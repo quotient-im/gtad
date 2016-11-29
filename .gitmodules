@@ -1,0 +1,6 @@
+[submodule "matrix-doc"]
+	path = matrix-doc
+	url = https://github.com/matrix-org/matrix-doc.git
+[submodule "yaml-cpp"]
+	path = yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp.git
