@@ -21,29 +21,31 @@
 #include <QtCore/QTextStream>
 #include <QtCore/QHash>
 
-namespace ApiGenerator {
-
-    static const bool NoNewLines = false;
+namespace CppPrinting
+{
     using size_type = int;
 
     class Scope
     {
         public:
+            static const size_type TABSIZE = 4;
+            static const bool NoNewLines = false;
+
             Scope(QTextStream& s, QString leader, QString trailer = "",
-                  bool appendEndl = true);
+                  bool appendNewLines = true);
             ~Scope();
 
             static size_type getOffset(const QTextStream& s);
+            static void setOffset(const QTextStream& s, size_type offset);
 
             static QString offsetString(const QTextStream& s)
             {
-                return QString(getOffset(s), ' ');
+                return QString(getOffset(s) * TABSIZE, ' ');
             }
         private:
             QTextStream& _s;
             QString _trailer;
     };
-
     inline QTextStream& offset(QTextStream& s)
     {
         return s << Scope::offsetString(s);

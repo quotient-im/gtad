@@ -45,6 +45,8 @@ add_subdirectory(yaml-cpp)
 
 list(APPEND api_generator_SRCS
     main.cpp
+        generator.cpp
+    swagger_analyzer.cpp
     scope.cpp
 )
 
@@ -66,7 +68,7 @@ foreach(_yaml_file ${API_YAML_FILES})
     set(_cppfile ${GENERATED_API_DIR}/${_f}.cpp)
     add_custom_command(
         OUTPUT ${_cppfile}
-        COMMAND api-generator --in "${_yaml_file}" --out ${GENERATED_API_DIR}
+        COMMAND api-generator --out ${GENERATED_API_DIR} ${_yaml_file}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         MAIN_DEPENDENCY ${_yaml_file}
         DEPENDS api-generator
