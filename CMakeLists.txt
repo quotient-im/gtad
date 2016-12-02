@@ -45,9 +45,11 @@ add_subdirectory(yaml-cpp)
 
 list(APPEND api_generator_SRCS
     main.cpp
-        generator.cpp
-    swagger_analyzer.cpp
+    translator.cpp
+    analyzer.cpp
     scope.cpp
+    model.cpp
+    exception.cpp
 )
 
 add_executable(api-generator ${api_generator_SRCS})

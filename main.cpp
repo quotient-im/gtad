@@ -19,7 +19,8 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QCommandLineParser>
 
-#include "generator.h"
+#include "translator.h"
+#include "exception.h"
 
 int main( int argc, char* argv[] )
 {
@@ -45,9 +46,16 @@ int main( int argc, char* argv[] )
 
     parser.process(app);
 
-    auto filePaths = parser.positionalArguments();
-    std::for_each(filePaths.begin(), filePaths.end(),
-                  ApiGenerator(parser.value(outputDirOption)));
+    try
+    {
+        auto filePaths = parser.positionalArguments();
+        std::for_each(filePaths.begin(), filePaths.end(),
+                      Translator(parser.value(outputDirOption)));
+    }
+    catch (Exception& e)
+    {
+        return e.code;
+    }
 
     return 0;
 }
