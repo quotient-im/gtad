@@ -1,10 +1,13 @@
 #include "analyzer.h"
 
-#include <yaml-cpp/yaml.h>
-
 #include <iostream>
 #include <locale>
 #include <regex>
+
+#include <yaml-cpp/yaml.h>
+
+#include <QtCore/QFileInfo>
+#include <QtCore/QDir>
 
 #include "exception.h"
 
@@ -34,17 +37,13 @@ QString convertMultiword(string s)
     while (pos < s.size())
     {
         capitalize(s, pos);
-        pos = s.find_first_of("/_", pos);
+        pos = s.find_first_of("/_ ", pos);
         if (pos == string::npos)
             break;
         s.erase(pos, 1);
     }
     return QString::fromStdString(s);
 }
-
-using std::regex;
-using std::regex_replace;
-using std::regex_match;
 
 regex makeRegex(const string& pattern)
 {
@@ -164,6 +163,18 @@ QString makeClassName(string path, string verb)
 using YAML::Node;
 using YAML::NodeType;
 
+Node Analyzer::loadYaml() const
+{
+    try {
+        cout << "Loading from " << fileName << endl;
+        return YAML::LoadFile(fileName);
+    }
+    catch (YAML::BadFile &)
+    {
+        fail(CannotReadFromInput, "Couldn't read YAML from input");
+    }
+}
+
 static const char* typenames[] = { "Undefined", "Null", "Scalar", "Sequence", "Map" };
 
 const Node& Analyzer::assert(const Node& node, NodeType::value checkedType) const
@@ -203,8 +214,35 @@ Node Analyzer::get(const Node& node, const string& subnodeName,
     fail(YamlFailsSchema);
 }
 
-QString Analyzer::getTypename(const Node& node) const
+pair<QString, QString> Analyzer::getTypename(const Node& node) const
 {
+    if (node["$ref"])
+    {
+        // The referenced file's path is relative to the current file's path;
+        // we have to prepend a path to the current file's directory so that
+        // YAML-Cpp finds the file.
+        QFileInfo currentFileInfo { QString::fromStdString(fileName) };
+        string currentFileDirPath = currentFileInfo.dir().path().toStdString() + "/";
+        string localFilePath = getString(node, "$ref");
+
+        Model m = Analyzer(currentFileDirPath + localFilePath).getModel();
+        if (m.dataModels.empty())
+        {
+            cerr << "File " << localFilePath
+                 << " doesn't have data definitions" << endl;
+            fail(YamlFailsSchema);
+        }
+        if (m.dataModels.size() > 1)
+        {
+            cerr << "File " << localFilePath
+                 << " has more than one data structure definition" << endl;
+            fail(YamlFailsSchema);
+        }
+
+        QString qFilePath = dropYamlExtension(QString::fromStdString(localFilePath));
+        return { m.dataModels.back().name, "\"" % qFilePath % ".h\"" };
+    }
+
     string yamlType = getString(node, "type");
     if (yamlType == "array")
     {
@@ -212,102 +250,138 @@ QString Analyzer::getTypename(const Node& node) const
 
         auto innerType = getString(arrayElType, "type");
         if (innerType == "string")
-            return "QStringList";
-        // TODO: items can have [properties], too;
-        // we'll have to create a separate struct
+            return { "QStringList", "<QtCore/QStringList>" };
+        // TODO: items can have [properties]; we'll have to create a separate struct
         // to describe such type
     }
-    QString qtype =
-            yamlType == "string" ? "QString" :
-            yamlType == "integer" || yamlType == "number" ? "int" :
-            yamlType == "boolean" ? "bool" :
-            yamlType == "array" ? "QVariantList" :
-            yamlType == "object" ? "QVariant" : "";
-    if (!qtype.isEmpty())
-        return qtype;
+    pair<QString,QString> retval =
+            yamlType == "string" ? make_pair("QString", "") :
+            yamlType == "integer" || yamlType == "number" ? make_pair("int", "") :
+            yamlType == "boolean" ? make_pair("bool", "") :
+            yamlType == "array" ? make_pair("QVariantList", "<QtCore/QVariantList>") :
+            yamlType == "object" ? make_pair("QVariant", "<QtCore/QVariant>") :
+            make_pair("", "");
+    if (!retval.first.isEmpty())
+        return retval;
 
     cerr << fileName << ":" << node.Mark().line + 1 << ": unknown type: " << yamlType;
     fail(UnknownParameterType);
 }
 
-std::vector<CallConfigModel> Analyzer::getModels() const
+QString Analyzer::dropYamlExtension(QString qFilePath) const
 {
-    Node yaml;
-    try {
-        yaml = YAML::LoadFile(fileName);
-    }
-    catch (YAML::BadFile &)
-    {
-        fail(CannotReadFromInput, "Couldn't read YAML from input");
-    }
+    if (qFilePath.endsWith(".yaml", Qt::CaseInsensitive))
+        qFilePath.chop(5);
+    else if (qFilePath.endsWith(".yml", Qt::CaseInsensitive))
+        qFilePath.chop(4);
+    return qFilePath;
+}
 
-    std::vector<CallConfigModel> models;
-    auto produces = yaml["produces"];
-    bool allCallsReturnJson = produces.size() == 1 &&
-                              produces.begin()->as<string>() == "application/json";
-    auto paths = get(yaml, "paths", NodeType::Map);
-    for (auto yaml_path: paths)
-    {
-        auto path = yaml_path.first.as<string>();
-        while (*path.rbegin() == ' ' || *path.rbegin() == '/')
-            path.erase(path.size() - 1);
+void Analyzer::addParameter(string name, const Node& node, vector<QString>& includes,
+                            CallConfigModel::CallOverload& callOverload) const
+{
+    auto typeDef = getTypename(node);
+    callOverload.params.emplace_back(typeDef.first, QString::fromStdString(name));
+    cout << "  Added input parameter: "
+         << callOverload.params.back().toString().toStdString();
 
-        assert(yaml_path.second, NodeType::Map);
-        for (auto yaml_call_pair: yaml_path.second)
+    if (!typeDef.second.isEmpty() &&
+            find(includes.begin(), includes.end(), typeDef.second) == includes.end())
+    {
+        includes.emplace_back(typeDef.second);
+        cout << "(with #include " << typeDef.second.toStdString() << ")";
+    }
+    cout << endl;
+}
+
+Model Analyzer::getModel() const
+{
+    Node yaml = loadYaml();
+
+    Model model;
+    // Detect which file we have, with a call, or just with a data definition
+    if (auto paths = yaml["paths"])
+    {
+        assert(paths, NodeType::Map);
+
+        auto produces = yaml["produces"];
+        bool allCallsReturnJson = produces.size() == 1 &&
+                                  produces.begin()->as<string>() ==
+                                  "application/json";
+
+        for (auto yaml_path: paths)
         {
-            string verb = yaml_call_pair.first.as<string>();
+            auto path = yaml_path.first.as<string>();
+            while (*path.rbegin() == ' ' || *path.rbegin() == '/')
+                path.erase(path.size() - 1);
+
+            assert(yaml_path.second, NodeType::Map);
+            for (auto yaml_call_pair: yaml_path.second)
             {
-                QString className = makeClassName(path, verb);
-
-                if (models.empty() || className != models.back().className)
-                    models.emplace_back(className);
-            }
-            auto& model = models.back();
-
-            model.callOverloads.emplace_back();
-            auto& cp = model.callOverloads.back();
-
-            auto yaml_call = assert(yaml_call_pair.second, NodeType::Map);
-            {
-                auto s = yaml_call["security"];
-                cp.needsToken = s.IsSequence() && s[0]["accessToken"].IsDefined();
-            }
-
-            cout << path << " - " << verb << endl;
-
-            for (auto yaml_param: yaml_call["parameters"])
-            {
-                assert(yaml_param, NodeType::Map);
-                auto name = getString(yaml_param, "name");
-
-                if (yaml_param["type"])
+                string verb = yaml_call_pair.first.as<string>();
                 {
-                    // Got a simple type
-                    cp.addParam(getTypename(yaml_param), name);
-                    continue;
+                    QString className = makeClassName(path, verb);
+
+                    if (model.callModels.empty() ||
+                            className != model.callModels.back().className)
+                        model.callModels.emplace_back(className);
                 }
-                // Got a complex type
-                auto schema = get(yaml_param, "schema", NodeType::Map);
-                Node properties = schema["properties"];
-                if (!properties)
-                {
-                    // Got a complex type without inner schema details
-                    cp.addParam(getTypename(schema), name);
-                    continue;
-                }
+                auto& cm = model.callModels.back();
 
-                assert(properties, NodeType::Map);
-                for (auto property: properties)
+                cm.callOverloads.emplace_back();
+                auto& cp = cm.callOverloads.back();
+
+                auto yaml_call = assert(yaml_call_pair.second, NodeType::Map);
                 {
-                    name = property.first.as<string>();
-                    if (property.second["type"])
-                        cp.addParam(getTypename(property.second), name);
-                    else
-                        cp.addParam("QVariant", name);
+                    auto s = yaml_call["security"];
+                    cp.needsToken =
+                            s.IsSequence() && s[0]["accessToken"].IsDefined();
+                }
+                cp.path = QString::fromStdString(regex_replace(
+                        regex_replace(path, regex("\\{"), "\" % "), regex("\\}"),
+                        " % \""));
+                cp.verb = QString::fromStdString(capitalize(verb));
+
+                cout << path << " - " << verb << endl;
+
+                for (Node yaml_param: yaml_call["parameters"])
+                {
+                    assert(yaml_param, NodeType::Map);
+
+                    if (yaml_param["type"])
+                    {
+                        // Got a simple type
+                        auto name = getString(yaml_param, "name");
+                        addParameter(name, yaml_param, model.includes, cp);
+                        continue;
+                    }
+                    // Got a complex type
+                    auto schema = get(yaml_param, "schema", NodeType::Map);
+                    Node properties = schema["properties"];
+                    if (!properties)
+                    {
+                        // Got a complex type without inner schema details
+                        auto name = getString(yaml_param, "name");
+                        addParameter(name, schema, model.includes, cp);
+                        continue;
+                    }
+
+                    assert(properties, NodeType::Map);
+                    for (auto property: properties)
+                    {
+                        auto name = property.first.as<string>();
+                        addParameter(name, property.second, model.includes, cp);
+                    }
                 }
             }
         }
+    } else {
+        assert(yaml, NodeType::Map);
+        model.dataModels.emplace_back();
+        DataModel& dm = model.dataModels.back();
+        dm.name = convertMultiword(
+                yaml["title"] ? getString(yaml, "title") :
+                dropYamlExtension(QFileInfo(QString::fromStdString(fileName)).fileName()).toStdString());
     }
-    return models;
+    return model;
 }
-

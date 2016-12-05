@@ -32,10 +32,12 @@ class Analyzer
 
         explicit Analyzer(const std::string& fn) : fileName(fn) { }
 
-        std::vector<CallConfigModel> getModels() const;
+        Model getModel() const;
 
     private:
         std::string fileName;
+
+        Node loadYaml() const;
 
         const Node& assert(const Node& node, NodeType::value checkedType) const;
         Node get(const Node& node, const std::string& subnodeName,
@@ -46,6 +48,10 @@ class Analyzer
             return get(node, subnodeName, NodeType::Scalar).as<std::string>();
         }
 
-        QString getTypename(const Node& node) const;
+        std::pair<QString, QString> getTypename(const Node& node) const;
 
+        void addParameter(std::string name, const Node& node, std::vector<QString>& includes,
+                          CallConfigModel::CallOverload& callOverload) const;
+
+        QString dropYamlExtension(QString qFilePath) const;
 };

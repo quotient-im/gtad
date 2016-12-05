@@ -50,6 +50,7 @@ list(APPEND api_generator_SRCS
     scope.cpp
     model.cpp
     exception.cpp
+    printer.cpp
 )
 
 add_executable(api-generator ${api_generator_SRCS})

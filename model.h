@@ -23,22 +23,29 @@
 #include <QtCore/QString>
 #include <QtCore/QStringBuilder>
 
+class QTextStream;
+
 struct VariableDefinition
 {
     QString type;
     QString name;
+    bool required = false;
 
+    VariableDefinition() = default;
+    VariableDefinition(const QString& t, const QString& n) : type(t), name(n) { }
     QString toString() const { return type % " " % name; }
 };
 
-struct CustomResponseType
+struct DataModel
 {
     QString name;
 
     std::vector<VariableDefinition> fields;
+
+    void printTo(QTextStream& s);
 };
 
-class QTextStream;
+using ResponseType = DataModel;
 
 struct CallConfigModel
 {
@@ -47,16 +54,26 @@ struct CallConfigModel
     struct CallOverload
     {
         std::vector<VariableDefinition> params;
+        QString path;
+        QString verb;
         bool needsToken;
 
-        void addParam(const QString& type, const std::string& name);
     };
     std::vector<CallOverload> callOverloads;
     VariableDefinition replyFormatVar;
-    CustomResponseType responseType;
+    ResponseType responseType;
 
     CallConfigModel(const QString& n) : className(n) { }
     void printTo(QTextStream& hText, QTextStream& cppText);
+    void printFunctionSignature(QTextStream& s,
+                                const QString& rettype, const QString& name,
+                                const CallOverload& call, bool header = true) const;
 };
 
+struct Model
+{
+    std::vector<QString> includes;
+    std::vector<DataModel> dataModels;
+    std::vector<CallConfigModel> callModels;
+};
 

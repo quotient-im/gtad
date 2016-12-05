@@ -1,52 +1,54 @@
 #include "model.h"
 
-#include "exception.h"
-#include "scope.h"
-
 #include <iostream>
 
 using std::string;
 using std::cerr;
 using std::cout;
+//using std::endl; // Beware, Qt has its own endl
 
 #include <QtCore/QTextStream>
 
+#include "exception.h"
+#include "scope.h"
+
 using namespace CppPrinting;
 
-void CallConfigModel::CallOverload::addParam(const QString& type, const string& name)
+void DataModel::printTo(QTextStream& s)
 {
-    params.emplace_back(VariableDefinition{ type, QString::fromStdString(name) });
-    cout << "  Added input parameter: "
-         << params.back().toString().toStdString() << std::endl;
+    s << offset << "struct " << name;
+    Scope _scope(s, "{", "};");
 }
 
-void printFunction(QTextStream& s, const QString& rettype, const QString& name,
-                   const CallConfigModel::CallOverload& call, bool declare = true)
+void CallConfigModel::printFunctionSignature(QTextStream& s,
+                   const QString& retType, const QString& name,
+                   const CallConfigModel::CallOverload& call, bool header) const
 {
     QString line; QTextStream lineS(&line);
     Scope::setOffset(lineS, Scope::getOffset(s));
-
     {
-        Scope o(lineS, (rettype.isEmpty() ? name : rettype % " " % name) % "(",
-                ");", Scope::NoNewLines);
+        QString qualifiedName = (header || !retType.isEmpty() ? name : className % "::" % name);
+        QString retvalAndName =
+                (retType.isEmpty() ? qualifiedName : retType % " " % qualifiedName);
+
+        Scope o(lineS, retvalAndName + "(", header ? ");" : ")", Scope::NoNewLines);
         for (auto p = call.params.begin(); p != call.params.end(); ++p)
         {
-            if (p != call.params.begin())
-                lineS << ',';
-
             QString param = p->toString();
-            if (line.size() + param.size() <= 79)
-                lineS << " ";
-            else
+            if (p != call.params.begin())
             {
-                s << line << "\n";
-                line.clear();
-                lineS << offset;
+                if (line.size() + param.size() <= 79)
+                    lineS << ", ";
+                else
+                {
+                    s << line << ",\n";
+                    line.clear();
+                    lineS << offset;
+                }
             }
             lineS << param;
         }
     }
-
     s << line;
 }
 
@@ -55,7 +57,7 @@ void CallConfigModel::printTo(QTextStream& hText, QTextStream& cppText)
     if (callOverloads.empty())
     {
         cerr << "Couldn't find any parameter set for the call "
-             << className.toStdString() << endl;
+             << className.toStdString() << std::endl;
         fail(InternalError);
     }
 
@@ -67,7 +69,14 @@ void CallConfigModel::printTo(QTextStream& hText, QTextStream& cppText)
         // with Invite calls, which are defined twice in different Swagger files
         // but have different sets of parameters.
         for (auto call: callOverloads)
-            printFunction(hText, "CallConfig", className, call);
+        {
+            printFunctionSignature(hText, "CallConfig", className, call);
+            printFunctionSignature(cppText, "CallConfig", className, call, false);
+            Scope fnBody(cppText, "{", "}");
+            Scope callconfigInitializer(cppText, "return { ", "};", Scope::NoNewLines);
+            cppText << "\"" << className << "\", HttpVerb::" << call.verb << ",\n"
+                    << offset << "\"" << call.path << "\" ";
+        }
 
         return;
     }
@@ -85,7 +94,15 @@ void CallConfigModel::printTo(QTextStream& hText, QTextStream& cppText)
     Scope p(hText, "public:");
 
     for (auto constructor: callOverloads)
-        printFunction(hText, "", className, constructor);
+    {
+        printFunctionSignature(hText, {}, className, constructor);
+        printFunctionSignature(cppText, {}, className, constructor, false);
+        {
+            Scope semicolonOffset(cppText, "", "", Scope::NoNewLines);
+            cppText << offset << ": ";
+//            printCallConfigInitializer(cppText, constructor);
+        }
+    }
 
     hText << "\n" << offset << "Result<" << responseType.name
           << "> parseReply(" << replyFormatVar.toString()

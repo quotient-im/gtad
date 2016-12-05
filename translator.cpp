@@ -2,18 +2,15 @@
 
 #include "model.h"
 #include "analyzer.h"
-#include "scope.h"
 #include "exception.h"
-
-#include <iostream>
-#include <regex>
+#include "printer.h"
 
 using namespace std;
 
 enum ErrorCode
 {
     _Base = TranslatorCodes,
-    CannotCreateOutputDir, CannotWriteToFile, CannotResolveOverloadParameters,
+    CannotCreateOutputDir, CannotWriteToFile
 };
 
 Translator::Translator(const QString& outputDirPath)
@@ -29,10 +26,20 @@ void Translator::operator()(const QString& filePath) const
 
     if (inputFileInfo.isDir())
     {
-        QDir inputDir(filePath, {"*.yaml"}, QDir::Name, QDir::Readable|QDir::Files);
-        auto filesList = inputDir.entryList();
-        for(auto fn:filesList)
-            (*this)(inputFileInfo.filePath() + fn);
+        auto paths = {
+                "/api/client-server",
+                "/api/client-server/definitions",
+        };
+        for (auto path: paths)
+        {
+            QStringList filesList =
+                    QDir(filePath + path).entryList(QDir::Readable|QDir::Files);
+            filesList.removeAll("error.yaml");
+            filesList.removeAll("security.yaml");
+            filesList.removeAll("event-schemas");
+            for(auto fn: filesList)
+                (*this)(filePath % path % "/" % fn);
+        }
         return;
     }
 
@@ -50,36 +57,8 @@ void Translator::operator()(const QString& filePath) const
     if (!cppFile.open(QIODevice::WriteOnly|QIODevice::Text))
         fail(CannotWriteToFile, "Couldn't open .cpp file for writing");
 
-    // Read the input file into the model
+    Analyzer a(filePath.toStdString());
+    Printer p(&hFile, &cppFile, "QMatrixClient::ServerApi");
 
-    auto models = Analyzer(filePath.toStdString()).getModels();
-
-    // Dump the model to the C++ files
-
-    using namespace CppPrinting;
-
-    QTextStream hText(&hFile);
-    QTextStream cppText(&cppFile);
-    {
-        QString s = "// This is an auto-generated file; don't edit!\n\n";
-        hText << s;
-        cppText << s;
-    }
-    cppText << "#include \"" << bareFilename << ".h\"\n";
-
-    hText << "#pragma once\n\n"
-             "#include \"../servercallsetup.h\"\n\n";
-
-    {
-        hText << "namespace QMatrixClient\n";
-        Scope ns1(hText, "{", "}");
-        hText << offset << "namespace ServerApi\n";
-        Scope ns2(hText, "{", "}");
-
-        for (auto model: models)
-            model.printTo(hText, cppText);
-    }
-
-    hFile.close();
-    cppFile.close();
+    p.print(a.getModel());
 }
