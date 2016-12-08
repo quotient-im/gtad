@@ -18,16 +18,14 @@
 
 #pragma once
 
-#include <QtCore/QDir>
-#include <QtCore/QTextStream>
-#include <QtCore/QHash>
+#include <QtCore/QString>
 
 class Translator
 {
     public:
         explicit Translator(const QString& outputDirPath);
-        void operator()(const QString& filePath) const;
+        void operator()(QString filePath, QString basePath = "") const;
 
     private:
-        QDir outputDir;
+        QString _outputDirPath;
 };

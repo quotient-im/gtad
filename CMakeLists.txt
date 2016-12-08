@@ -62,7 +62,7 @@ set (API_YAML_DIR "${PROJECT_SOURCE_DIR}/matrix-doc/api/client-server"
 set (GENERATED_API_DIR "${PROJECT_BINARY_DIR}/api"
     CACHE STRING "Path to directory with generated C++ API files")
 
-file(GLOB API_YAML_FILES RELATIVE "${PROJECT_SOURCE_DIR}" "${API_YAML_DIR}/*.yaml")
+file(GLOB_RECURSE API_YAML_FILES RELATIVE "${PROJECT_SOURCE_DIR}" "${API_YAML_DIR}/*.yaml")
 list(FILTER API_YAML_FILES EXCLUDE REGEX "/(old_sync|room_initial_sync)\\.")
 list(LENGTH API_YAML_FILES API_SIZE)
 

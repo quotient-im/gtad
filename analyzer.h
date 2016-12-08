@@ -30,12 +30,16 @@ class Analyzer
         using Node = YAML::Node;
         using NodeType = YAML::NodeType;
 
-        explicit Analyzer(const std::string& fn) : fileName(fn) { }
+        Analyzer(const std::string& filePath, const std::string& basePath)
+                : fileName(filePath), baseDir(basePath)
+        { }
 
-        Model getModel() const;
+        Model loadModel() const;
+        std::string getFilenameBase() const;
 
     private:
         std::string fileName;
+        std::string baseDir;
 
         Node loadYaml() const;
 
@@ -48,10 +52,9 @@ class Analyzer
             return get(node, subnodeName, NodeType::Scalar).as<std::string>();
         }
 
-        std::pair<QString, QString> getTypename(const Node& node) const;
+        std::pair<std::string, std::string> getTypename(const Node& node) const;
 
-        void addParameter(std::string name, const Node& node, std::vector<QString>& includes,
-                          CallConfigModel::CallOverload& callOverload) const;
-
-        QString dropYamlExtension(QString qFilePath) const;
+        void addParameter(std::string name, const Node& node,
+                          std::vector<std::string>& includes,
+                          CallOverload& callOverload) const;
 };

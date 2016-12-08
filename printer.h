@@ -1,20 +1,18 @@
 #pragma once
 
-#include <QtCore/QStringList>
+#include <string>
 
 #include "model.h"
-
-class QFile;
 
 class Printer
 {
     public:
-        Printer(QFile* h, QFile* cpp, const QString& nameSpace);
+        Printer(const std::string& baseDirPath,
+                const std::string& filenameBase);
 
-        void print(const Model& model);
+        void print(const Model& model) const;
 
     private:
-        QFile* hFile;
-        QFile* cppFile;
-        QStringList namespaces;
+        std::string baseDir;
+        std::string filenameBase;
 };

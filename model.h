@@ -19,61 +19,78 @@
 #pragma once
 
 #include <vector>
+#include <string>
 
-#include <QtCore/QString>
-#include <QtCore/QStringBuilder>
-
-class QTextStream;
-
-struct VariableDefinition
+struct VarDecl
 {
-    QString type;
-    QString name;
+    std::string type;
+    std::string name;
     bool required = false;
 
-    VariableDefinition() = default;
-    VariableDefinition(const QString& t, const QString& n) : type(t), name(n) { }
-    QString toString() const { return type % " " % name; }
+    VarDecl(const std::string& t, const std::string& n)
+        : type(t), name(n)
+    { }
+
+    std::string toString(bool withDefault = false) const
+    {
+        return type + " " + (withDefault && !required ? name + " = {}" : name);
+    }
 };
 
 struct DataModel
 {
-    QString name;
+    std::string name;
+    std::vector<VarDecl> fields;
 
-    std::vector<VariableDefinition> fields;
-
-    void printTo(QTextStream& s);
+    explicit DataModel(const std::string& typeName);
+    void printTo(std::ostream& s) const;
 };
 
 using ResponseType = DataModel;
 
+struct CallOverload
+{
+    std::vector<VarDecl> params;
+    std::string quotedPath;
+    std::string verb;
+    std::string query;
+    std::string data;
+    std::string contentType;
+    bool needsToken;
+
+};
+
+struct Model;
+
 struct CallConfigModel
 {
-    QString className;
-
-    struct CallOverload
-    {
-        std::vector<VariableDefinition> params;
-        QString path;
-        QString verb;
-        bool needsToken;
-
-    };
+    const Model& topModel;
+    std::string className;
     std::vector<CallOverload> callOverloads;
-    VariableDefinition replyFormatVar;
+    VarDecl replyFormatVar;
     ResponseType responseType;
 
-    CallConfigModel(const QString& n) : className(n) { }
-    void printTo(QTextStream& hText, QTextStream& cppText);
-    void printFunctionSignature(QTextStream& s,
-                                const QString& rettype, const QString& name,
-                                const CallOverload& call, bool header = true) const;
+    CallConfigModel(const Model& parent,
+                    const std::string& callName,
+                    const std::string& responseTypeName,
+                    const std::string& replyFormatType = "const QJsonObject&");
+
+    void printTo(std::ostream& hText, std::ostream& cppText) const;
+
+    void printSignatures(std::ostream& hS, std::ostream& cppS,
+                         const std::vector<VarDecl>& params,
+                         const std::string& returnType = "") const;
 };
 
 struct Model
 {
-    std::vector<QString> includes;
+    std::string nsName;
+    std::vector<std::string> includes;
     std::vector<DataModel> dataModels;
     std::vector<CallConfigModel> callModels;
+
+    explicit Model(const std::string& nameSpace = "") : nsName(nameSpace) { }
+    CallOverload& addCall(const std::string& path, const std::string& verb,
+                          const std::string& responseTypename);
 };
 

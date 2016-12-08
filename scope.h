@@ -18,35 +18,47 @@
 
 #pragma once
 
-#include <QtCore/QTextStream>
-#include <QtCore/QHash>
+#include <string>
+#include <regex>
+#include <algorithm>
+#include <ostream>
 
 namespace CppPrinting
 {
-    using size_type = int;
-
     class Scope
     {
         public:
+            using size_type = std::string::size_type;
+
             static const size_type TABSIZE = 4;
             static const bool NoNewLines = false;
 
-            Scope(QTextStream& s, QString leader, QString trailer = "",
+            Scope(std::ostream& s, std::string opener, std::string closer = "",
                   bool appendNewLines = true);
+            Scope(std::ostream& s, const std::string& scope,
+                  const std::string& splitAt, const std::string& header,
+                  const std::string& opener, const std::string& closer = "");
             ~Scope();
 
-            static size_type getOffset(const QTextStream& s);
-            static void setOffset(const QTextStream& s, size_type offset);
+            static size_type getOffset(const std::ostream& s);
+            static void setOffset(const std::ostream& s, size_type offset);
 
-            static QString offsetString(const QTextStream& s)
+            static std::string offsetString(const std::ostream& s)
             {
-                return QString(getOffset(s) * TABSIZE, ' ');
+                return std::string(getOffset(s) * TABSIZE, ' ');
             }
+            std::string offsetString() const
+            {
+                return offsetString(_s);
+            }
+
         private:
-            QTextStream& _s;
-            QString _trailer;
+            std::ostream& _s;
+            std::string _closer;
+            bool _appendEndl;
+            size_type _depth;
     };
-    inline QTextStream& offset(QTextStream& s)
+    inline std::ostream& offset(std::ostream& s)
     {
         return s << Scope::offsetString(s);
     }

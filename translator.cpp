@@ -1,5 +1,8 @@
 #include "translator.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QStringBuilder>
+
 #include "model.h"
 #include "analyzer.h"
 #include "exception.h"
@@ -14,51 +17,52 @@ enum ErrorCode
 };
 
 Translator::Translator(const QString& outputDirPath)
-    : outputDir { outputDirPath }
+    : _outputDirPath(outputDirPath)
 {
-    if (!outputDir.exists() && !outputDir.mkpath("."))
+    if (!_outputDirPath.endsWith('/'))
+        _outputDirPath.append('/');
+    QDir d { _outputDirPath };
+    if (!d.exists() && !d.mkpath("."))
         fail(CannotCreateOutputDir, "Cannot create output directory");
 }
 
-void Translator::operator()(const QString& filePath) const
+void Translator::operator()(QString filePath, QString basePath) const
 {
-    QFileInfo inputFileInfo { filePath };
+    if (!basePath.isEmpty() && !basePath.endsWith('/'))
+        basePath.append('/');
 
+    QString fullPath = basePath + filePath;
+    QFileInfo inputFileInfo { fullPath };
     if (inputFileInfo.isDir())
     {
-        auto paths = {
-                "/api/client-server",
-                "/api/client-server/definitions",
-        };
+        if (!fullPath.endsWith('/'))
+            fullPath.append('/');
+        auto paths = { "", "definitions/" };
         for (auto path: paths)
         {
             QStringList filesList =
-                    QDir(filePath + path).entryList(QDir::Readable|QDir::Files);
+                    QDir(fullPath + path).entryList(QDir::Readable|QDir::Files);
+            if (filesList.empty())
+                continue;
+
+            QDir oDir(_outputDirPath + path);
+            if (!oDir.exists() && !oDir.mkpath("."))
+                fail(CannotCreateOutputDir, "Cannot create output directory");
+
+            // FIXME: These exclusions should be external to the generator
             filesList.removeAll("error.yaml");
             filesList.removeAll("security.yaml");
             filesList.removeAll("event-schemas");
+            filesList.removeAll("content-repo.yaml"); // Temporarily
             for(auto fn: filesList)
-                (*this)(filePath % path % "/" % fn);
+                (*this)(path + fn, fullPath);
         }
         return;
     }
 
-    QString bareFilename = inputFileInfo.fileName();
-    if (bareFilename.endsWith(".yaml", Qt::CaseInsensitive))
-        bareFilename.chop(5);
-    else if (bareFilename.endsWith(".yml", Qt::CaseInsensitive))
-        bareFilename.chop(4);
-
-    QFile hFile(outputDir.absolutePath() % "/" % bareFilename % ".h");
-    if (!hFile.open(QIODevice::WriteOnly|QIODevice::Text))
-        fail(CannotWriteToFile, "Couldn't open .h file for writing");
-
-    QFile cppFile(outputDir.absolutePath() % "/" % bareFilename % ".cpp");
-    if (!cppFile.open(QIODevice::WriteOnly|QIODevice::Text))
-        fail(CannotWriteToFile, "Couldn't open .cpp file for writing");
-
-    Analyzer a(filePath.toStdString());
-    Printer p(&hFile, &cppFile, "QMatrixClient::ServerApi");
-
-    p.print(a.getModel());
+    Analyzer a(filePath.toStdString(), basePath.toStdString());
+    Model m = a.loadModel();
+    m.nsName = "QMatrixClient::ServerApi";
+    Printer(_outputDirPath.toStdString(), a.getFilenameBase()).print(m);
 }
+
