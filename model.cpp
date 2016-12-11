@@ -176,6 +176,17 @@ void DataModel::printTo(ostream& s) const
     Scope _scope(s, "{", "};");
 }
 
+const char* const ParamDecl::in_str[] =
+    { "!Undefined!", "path", "query", "header", "body" };
+
+ParamDecl::In ParamDecl::inFromStr(const string& s)
+{
+    for (auto it = begin(in_str); it != end(in_str); ++it)
+        if (s == *it)
+            return In(it - begin(in_str));
+    return Undefined;
+}
+
 CallConfigModel::CallConfigModel(const Model& parent,
                                  const string& callName,
                                  const string& responseTypeName,
@@ -197,7 +208,7 @@ CallConfigModel::CallConfigModel(const Model& parent,
 
 void printSignature(ostream& s, const string& retType,
                     const string& name,
-                    const vector<VarDecl>& params,
+                    const vector<ParamDecl>& params,
                     const string& qualifier = {})
 {
     static const Scope::size_type WRAPMARGIN = 80;
@@ -234,12 +245,50 @@ void printSignature(ostream& s, const string& retType,
 
 void CallConfigModel::printSignatures(ostream& hS,
                                       ostream& cppS,
-                                      const vector<VarDecl>& params,
+                                      const vector<ParamDecl>& params,
                                       const string& returnType) const
 {
     printSignature(hS, returnType, className, params);
     printSignature(cppS, returnType, className, params,
                    responseType.name.empty() ? topModel.nsName : className);
+}
+
+void CallConfigModel::printBody(ostream& s, const CallOverload& call,
+                                bool asFunction) const
+{
+    // Instead of having a full-fledged class that only has a constructor
+    // (or several) but no parseReply(), generate a function that
+    // returns a CallConfig. This also allows to nicely avoid a problem
+    // with Invite calls, which are defined twice in different Swagger files
+    // but have different sets of parameters.
+    Scope body(s, asFunction ? "{" : ": ", asFunction ? "}" : "", asFunction);
+    Scope initializer(s, asFunction ? "return {" : "CallConfig(",
+                      asFunction ? "};" : ")", Scope::NoNewLines);
+    s << "\"" << className << "\", HttpVerb::" << call.verb << ",\n"
+      << offset << "ApiPath(" << call.quotedPath << ") ";
+}
+
+void CallConfigModel::printOverloads(ostream& hS, ostream& cppS) const
+{
+    bool unsupportedCalls = false;
+
+    for (auto call: callOverloads)
+    {
+        cppS << endl;
+        printSignatures(hS, cppS, call.params, "CallConfigNoReplyBody");
+        printBody(cppS, call, responseType.name.empty());
+
+        for (auto p: call.params)
+            if (p.in != ParamDecl::Path)
+                unsupportedCalls = true;
+    }
+    if (unsupportedCalls)
+    {
+        cerr << "Warning: " << className << " has one or more "
+                "call overloads with parameters outside the path; "
+                "these are not supported at the moment" << endl;
+    }
+
 }
 
 void CallConfigModel::printTo(ostream& hText, ostream& cppText) const
@@ -259,47 +308,23 @@ void CallConfigModel::printTo(ostream& hText, ostream& cppText) const
         for (const auto& field: responseType.fields)
             hText << offset << field.toString() << ";\n";
     }
+
     if (responseType.name.empty())
+        printOverloads(hText, cppText);
+    else
     {
-        // Instead of having a full-fledged class that only has a constructor
-        // (or several) but no parseReply(), generate a function that
-        // returns a CallConfig. This also allows to nicely avoid a problem
-        // with Invite calls, which are defined twice in different Swagger files
-        // but have different sets of parameters.
-        for (auto call: callOverloads)
-        {
-            cppText << endl;
-            printSignatures(hText, cppText, call.params, "CallConfigNoReplyBody");
-            Scope fnBody(cppText, "{", "}");
-            Scope callconfigInitializer(cppText, "return { ", "};", Scope::NoNewLines);
-            cppText << "\"" << className << "\", HttpVerb::" << call.verb << ",\n"
-                    << offset << "ApiPath(" << call.quotedPath << ") ";
-        }
+        hText << offset << "class " << className << " : public CallConfig\n";
+        Scope cl(hText, "{", "};");
+        Scope p(hText, "public:");
+        printOverloads(hText, cppText);
+        printSignature(hText, "Result<" + responseType.name + ">",
+                       "parseReply", {}, className);
 
-        return;
+        hText << "\n" << offset << "Result<" << responseType.name
+              << "> parseReply(" << replyFormatVar.toString() << ");" << endl;
+        // TODO: dump parseReply() implementation
     }
 
-    hText << offset << "class " << className << " : public CallConfig\n";
-    Scope cl(hText, "{", "};");
-    Scope p(hText, "public:");
-
-    for (auto constructor: callOverloads)
-    {
-        printSignatures(hText, cppText, constructor.params);
-        {
-            Scope initializationBlock(cppText, ": ", "", Scope::NoNewLines);
-            Scope baseConstructorInit(cppText, "CallConfig(", ")", Scope::NoNewLines);
-//            printCallConfigInitializer(cppText, constructor);
-        }
-    }
-    printSignature(hText, "Result<" + responseType.name + ">",
-                   "parseReply", {}, className);
-
-    hText << "\n" << offset << "Result<" << responseType.name
-          << "> parseReply(" << replyFormatVar.toString()
-          << ");\n";
-
-    // TODO: dump the cpp file
 }
 
 CallOverload& Model::addCall(const string& path, const string& verb,

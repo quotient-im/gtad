@@ -18,8 +18,9 @@
 
 #pragma once
 
-#include <vector>
 #include <string>
+#include <vector>
+#include <unordered_map>
 
 struct VarDecl
 {
@@ -48,12 +49,28 @@ struct DataModel
 
 using ResponseType = DataModel;
 
+struct ParamDecl : public VarDecl
+{
+        enum In { Undefined, Path, Query, Header, Data } in;
+        static const char* const in_str[];
+        static In inFromStr(const std::string& s);
+        static std::string strFromIn(In in)
+        {
+            return in_str[in];
+        }
+
+        ParamDecl(const std::string& t, const std::string& n, In in)
+            : VarDecl(t, n)
+            , in(in)
+        { }
+};
+
 struct CallOverload
 {
-    std::vector<VarDecl> params;
+    std::vector<ParamDecl> params;
     std::string quotedPath;
     std::string verb;
-    std::string query;
+    std::unordered_map<std::string, std::string> query;
     std::string data;
     std::string contentType;
     bool needsToken;
@@ -78,8 +95,11 @@ struct CallConfigModel
     void printTo(std::ostream& hText, std::ostream& cppText) const;
 
     void printSignatures(std::ostream& hS, std::ostream& cppS,
-                         const std::vector<VarDecl>& params,
+                         const std::vector<ParamDecl>& params,
                          const std::string& returnType = "") const;
+    void printBody(std::ostream& s, const CallOverload& call,
+                   bool asFunction = false) const;
+    void printOverloads(std::ostream& hS, std::ostream& cppS) const;
 };
 
 struct Model

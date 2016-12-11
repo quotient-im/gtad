@@ -35,15 +35,18 @@ static const char* typenames[] = { "Undefined", "Null", "Scalar", "Sequence", "M
 
 const Node& Analyzer::assert(const Node& node, NodeType::value checkedType) const
 {
-    if (node && node.Type() == checkedType)
-        return node;
-
-    cerr << fileName << ":" << node.Mark().line + 1 << ": the node ";
     if (node)
-        cerr << "has a wrong type (expected "
-             << typenames[checkedType] << ", got " << typenames[node.Type()] << endl;
+    {
+        if (node.Type() == checkedType)
+            return node;
+
+        cerr << fileName << ":" << node.Mark().line + 1 << ": the node "
+             << "has a wrong type (expected " << typenames[checkedType]
+             << ", got " << typenames[node.Type()] << endl;
+    }
     else
-        cerr << "is undefined" << endl;
+        cerr << fileName << ": Analyzer::assert() on undefined node; check"
+                "the higher-level node with get()" << endl;
     fail(YamlFailsSchema);
 }
 
@@ -65,7 +68,7 @@ Node Analyzer::get(const Node& node, const string& subnodeName,
     }
     else
         cerr << fileName
-             << ": checkNode() on undefined parent node, check your parsing code"
+             << ": get() on undefined parent node, check your parsing code"
              << endl;
     fail(YamlFailsSchema);
 }
@@ -129,11 +132,11 @@ pair<string, string> Analyzer::getTypename(const Node& node) const
 }
 
 void Analyzer::addParameter(string name, const Node& node, vector<string>& includes,
-                            CallOverload& callOverload) const
+                            CallOverload& callOverload, ParamDecl::In in) const
 {
     auto typeDef = getTypename(node);
-    callOverload.params.emplace_back(typeDef.first, name);
-    cout << "  Added input parameter: "
+    callOverload.params.emplace_back(typeDef.first, name, in);
+    cout << "  Added input parameter for " << ParamDecl::strFromIn(in) << ": "
          << callOverload.params.back().toString();
 
     if (!typeDef.second.empty() &&
@@ -187,15 +190,18 @@ Model Analyzer::loadModel() const
 
                 cout << path << " - " << verb << endl;
 
-                for (Node yaml_param: yaml_call["parameters"])
+                if (!yaml_call["parameters"])
+                    continue;
+                for (Node yaml_param: assert(yaml_call["parameters"], NodeType::Sequence))
                 {
                     assert(yaml_param, NodeType::Map);
-
+                    auto in_str = getString(yaml_param, "in");
+                    auto in = ParamDecl::inFromStr(in_str);
                     if (yaml_param["type"])
                     {
                         // Got a simple type
                         auto name = getString(yaml_param, "name");
-                        addParameter(name, yaml_param, model.includes, call);
+                        addParameter(name, yaml_param, model.includes, call, in);
                         continue;
                     }
                     // Got a complex type
@@ -205,7 +211,7 @@ Model Analyzer::loadModel() const
                     {
                         // Got a complex type without inner schema details
                         auto name = getString(yaml_param, "name");
-                        addParameter(name, schema, model.includes, call);
+                        addParameter(name, schema, model.includes, call, in);
                         continue;
                     }
 
@@ -213,8 +219,17 @@ Model Analyzer::loadModel() const
                     for (auto property: properties)
                     {
                         auto name = property.first.as<string>();
-                        addParameter(name, property.second, model.includes, call);
+                        addParameter(name, property.second, model.includes,
+                                     call, in);
                     }
+                }
+
+                auto yamlResponses = get(yaml_call, "responses", NodeType::Map);
+                auto normalResponse = yamlResponses["200"];
+                if (!normalResponse || (normalResponse && normalResponse["schema"]))
+                {
+                    cerr << "Non-trivial responses not supported yet" << endl;
+                    return model;
                 }
             }
         }
