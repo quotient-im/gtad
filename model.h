@@ -44,7 +44,6 @@ struct DataModel
     std::vector<VarDecl> fields;
 
     explicit DataModel(const std::string& typeName);
-    void printTo(std::ostream& s) const;
 };
 
 using ResponseType = DataModel;
@@ -91,15 +90,6 @@ struct CallConfigModel
                     const std::string& callName,
                     const std::string& responseTypeName,
                     const std::string& replyFormatType = "const QJsonObject&");
-
-    void printTo(std::ostream& hText, std::ostream& cppText) const;
-
-    void printSignatures(std::ostream& hS, std::ostream& cppS,
-                         const std::vector<ParamDecl>& params,
-                         const std::string& returnType = "") const;
-    void printBody(std::ostream& s, const CallOverload& call,
-                   bool asFunction = false) const;
-    void printOverloads(std::ostream& hS, std::ostream& cppS) const;
 };
 
 struct Model
