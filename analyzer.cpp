@@ -13,6 +13,7 @@ using namespace std;
 
 enum {
     CannotReadFromInput = AnalyzerCodes, UnknownParameterType,
+    ComplexTypeTargetsOutsideBody,
     YamlFailsSchema
 };
 
@@ -132,12 +133,12 @@ pair<string, string> Analyzer::getTypename(const Node& node) const
 }
 
 void Analyzer::addParameter(string name, const Node& node, vector<string>& includes,
-                            CallOverload& callOverload, ParamDecl::In in) const
+                            Call& callOverload, const string& in) const
 {
     auto typeDef = getTypename(node);
-    callOverload.params.emplace_back(typeDef.first, name, in);
-    cout << "  Added input parameter for " << ParamDecl::strFromIn(in) << ": "
-         << callOverload.params.back().toString();
+    VarDecl p(typeDef.first, name);
+    callOverload.addParam(p, in);
+    cout << "  Added input parameter for " << in << ": " << p.toString();
 
     if (!typeDef.second.empty() &&
             find(includes.begin(), includes.end(), typeDef.second) == includes.end())
@@ -181,12 +182,11 @@ Model Analyzer::loadModel() const
             {
                 string verb = yaml_call_pair.first.as<string>();
                 Node yaml_call = assert(yaml_call_pair.second, NodeType::Map);
-                CallOverload& call = model.addCall(path, verb, "");
-                if (auto s = yaml_call["security"])
-                {
-                    assert(s, NodeType::Sequence);
-                    call.needsToken = s[0]["accessToken"].IsDefined();
-                }
+
+                auto s = yaml_call["security"];
+                bool needsToken = s.IsDefined() &&
+                        assert(s, NodeType::Sequence)[0]["accessToken"].IsDefined();
+                Call& call = model.addCall(path, verb, needsToken, "");
 
                 cout << path << " - " << verb << endl;
 
@@ -195,14 +195,20 @@ Model Analyzer::loadModel() const
                 for (Node yaml_param: assert(yaml_call["parameters"], NodeType::Sequence))
                 {
                     assert(yaml_param, NodeType::Map);
-                    auto in_str = getString(yaml_param, "in");
-                    auto in = ParamDecl::inFromStr(in_str);
+                    auto in = getString(yaml_param, "in");
                     if (yaml_param["type"])
                     {
                         // Got a simple type
                         auto name = getString(yaml_param, "name");
                         addParameter(name, yaml_param, model.includes, call, in);
                         continue;
+                    }
+                    if (in != "body")
+                    {
+                        cerr << "Parameter " << yaml_param["name"]
+                             << " has a non-primitive type but tries to be passed "
+                             << "through " << in << endl;
+                        fail(ComplexTypeTargetsOutsideBody);
                     }
                     // Got a complex type
                     auto schema = get(yaml_param, "schema", NodeType::Map);
@@ -211,7 +217,7 @@ Model Analyzer::loadModel() const
                     {
                         // Got a complex type without inner schema details
                         auto name = getString(yaml_param, "name");
-                        addParameter(name, schema, model.includes, call, in);
+                        addParameter(name, schema, model.includes, call);
                         continue;
                     }
 
@@ -219,18 +225,14 @@ Model Analyzer::loadModel() const
                     for (auto property: properties)
                     {
                         auto name = property.first.as<string>();
-                        addParameter(name, property.second, model.includes,
-                                     call, in);
+                        addParameter(name, property.second, model.includes, call);
                     }
                 }
 
                 auto yamlResponses = get(yaml_call, "responses", NodeType::Map);
                 auto normalResponse = yamlResponses["200"];
                 if (!normalResponse || (normalResponse && normalResponse["schema"]))
-                {
-                    cerr << "Non-trivial responses not supported yet" << endl;
-                    return model;
-                }
+                    cerr << "Warning: Non-trivial responses not supported yet" << endl;
             }
         }
     } else {

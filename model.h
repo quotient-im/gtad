@@ -20,13 +20,14 @@
 
 #include <string>
 #include <vector>
-#include <unordered_map>
+#include <array>
 
 struct VarDecl
 {
     std::string type;
     std::string name;
     bool required = false;
+    bool isRequired() const { return required; }
 
     VarDecl(const std::string& t, const std::string& n)
         : type(t), name(n)
@@ -48,48 +49,60 @@ struct DataModel
 
 using ResponseType = DataModel;
 
-struct ParamDecl : public VarDecl
+class Call
 {
-        enum In { Undefined, Path, Query, Header, Data } in;
-        static const char* const in_str[];
-        static In inFromStr(const std::string& s);
-        static std::string strFromIn(In in)
+    public:
+        using params_type = std::vector<VarDecl>;
+
+        Call(const std::string& callPath, const std::string& callVerb,
+             bool callNeedsToken)
+            : path(callPath), verb(callVerb), needsToken(callNeedsToken)
+        { }
+        Call(Call&) = delete;
+        Call(Call&& other)
+            : path(other.path), verb(other.verb), allParams(other.allParams)
+            , needsToken(other.needsToken)
         {
-            return in_str[in];
+
         }
 
-        ParamDecl(const std::string& t, const std::string& n, In in)
-            : VarDecl(t, n)
-            , in(in)
-        { }
-};
+        void addParam(const VarDecl& param, const std::string& in);
+        params_type::size_type paramsTotalSize() const
+        {
+            params_type::size_type s = 0;
+            for (const auto& p: allParams) s += p.size();
+            return s;
+        }
+        params_type collateParams() const;
 
-struct CallOverload
-{
-    std::vector<ParamDecl> params;
-    std::string quotedPath;
-    std::string verb;
-    std::unordered_map<std::string, std::string> query;
-    std::string data;
-    std::string contentType;
-    bool needsToken;
-
+        std::string path;
+        std::string verb;
+        std::array<params_type, 4> allParams;
+        params_type& pathParams = allParams[0];
+        params_type& queryParams = allParams[1];
+        params_type& headerParams = allParams[2];
+        params_type& bodyParams = allParams[3];
+        bool needsToken;
 };
 
 struct Model;
 
 struct CallConfigModel
 {
-    const Model& topModel;
     std::string className;
-    std::vector<CallOverload> callOverloads;
+    std::vector<Call> callOverloads;
     VarDecl replyFormatVar;
     ResponseType responseType;
 
-    CallConfigModel(const Model& parent,
-                    const std::string& callName,
+    CallConfigModel(const std::string& callName,
                     const std::string& responseTypeName,
                     const std::string& replyFormatType = "const QJsonObject&");
+    Call& addCall(const std::string& path, const std::string& verb,
+                  bool needsToken)
+    {
+        callOverloads.emplace_back(path, verb, needsToken);
+        return callOverloads.back();
+    }
 };
 
 struct Model
@@ -100,7 +113,9 @@ struct Model
     std::vector<CallConfigModel> callModels;
 
     explicit Model(const std::string& nameSpace = "") : nsName(nameSpace) { }
-    CallOverload& addCall(const std::string& path, const std::string& verb,
-                          const std::string& responseTypename);
+    Model(Model&) = delete;
+    Model(Model&&) = default;
+    Call& addCall(const std::string& path, const std::string& verb,
+                  bool needsToken, const std::string& responseTypename);
 };
 

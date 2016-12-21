@@ -56,5 +56,6 @@ class Analyzer
 
         void addParameter(std::string name, const Node& node,
                           std::vector<std::string>& includes,
-                          CallOverload& callOverload, ParamDecl::In in) const;
+                          Call& callOverload,
+                          const std::string& in = "body") const;
 };

@@ -17,7 +17,9 @@ class Printer
         void printCall(const std::string& ns, const CallConfigModel& cm);
         void printConstructors(const CallConfigModel& cm, const std::string& ns = "");
         void printBody(const std::string& callName,
-                       const CallOverload& callOverload, bool asFunction);
+                       const Call& callOverload, bool asFunction);
+        void printParamInitializer(const Call::params_type& params,
+                                   const std::string& containerName);
 
     private:
         std::ofstream hS;

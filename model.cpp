@@ -9,7 +9,7 @@
 
 enum {
     CannotResolveClassName = InternalErrors,
-    NoCallOverloadsForClass, ConflictingOverloads,
+    NoCallOverloadsForClass, ConflictingOverloads, UnknownInValue,
 };
 
 using namespace std;
@@ -170,28 +170,16 @@ DataModel::DataModel(const string& typeName)
     : name(convertMultiword(typeName))
 { }
 
-const char* const ParamDecl::in_str[] =
-    { "!Undefined!", "path", "query", "header", "body" };
-
-ParamDecl::In ParamDecl::inFromStr(const string& s)
-{
-    for (auto it = begin(in_str); it != end(in_str); ++it)
-        if (s == *it)
-            return In(it - begin(in_str));
-    return Undefined;
-}
-
-CallConfigModel::CallConfigModel(const Model& parent,
-                                 const string& callName,
+CallConfigModel::CallConfigModel(const string& callName,
                                  const string& responseTypeName,
                                  const string& replyFormatType)
-    : topModel(parent), className(callName)
+    : className(callName)
     , replyFormatVar(replyFormatType, "reply")
     , responseType(responseTypeName)
 { }
 
-CallOverload& Model::addCall(const string& path, const string& verb,
-                             const string& responseTypename)
+Call& Model::addCall(const string& path, const string& verb,
+                     bool needsToken, const string& responseTypename)
 {
     string className = makeClassName(path, verb);
     if (callModels.empty() || className != callModels.back().className)
@@ -200,19 +188,33 @@ CallOverload& Model::addCall(const string& path, const string& verb,
                 callModels.back().responseType.name != responseTypename)
             fail(ConflictingOverloads, "Call overloads return different types");
 
-        callModels.emplace_back(*this, className, responseTypename);
+        callModels.emplace_back(className, responseTypename);
     }
 
-    auto& cm = callModels.back();
+    return callModels.back().addCall(path, capitalizedCopy(verb), needsToken);
+}
 
-    cm.callOverloads.emplace_back();
-    CallOverload& call = cm.callOverloads.back();
-    call.verb = capitalizedCopy(verb);
-    call.quotedPath = "\"" +
-            regex_replace(path, makeRegex("\\{#\\}"), "\" % $1 % \"") + "\"";
-    // Remove an excess ' % ""' sequence in case when the last character
-    // in path is a closing brace
-    if (call.quotedPath[call.quotedPath.size() - 4] == '%')
-        call.quotedPath.erase(call.quotedPath.size() - 5);
-    return call;
+void Call::addParam(const VarDecl& param, const string& in)
+{
+    static const char* const map[] { "path", "query", "header", "body" };
+    for (params_type::size_type i = 0; i < 4; ++i)
+        if (map[i] == in)
+        {
+            allParams[i].push_back(param);
+            return;
+        }
+
+    cerr << "Parameter " << param.toString()
+         << " has unknown 'in' value: "<< in << endl;
+    fail(UnknownInValue);
+}
+
+Call::params_type Call::collateParams() const
+{
+    params_type allCollated; allCollated.reserve(paramsTotalSize());
+    for (auto c: allParams)
+        copy(c.begin(), c.end(), back_inserter(allCollated));
+    stable_partition(allCollated.begin(), allCollated.end(),
+                     mem_fn(&VarDecl::isRequired));
+    return allCollated;
 }

@@ -48,8 +48,6 @@ Scope::~Scope()
             else
                 _s << _closer;
         }
-        if (!_appendEndl)
-            _s << '\n';
     }
     _s.flush();
 }

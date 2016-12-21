@@ -63,7 +63,7 @@ void Translator::operator()(QString filePath, QString basePath) const
     }
 
     Analyzer a(filePath.toStdString(), basePath.toStdString());
-    Model m = a.loadModel();
+    Model m { a.loadModel() };
     m.nsName = "QMatrixClient::ServerApi";
     Printer(_outputDirPath.toStdString(), a.getFilenameBase()).print(m);
 }
