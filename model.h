@@ -39,64 +39,66 @@ struct VarDecl
     }
 };
 
-struct DataModel
+struct Type
 {
+    std::string import;
     std::string name;
     std::vector<VarDecl> fields;
 
-    explicit DataModel(const std::string& typeName);
+    explicit Type(const std::string& typeName);
 };
 
-using ResponseType = DataModel;
+using ResponseType = Type;
 
-class Call
+struct Call
 {
-    public:
-        using params_type = std::vector<VarDecl>;
+    using params_type = std::vector<VarDecl>;
 
-        Call(const std::string& callPath, const std::string& callVerb,
-             bool callNeedsToken)
-            : path(callPath), verb(callVerb), needsToken(callNeedsToken)
-        { }
-        Call(Call&) = delete;
-        Call(Call&& other)
-            : path(other.path), verb(other.verb), allParams(other.allParams)
-            , needsToken(other.needsToken)
-        {
+    Call(const std::string& callPath, const std::string& callVerb,
+         bool callNeedsToken)
+        : path(callPath), verb(callVerb), needsToken(callNeedsToken)
+    { }
+    Call(Call&) = delete;
+    Call(Call&& other)
+        : path(other.path), verb(other.verb), allParams(other.allParams)
+        , needsToken(other.needsToken)
+    { }
 
-        }
+    void addParam(const VarDecl& param, const std::string& in);
+    params_type::size_type paramsTotalSize() const
+    {
+        params_type::size_type s = 0;
+        for (const auto& p: allParams) s += p.size();
+        return s;
+    }
+    params_type collateParams() const;
 
-        void addParam(const VarDecl& param, const std::string& in);
-        params_type::size_type paramsTotalSize() const
-        {
-            params_type::size_type s = 0;
-            for (const auto& p: allParams) s += p.size();
-            return s;
-        }
-        params_type collateParams() const;
-
-        std::string path;
-        std::string verb;
-        std::array<params_type, 4> allParams;
-        params_type& pathParams = allParams[0];
-        params_type& queryParams = allParams[1];
-        params_type& headerParams = allParams[2];
-        params_type& bodyParams = allParams[3];
-        bool needsToken;
+    std::string path;
+    std::string verb;
+    std::array<params_type, 4> allParams;
+    params_type& pathParams = allParams[0];
+    params_type& queryParams = allParams[1];
+    params_type& headerParams = allParams[2];
+    params_type& bodyParams = allParams[3];
+    bool needsToken;
 };
 
 struct Model;
 
-struct CallConfigModel
+struct CallClass
 {
     std::string className;
     std::vector<Call> callOverloads;
     VarDecl replyFormatVar;
     ResponseType responseType;
 
-    CallConfigModel(const std::string& callName,
-                    const std::string& responseTypeName,
-                    const std::string& replyFormatType = "const QJsonObject&");
+    CallClass(const std::string& callName,
+              const std::string& responseTypeName,
+              const std::string& replyFormatType = "const QJsonObject&")
+        : className(callName)
+        , replyFormatVar(replyFormatType, "reply")
+        , responseType(responseTypeName)
+    { }
     Call& addCall(const std::string& path, const std::string& verb,
                   bool needsToken)
     {
@@ -109,8 +111,8 @@ struct Model
 {
     std::string nsName;
     std::vector<std::string> includes;
-    std::vector<DataModel> dataModels;
-    std::vector<CallConfigModel> callModels;
+    std::vector<Type> types;
+    std::vector<CallClass> callClasses;
 
     explicit Model(const std::string& nameSpace = "") : nsName(nameSpace) { }
     Model(Model&) = delete;

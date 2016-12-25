@@ -26,12 +26,12 @@ Scope::Scope(ostream& s, const string& scope,
 {
     regex reSplit { splitAt };
     for(sregex_token_iterator it(scope.begin(), scope.end(), reSplit, -1), end;
-        it != end; ++it, ++_depth, ++_levels[&s])
+        it != end; ++it, ++_depth, ++_levels[&_s])
     {
-        s << offset << header << *it << '\n'
-          << offset << opener << '\n';
+        _s << offset << header << *it << '\n'
+           << offset << opener << '\n';
     }
-    s.flush();
+    _s.flush();
 }
 
 Scope::~Scope()

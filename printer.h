@@ -13,11 +13,11 @@ class Printer
                 const std::string& filenameBase);
 
         void print(const Model& model);
-        void printDataDef(const DataModel& dm);
-        void printCall(const std::string& ns, const CallConfigModel& cm);
-        void printConstructors(const CallConfigModel& cm, const std::string& ns = "");
-        void printBody(const std::string& callName,
-                       const Call& callOverload, bool asFunction);
+        void printDataDef(const Type& dm);
+        void printCall(const std::string& ns, const CallClass& cm);
+        void printConstructors(const CallClass& cm, const std::string& ns = "");
+        void printInitializer(const std::string& callName,
+                       const Call& callOverload);
         void printParamInitializer(const Call::params_type& params,
                                    const std::string& containerName);
 

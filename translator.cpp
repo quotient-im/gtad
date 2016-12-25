@@ -56,6 +56,8 @@ void Translator::operator()(QString filePath, QString basePath) const
             filesList.removeAll("content-repo.yaml"); // Temporarily
             filesList.removeAll("cas_login_redirect.yaml");
             filesList.removeAll("cas_login_ticket.yaml");
+            filesList.removeAll("old_sync.yaml"); // Deprecated
+            filesList.removeAll("room_initial_sync.yaml"); // Deprecated
             for(auto fn: filesList)
                 (*this)(path + fn, fullPath);
         }

@@ -44,8 +44,9 @@ void Printer::print(const Model& model)
         hS << "#include " << header << "\n";
     hS << "\n";
 
+    // TODO: Move all #include generation here from Analyzer
     if ([&] {
-                for (const auto& cm: model.callModels)
+                for (const auto& cm: model.callClasses)
                     for (const auto& cp: cm.callOverloads)
                         if (cp.path.find('{') != string::npos)
                             return true;
@@ -59,14 +60,14 @@ void Printer::print(const Model& model)
     Scope ns(hS, model.nsName, "::", "namespace ", "{", "}");
     cppS << "using namespace " << model.nsName << ";\n";
 
-    for_each(model.dataModels.begin(), model.dataModels.end(),
+    for_each(model.types.begin(), model.types.end(),
              bind(&Printer::printDataDef, this, _1));
 
-    for_each(model.callModels.begin(), model.callModels.end(),
+    for_each(model.callClasses.begin(), model.callClasses.end(),
              bind(&Printer::printCall, this, model.nsName, _1));
 }
 
-void Printer::printDataDef(const DataModel& dm)
+void Printer::printDataDef(const Type& dm)
 {
     hS << offset << "struct " << dm.name;
     Scope _scope(hS, "{", "};");
@@ -111,7 +112,7 @@ void printSignature(ostream& s, const string& returnType,
     s << lineS.str();
 }
 
-void Printer::printCall(const string& ns, const CallConfigModel& cm)
+void Printer::printCall(const string& ns, const CallClass& cm)
 {
     if (cm.callOverloads.empty())
     {
@@ -129,6 +130,11 @@ void Printer::printCall(const string& ns, const CallConfigModel& cm)
             hS << offset << field.toString() << ";\n";
     }
 
+    // Instead of having a full-fledged class that only has a constructor
+    // (or several) but no parseReply(), generate a function that
+    // returns a CallConfig for each such a would-be constructor. This also
+    // allows to nicely avoid a problem with Invite calls, which are defined
+    // twice in different Swagger files but have different sets of parameters.
     if (cm.responseType.name.empty())
         printConstructors(cm, ns);
     else
@@ -147,7 +153,7 @@ void Printer::printCall(const string& ns, const CallConfigModel& cm)
 
 }
 
-void Printer::printConstructors(const CallConfigModel& cm, const string& ns)
+void Printer::printConstructors(const CallClass& cm, const string& ns)
 {
     bool asFunction = !ns.empty();
 
@@ -155,12 +161,26 @@ void Printer::printConstructors(const CallConfigModel& cm, const string& ns)
     for (const auto& call: cm.callOverloads)
     {
         cppS << endl;
-        string returnType = asFunction ? "CallConfigNoReplyBody" : "";
         Call::params_type allParams = call.collateParams();
-        printSignature(hS, returnType, cm.className, allParams);
-        printSignature(cppS, returnType, cm.className, allParams,
-                       asFunction ? ns : cm.className);
-        printBody(cm.className, call, asFunction);
+        string nameAndVerb =
+                '"' + cm.className + "\", HttpVerb::" + call.verb + ',';
+        if (asFunction)
+        {
+            string returnType = "CallConfigNoReplyBody";
+            printSignature(hS, returnType, cm.className, allParams);
+            printSignature(cppS, returnType, cm.className, allParams, ns);
+            Scope body(cppS, "{", "}");
+            Scope initializer(cppS, "return { " + nameAndVerb, "};");
+            printInitializer(cm.className, call);
+        }
+        else
+        {
+            printSignature(hS, "", cm.className, allParams);
+            printSignature(cppS, "", cm.className, allParams, cm.className);
+            Scope body(cppS, ": ", "{ }\n", Scope::NoNewLines);
+            Scope initializer(cppS, "CallConfig(" + nameAndVerb, ")");
+            printInitializer(cm.className, call);
+        }
 
         for (const auto& p: {call.queryParams, call.headerParams, call.bodyParams})
             if (!p.empty())
@@ -184,18 +204,8 @@ void Printer::printConstructors(const CallConfigModel& cm, const string& ns)
 //retval className::name
 //className::name
 
-void Printer::printBody(const string& callName, const Call& callOverload,
-                        bool asFunction)
+void Printer::printInitializer(const string& callName, const Call& callOverload)
 {
-    // Instead of having a full-fledged class that only has a constructor
-    // (or several) but no parseReply(), generate a function that
-    // returns a CallConfig for each such a would-be constructor. This also
-    // allows to nicely avoid a problem with Invite calls, which are defined
-    // twice in different Swagger files but have different sets of parameters.
-    Scope body(cppS, asFunction ? "{" : ": ", asFunction ? "}" : "{ }\n", asFunction);
-    Scope initializer(cppS, asFunction ? "return { " : "CallConfig(",
-                      asFunction ? "};\n" : ")\n", Scope::NoNewLines);
-    cppS << "\"" << callName << "\", HttpVerb::" << callOverload.verb << ",\n";
     {
         Scope apiPathScope(cppS, "ApiPath(\"", ")", Scope::NoNewLines);
 
@@ -206,7 +216,7 @@ void Printer::printBody(const string& callName, const Call& callOverload,
             auto i2 = path.find('}', i1);
             if (i1 == string::npos)
             {
-                cppS << path.substr(i);
+                cppS << path.substr(i) << "\"";
                 break;
             }
             if (i2 == string::npos)
@@ -230,7 +240,6 @@ void Printer::printBody(const string& callName, const Call& callOverload,
 
     if (!callOverload.needsToken)
         cppS << ",\n" << offset << "false";
-    cppS << ' ';
 }
 
 inline string dumpJsonPair(const std::string& name)
@@ -242,13 +251,16 @@ void Printer::printParamInitializer(const Call::params_type& params,
                                     const string& containerName)
 {
     cppS << ",\n";
-    Scope apiQueryScope(cppS, containerName + " {", "}", Scope::NoNewLines);
-    if (params.size() == 1)
-        cppS << " " << dumpJsonPair(params.front().name) << " ";
-    else
-        transform(params.begin(), params.end(),
-            ostream_iterator<string>(cppS, ",\n"), [&](const VarDecl& p) {
-                return Scope::offsetString(cppS) +
-                        "{ \"" + p.name + "\", " + p.name + " }";
-            });
+    Scope paramInitializer(cppS, containerName + " {", "}", params.size() > 1);
+    switch (params.size())
+    {
+        case 0: cppS << " "; break;
+        case 1: cppS << " " << dumpJsonPair(params.front().name) << " "; break;
+        default:
+            cppS << offset << dumpJsonPair(params.front().name);
+            for_each(params.begin() + 1, params.end(), [&](const VarDecl& p) {
+                    cppS << ",\n" << offset << dumpJsonPair(p.name);
+                });
+            cppS << '\n';
+    }
 }

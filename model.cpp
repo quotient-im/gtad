@@ -5,7 +5,6 @@
 #include <regex>
 
 #include "exception.h"
-#include "scope.h"
 
 enum {
     CannotResolveClassName = InternalErrors,
@@ -164,34 +163,24 @@ string makeClassName(const string& path, const string& verb)
     fail(CannotResolveClassName);
 }
 
-using namespace CppPrinting;
-
-DataModel::DataModel(const string& typeName)
+Type::Type(const string& typeName)
     : name(convertMultiword(typeName))
-{ }
-
-CallConfigModel::CallConfigModel(const string& callName,
-                                 const string& responseTypeName,
-                                 const string& replyFormatType)
-    : className(callName)
-    , replyFormatVar(replyFormatType, "reply")
-    , responseType(responseTypeName)
 { }
 
 Call& Model::addCall(const string& path, const string& verb,
                      bool needsToken, const string& responseTypename)
 {
     string className = makeClassName(path, verb);
-    if (callModels.empty() || className != callModels.back().className)
+    if (callClasses.empty() || className != callClasses.back().className)
     {
-        if (!callModels.empty() &&
-                callModels.back().responseType.name != responseTypename)
+        if (!callClasses.empty() &&
+                callClasses.back().responseType.name != responseTypename)
             fail(ConflictingOverloads, "Call overloads return different types");
 
-        callModels.emplace_back(className, responseTypename);
+        callClasses.emplace_back(className, responseTypename);
     }
 
-    return callModels.back().addCall(path, capitalizedCopy(verb), needsToken);
+    return callClasses.back().addCall(path, capitalizedCopy(verb), needsToken);
 }
 
 void Call::addParam(const VarDecl& param, const string& in)

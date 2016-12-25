@@ -91,20 +91,20 @@ pair<string, string> Analyzer::getTypename(const Node& node) const
         string localFilePath = getString(node, "$ref");
         Analyzer a(localFilePath, baseDir + currentFileDirPath);
         Model m = a.loadModel();
-        if (m.dataModels.empty())
+        if (m.types.empty())
         {
             cerr << "File " << localFilePath
                  << " doesn't have data definitions" << endl;
             fail(YamlFailsSchema);
         }
-        if (m.dataModels.size() > 1)
+        if (m.types.size() > 1)
         {
             cerr << "File " << localFilePath
                  << " has more than one data structure definition" << endl;
             fail(YamlFailsSchema);
         }
 
-        return { m.dataModels.back().name, "\"" + a.getFilenameBase() + ".h\"" };
+        return { m.types.back().name, "\"" + a.getFilenameBase() + ".h\"" };
     }
 
     string yamlType = getString(node, "type");
@@ -122,8 +122,8 @@ pair<string, string> Analyzer::getTypename(const Node& node) const
             yamlType == "string" ? make_pair("QString", "") :
             yamlType == "integer" || yamlType == "number" ? make_pair("int", "") :
             yamlType == "boolean" ? make_pair("bool", "") :
-            yamlType == "array" ? make_pair("QVariantList", "<QtCore/QVariantList>") :
-            yamlType == "object" ? make_pair("QVariant", "<QtCore/QVariant>") :
+            yamlType == "array" ? make_pair("QJsonArray", "<QtCore/QJsonArray>") :
+            yamlType == "object" ? make_pair("QJsonObject", "<QtCore/QJsonObject>") :
             make_pair("", "");
     if (!retval.first.empty())
         return retval;
@@ -238,7 +238,7 @@ Model Analyzer::loadModel() const
     } else {
         assert(yaml, NodeType::Map);
         if (auto t = yaml["title"])
-            model.dataModels.emplace_back(
+            model.types.emplace_back(
                         assert(t, NodeType::Scalar).as<string>());
         else
         {
@@ -246,7 +246,7 @@ Model Analyzer::loadModel() const
             auto n = bareFilename.rfind('/');
             if (n != string::npos)
                 bareFilename = bareFilename.substr(n + 1);
-            model.dataModels.emplace_back(bareFilename);
+            model.types.emplace_back(bareFilename);
         }
     }
     return model;
