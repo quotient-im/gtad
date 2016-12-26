@@ -55,9 +55,8 @@ void Printer::print(const Model& model)
         cppS << "#include <QtCore/QStringBuilder>\n\n";
 
     // Make a nested structure of namespaces (C++11 doesn't allow to write
-    // namespace NS1::NS2 { } unless NS1 is previously defined). The below
-    // clumsy statement simply splits model.nsName at ::
-    Scope ns(hS, model.nsName, "::", "namespace ", "{", "}");
+    // namespace NS1::NS2 { } unless NS1 is previously defined).
+    Scope ns(hS, "namespace ", model.nsName, "{", "}", "::");
     cppS << "using namespace " << model.nsName << ";\n";
 
     for_each(model.types.begin(), model.types.end(),
@@ -83,17 +82,17 @@ void printSignature(ostream& s, const string& returnType,
 {
     static const Scope::size_type WRAPMARGIN = 80;
     ostringstream lineS;
-    Scope::setOffset(lineS, Scope::getOffset(s));
+    Offset _o(lineS, s);
     {
         bool header = qualifier.empty();
-        string leader =
+        string beforeParams =
                 (returnType.empty() ? "" : returnType + " ") +
                 (qualifier.empty() ? "" : qualifier + "::") + name + "(";
 
-        Scope o(lineS, leader, header ? ");\n" : ")\n", Scope::NoNewLines);
+        Scope o(lineS, beforeParams, header ? ");\n" : ")\n", Scope::NoNewLines);
         for (auto p = params.begin(); p != params.end(); ++p)
         {
-            string param = p->toString(/*header*/);
+            string param = p->toString(header);
             if (p != params.begin())
             {
                 // Wrap lines
@@ -121,14 +120,14 @@ void Printer::printCall(const string& ns, const CallClass& cm)
         fail(ClassHasNoCalls);
     }
 
-    if (!cm.responseType.fields.empty())
-    {
-        // Complex response type; define the structure(s) before the class
-        hS << offset << "struct " << cm.responseType.name << "\n";
-        Scope sdef(hS, "{", "};");
-        for (const auto& field: cm.responseType.fields)
-            hS << offset << field.toString() << ";\n";
-    }
+//    if (!cm.responseType.fields.empty())
+//    {
+//        // Complex response type; define the structure(s) before the class
+//        hS << offset << "struct " << cm.responseType.name << "\n";
+//        Scope sdef(hS, "{", "};");
+//        for (const auto& field: cm.responseType.fields)
+//            hS << offset << field.toString() << ";\n";
+//    }
 
     // Instead of having a full-fledged class that only has a constructor
     // (or several) but no parseReply(), generate a function that
@@ -141,7 +140,7 @@ void Printer::printCall(const string& ns, const CallClass& cm)
     {
         hS << offset << "class " << cm.className << " : public CallConfig\n";
         Scope cl(hS, "{", "};");
-        Scope p(hS, "public:");
+        Offset p(hS, "public:");
         printConstructors(cm);
         printSignature(hS, "Result<" + cm.responseType.name + ">",
                        "parseReply", {}, cm.className);
@@ -162,24 +161,32 @@ void Printer::printConstructors(const CallClass& cm, const string& ns)
     {
         cppS << endl;
         Call::params_type allParams = call.collateParams();
-        string nameAndVerb =
-                '"' + cm.className + "\", HttpVerb::" + call.verb + ',';
         if (asFunction)
         {
             string returnType = "CallConfigNoReplyBody";
             printSignature(hS, returnType, cm.className, allParams);
             printSignature(cppS, returnType, cm.className, allParams, ns);
             Scope body(cppS, "{", "}");
-            Scope initializer(cppS, "return { " + nameAndVerb, "};");
-            printInitializer(cm.className, call);
+            cppS << offset << "return { ";
+            {
+                Offset initializer(cppS, 1);
+                printInitializer(cm.className, call);
+            }
+
+            cppS << offset << (call.needsToken ? "};" : ", false };") << endl;
         }
         else
         {
             printSignature(hS, "", cm.className, allParams);
             printSignature(cppS, "", cm.className, allParams, cm.className);
-            Scope body(cppS, ": ", "{ }\n", Scope::NoNewLines);
-            Scope initializer(cppS, "CallConfig(" + nameAndVerb, ")");
-            printInitializer(cm.className, call);
+            {
+                Offset initializerOffset(cppS, 1);
+                cppS << offset << ": CallConfig(";
+                Offset initializer(cppS, 1);
+                printInitializer(cm.className, call);
+            }
+            cppS << offset << (call.needsToken ? ")" : ", false )") << '\n'
+                 << offset << "{ }" << endl;
         }
 
         for (const auto& p: {call.queryParams, call.headerParams, call.bodyParams})
@@ -206,8 +213,9 @@ void Printer::printConstructors(const CallClass& cm, const string& ns)
 
 void Printer::printInitializer(const string& callName, const Call& callOverload)
 {
+    cppS << '"' << callName << "\", HttpVerb::" << callOverload.verb << '\n';
     {
-        Scope apiPathScope(cppS, "ApiPath(\"", ")", Scope::NoNewLines);
+        Scope apiPathScope(cppS, ", ApiPath(\"", ")\n", Scope::NoNewLines);
 
         const auto& path = callOverload.path;
         for (string::size_type i = 0; i < path.size();)
@@ -233,13 +241,10 @@ void Printer::printInitializer(const string& callName, const Call& callOverload)
     if (!callOverload.needsToken
             || !callOverload.bodyParams.empty()
             || !callOverload.queryParams.empty())
-        printParamInitializer(callOverload.queryParams, "Query");
+        printParamInitializer(callOverload.queryParams, ", Query");
 
     if (!callOverload.bodyParams.empty() || !callOverload.needsToken)
-        printParamInitializer(callOverload.bodyParams, "Data");
-
-    if (!callOverload.needsToken)
-        cppS << ",\n" << offset << "false";
+        printParamInitializer(callOverload.bodyParams, ", Data");
 }
 
 inline string dumpJsonPair(const std::string& name)
@@ -250,8 +255,7 @@ inline string dumpJsonPair(const std::string& name)
 void Printer::printParamInitializer(const Call::params_type& params,
                                     const string& containerName)
 {
-    cppS << ",\n";
-    Scope paramInitializer(cppS, containerName + " {", "}", params.size() > 1);
+    Scope paramInitializer(cppS, containerName + " {", "}\n", params.size() > 1);
     switch (params.size())
     {
         case 0: cppS << " "; break;

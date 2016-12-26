@@ -24,42 +24,47 @@
 #include <ostream>
 
 namespace CppPrinting
-{
-    class Scope
+{   
+    class Offset
     {
         public:
             using size_type = std::string::size_type;
 
-            static const size_type TABSIZE = 4;
-            static const bool NoNewLines = false;
-
-            Scope(std::ostream& s, std::string opener, std::string closer = "",
-                  bool appendNewLines = true);
-            Scope(std::ostream& s, const std::string& scope,
-                  const std::string& splitAt, const std::string& header,
-                  const std::string& opener, const std::string& closer = "");
-            ~Scope();
-
-            static size_type getOffset(const std::ostream& s);
-            static void setOffset(const std::ostream& s, size_type offset);
-
-            static std::string offsetString(const std::ostream& s)
+            explicit Offset(std::ostream& s, size_type depth = 0)
+                : _s(s), _depth(0)
             {
-                return std::string(getOffset(s) * TABSIZE, ' ');
+                promote(depth);
             }
-            std::string offsetString() const
-            {
-                return offsetString(_s);
-            }
+            Offset(std::ostream& s, const std::ostream& otherS);
+            Offset(std::ostream& s, const std::string& leader);
+            ~Offset();
 
-        private:
+            void promote(size_type depth = 1);
+            void demote(size_type depth = 1);
+
+        protected:
             std::ostream& _s;
-            std::string _closer;
-            bool _appendEndl;
             size_type _depth;
     };
-    inline std::ostream& offset(std::ostream& s)
+    class Scope : public Offset
     {
-        return s << Scope::offsetString(s);
-    }
+        public:
+            static const bool NoNewLines = false;
+
+            Scope(std::ostream& s, std::string leader, std::string trailer,
+                  bool appendNewLines = true);
+            Scope(std::ostream& s, const std::string& header,
+                  const std::string& scopeName, const std::string& leader,
+                  const std::string& trailer);
+            Scope(std::ostream& s, const std::string& header,
+                  const std::string& scope, const std::string& leader,
+                  const std::string& trailer, const std::string& splitAt);
+            ~Scope();
+
+        private:
+            std::string _trailer;
+            bool _appendEndl;
+    };
+
+    std::ostream& offset(std::ostream& s);
 }

@@ -7,57 +7,90 @@
 using namespace CppPrinting;
 using namespace std;
 
-static unordered_map<const ostream*, Scope::size_type> _levels;
+static unordered_map<const ostream*, Offset::size_type> _levels;
+static const Offset::size_type TABSIZE = 4;
 
-Scope::Scope(ostream& s, string opener, string closer, bool appendEndl)
-    : _s(s), _closer(closer), _appendEndl(appendEndl), _depth(1)
+Offset::Offset(ostream& s, const ostream& otherS)
+    : _s(s), _depth(_levels[&otherS] - _levels[&_s])
 {
-    _s << offset << opener;
-    ++_levels[&_s];
+    _levels[&_s] = _levels[&otherS];
+}
+
+Offset::Offset(ostream& s, const string& leader)
+    : _s(s), _depth(1)
+{
+    _s << offset << leader << endl;
+    promote();
+}
+
+Offset::~Offset()
+{
+    _levels[&_s] -= _depth;
+}
+
+void Offset::promote(Offset::size_type depth)
+{
+    _levels[&_s] += depth;
+    _depth += depth;
+}
+
+void Offset::demote(Offset::size_type depth)
+{
+    _levels[&_s] -= depth;
+    _depth -= depth;
+}
+
+Scope::Scope(ostream& s, string leader, string trailer, bool appendNewLines)
+    : Offset(s), _trailer(trailer), _appendEndl(appendNewLines)
+{
+    _s << offset << leader;
     if (_appendEndl)
         _s << '\n';
     _s.flush();
+    promote();
 }
 
-Scope::Scope(ostream& s, const string& scope,
-             const string& splitAt, const string& header,
-             const string& opener, const string& closer)
-    : _s(s), _closer(closer), _appendEndl(true), _depth(0)
+Scope::Scope(ostream& s, const string& header, const string& scopeName,
+             const string& leader, const string& trailer)
+    : Offset(s), _trailer(trailer), _appendEndl(true)
+{
+    _s << offset << header << scopeName << '\n'
+       << offset << leader << endl;
+    promote();
+}
+
+Scope::Scope(ostream& s, const string& header, const string& scope,
+             const string& leader, const string& trailer, const string& splitAt)
+    : Offset(s), _trailer(trailer), _appendEndl(true)
 {
     regex reSplit { splitAt };
     for(sregex_token_iterator it(scope.begin(), scope.end(), reSplit, -1), end;
-        it != end; ++it, ++_depth, ++_levels[&_s])
+        it != end; ++it, promote())
     {
         _s << offset << header << *it << '\n'
-           << offset << opener << '\n';
+           << offset << leader << '\n';
     }
     _s.flush();
 }
 
 Scope::~Scope()
 {
-    if (_closer.empty())
-        _levels[&_s] -= _depth;
-    else
+    if (!_trailer.empty())
     {
-        for (;_depth > 0; --_depth)
+        while (_depth > 0)
         {
-            --_levels[&_s];
+            demote();
             if (_appendEndl)
-                _s << offset << _closer << '\n';
+                _s << offset << _trailer << '\n';
             else
-                _s << _closer;
+                _s << _trailer;
         }
+        _s.flush();
     }
-    _s.flush();
 }
 
-Scope::size_type Scope::getOffset(const ostream& s)
+ostream& CppPrinting::offset(ostream& s)
 {
-    return _levels[&s];
-}
-
-void Scope::setOffset(const ostream& s, Scope::size_type offset)
-{
-    _levels[&s] = offset;
+    fill_n(ostreambuf_iterator<char>(s), _levels[&s] * TABSIZE, ' ');
+    return s;
 }
