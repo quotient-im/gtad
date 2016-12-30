@@ -44,13 +44,13 @@ option(YAML_CPP_BUILD_CONTRIB "Enable contrib stuff in library" OFF)
 add_subdirectory(yaml-cpp)
 
 list(APPEND api_generator_SRCS
-    main.cpp
-    translator.cpp
-    analyzer.cpp
-    scope.cpp
-    model.cpp
-    exception.cpp
-    printer.cpp
+        main.cpp
+        translator.cpp
+        analyzer.cpp
+        formatting.cpp
+        model.cpp
+        exception.cpp
+        printer.cpp
 )
 
 add_executable(api-generator ${api_generator_SRCS})

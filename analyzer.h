@@ -52,7 +52,7 @@ class Analyzer
             return get(node, subnodeName, NodeType::Scalar).as<std::string>();
         }
 
-        std::pair<std::string, std::string> getTypename(const Node& node) const;
+        TypeUsage resolveType(const Node& node) const;
 
         void addParameter(std::string name, const Node& node,
                           std::vector<std::string>& includes,

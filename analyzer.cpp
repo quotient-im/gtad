@@ -74,7 +74,7 @@ Node Analyzer::get(const Node& node, const string& subnodeName,
     fail(YamlFailsSchema);
 }
 
-pair<string, string> Analyzer::getTypename(const Node& node) const
+TypeUsage Analyzer::resolveType(const Node& node) const
 {
     if (node["$ref"])
     {
@@ -104,29 +104,41 @@ pair<string, string> Analyzer::getTypename(const Node& node) const
             fail(YamlFailsSchema);
         }
 
-        return { m.types.back().name, "\"" + a.getFilenameBase() + ".h\"" };
+        return TypeUsage(m.types.back().name, "\"" + a.getFilenameBase() + ".h\"");
     }
 
     string yamlType = getString(node, "type");
+    string yamlFormat = node["format"] ? getString(node, "format") : "";
     if (yamlType == "array")
     {
         auto arrayElType = get(node, "items", NodeType::Map);
 
         auto innerType = getString(arrayElType, "type");
         if (innerType == "string")
-            return { "QStringList", "<QtCore/QStringList>" };
+            return TypeUsage("QStringList", "<QtCore/QStringList>");
         // TODO: items can have [properties]; we'll have to create a separate struct
         // to describe such type
     }
-    pair<string, string> retval =
-            yamlType == "string" ? make_pair("QString", "") :
-            yamlType == "integer" || yamlType == "number" ? make_pair("int", "") :
-            yamlType == "boolean" ? make_pair("bool", "") :
-            yamlType == "array" ? make_pair("QJsonArray", "<QtCore/QJsonArray>") :
-            yamlType == "object" ? make_pair("QJsonObject", "<QtCore/QJsonObject>") :
-            make_pair("", "");
-    if (!retval.first.empty())
-        return retval;
+    TypeUsage resolvedType =
+            yamlType == "string" ?
+                (yamlFormat == "byte" || yamlFormat == "binary" ?
+                     TypeUsage("QByteArray", "<QtCore/QByteArray>") :
+                 yamlFormat == "date" ? TypeUsage("QDate", "<QtCore/QDate>") :
+                 yamlFormat == "date-time" ?
+                    TypeUsage("QDateTIme", "<QtCore/QDateTime>") :
+                    TypeUsage("QString")) :
+            yamlType == "integer" ?
+                (yamlFormat == "int64" ? TypeUsage("std::int64_t", "<cstdint>") :
+                 yamlFormat == "int32" ? TypeUsage("std::int32_t", "<cstdint>") :
+                                         TypeUsage("int")) :
+            yamlType == "number" ?
+                (yamlFormat == "float" ? TypeUsage("float") : TypeUsage("double")) :
+            yamlType == "boolean" ? TypeUsage("bool") :
+            yamlType == "array" ? TypeUsage("QJsonArray", "<QtCore/QJsonArray>") :
+            yamlType == "object" ? TypeUsage("QJsonObject", "<QtCore/QJsonObject>") :
+            TypeUsage("", "");
+    if (!resolvedType.name.empty())
+        return resolvedType;
 
     cerr << fileName << ":" << node.Mark().line + 1 << ": unknown type: " << yamlType;
     fail(UnknownParameterType);
@@ -135,16 +147,16 @@ pair<string, string> Analyzer::getTypename(const Node& node) const
 void Analyzer::addParameter(string name, const Node& node, vector<string>& includes,
                             Call& callOverload, const string& in) const
 {
-    auto typeDef = getTypename(node);
-    VarDecl p(typeDef.first, name);
+    auto type = resolveType(node);
+    VarDecl p(type.name, name);
     callOverload.addParam(p, in);
     cout << "  Added input parameter for " << in << ": " << p.toString();
 
-    if (!typeDef.second.empty() &&
-            find(includes.begin(), includes.end(), typeDef.second) == includes.end())
+    if (!type.import.empty() &&
+            find(includes.begin(), includes.end(), type.import) == includes.end())
     {
-        includes.emplace_back(typeDef.second);
-        cout << "(with #include " << typeDef.second << ")";
+        includes.emplace_back(type.import);
+        cout << "(with #include " << type.import<< ")";
     }
     cout << endl;
 }
@@ -200,7 +212,7 @@ Model Analyzer::loadModel() const
                     {
                         // Got a simple type
                         auto name = getString(yaml_param, "name");
-                        addParameter(name, yaml_param, model.includes, call, in);
+                        addParameter(name, yaml_param, model.imports, call, in);
                         continue;
                     }
                     if (in != "body")
@@ -217,7 +229,7 @@ Model Analyzer::loadModel() const
                     {
                         // Got a complex type without inner schema details
                         auto name = getString(yaml_param, "name");
-                        addParameter(name, schema, model.includes, call);
+                        addParameter(name, schema, model.imports, call);
                         continue;
                     }
 
@@ -225,7 +237,7 @@ Model Analyzer::loadModel() const
                     for (auto property: properties)
                     {
                         auto name = property.first.as<string>();
-                        addParameter(name, property.second, model.includes, call);
+                        addParameter(name, property.second, model.imports, call);
                     }
                 }
 
@@ -237,17 +249,11 @@ Model Analyzer::loadModel() const
         }
     } else {
         assert(yaml, NodeType::Map);
-        if (auto t = yaml["title"])
-            model.types.emplace_back(
-                        assert(t, NodeType::Scalar).as<string>());
-        else
-        {
-            auto bareFilename = getFilenameBase();
-            auto n = bareFilename.rfind('/');
-            if (n != string::npos)
-                bareFilename = bareFilename.substr(n + 1);
-            model.types.emplace_back(bareFilename);
-        }
+        auto bareFilename = getFilenameBase();
+        auto n = bareFilename.rfind('/');
+        if (n != string::npos)
+            bareFilename = bareFilename.substr(n + 1);
+        model.types.emplace_back(convertMultiword(bareFilename));
     }
     return model;
 }

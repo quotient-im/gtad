@@ -8,7 +8,7 @@
 
 enum {
     CannotResolveClassName = InternalErrors,
-    NoCallOverloadsForClass, ConflictingOverloads, UnknownInValue,
+    ConflictingOverloads, UnknownInValue,
 };
 
 using namespace std;
@@ -162,10 +162,6 @@ string makeClassName(const string& path, const string& verb)
     cerr << "Couldn't create a class name for path " << path << ", verb: " << verb;
     fail(CannotResolveClassName);
 }
-
-Type::Type(const string& typeName)
-    : name(convertMultiword(typeName))
-{ }
 
 Call& Model::addCall(const string& path, const string& verb,
                      bool needsToken, const string& responseTypename)

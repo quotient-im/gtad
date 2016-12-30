@@ -22,6 +22,8 @@
 #include <vector>
 #include <array>
 
+std::string convertMultiword(std::string s);
+
 struct VarDecl
 {
     std::string type;
@@ -39,16 +41,26 @@ struct VarDecl
     }
 };
 
-struct Type
+struct TypeUsage
 {
+    std::string name;
     std::string import;
+
+    explicit TypeUsage(const std::string& typeName,
+                       const std::string& requiresImport = "")
+        : name(typeName), import(requiresImport)
+    { }
+};
+
+struct StructDef
+{
     std::string name;
     std::vector<VarDecl> fields;
 
-    explicit Type(const std::string& typeName);
+    explicit StructDef(const std::string& typeName) : name(typeName) { }
 };
 
-using ResponseType = Type;
+using ResponseType = TypeUsage;
 
 struct Call
 {
@@ -110,8 +122,8 @@ struct CallClass
 struct Model
 {
     std::string nsName;
-    std::vector<std::string> includes;
-    std::vector<Type> types;
+    std::vector<std::string> imports;
+    std::vector<StructDef> types;
     std::vector<CallClass> callClasses;
 
     explicit Model(const std::string& nameSpace = "") : nsName(nameSpace) { }
