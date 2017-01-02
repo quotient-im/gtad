@@ -20,12 +20,17 @@
 
 #include <QtCore/QString>
 
+class Model;
+
 class Translator
 {
     public:
         explicit Translator(const QString& outputDirPath);
-        void operator()(QString filePath, QString basePath = "") const;
+        void operator()(QString path) const;
+        Model processFile(std::string filePath, std::string baseFilePath) const;
 
     private:
         QString _outputDirPath;
+
+        Model doProcessFile(std::string filePath, std::string baseDirPath) const;
 };

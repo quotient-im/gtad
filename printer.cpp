@@ -41,11 +41,13 @@ void Printer::print(const Model& model)
     if (!model.callClasses.empty())
         hS << "#include \"serverapi/servercallsetup.h\"\n\n";
 
+    if (!model.types.empty())
+        model.imports.insert("<QtCore/QJsonObject>");
+
     for (const auto& header: model.imports)
         hS << "#include " << header << "\n";
     hS << "\n";
 
-    // TODO: Move all #include generation here from Analyzer
     if ([&] {
                 for (const auto& cm: model.callClasses)
                     for (const auto& cp: cm.callOverloads)

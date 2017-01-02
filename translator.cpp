@@ -1,7 +1,8 @@
 #include "translator.h"
 
+#include <string>
+
 #include <QtCore/QDir>
-#include <QtCore/QStringBuilder>
 
 #include "model.h"
 #include "analyzer.h"
@@ -26,47 +27,45 @@ Translator::Translator(const QString& outputDirPath)
         fail(CannotCreateOutputDir, "Cannot create output directory");
 }
 
-void Translator::operator()(QString filePath, QString basePath) const
+void Translator::operator()(QString path) const
 {
-    if (!basePath.isEmpty() && !basePath.endsWith('/'))
-        basePath.append('/');
+    QFileInfo inputFileInfo { path };
 
-    QString fullPath = basePath + filePath;
-    QFileInfo inputFileInfo { fullPath };
     if (inputFileInfo.isDir())
     {
-        if (!fullPath.endsWith('/'))
-            fullPath.append('/');
-        auto paths = { "", "definitions/" };
-        for (auto path: paths)
+        if (!path.isEmpty() && !path.endsWith('/'))
+            path.push_back('/');
+        QStringList filesList = QDir(path).entryList(QDir::Readable|QDir::Files);
+        for (auto fn: filesList)
         {
-            QStringList filesList =
-                    QDir(fullPath + path).entryList(QDir::Readable|QDir::Files);
-            if (filesList.empty())
-                continue;
-
-            QDir oDir(_outputDirPath + path);
-            if (!oDir.exists() && !oDir.mkpath("."))
-                fail(CannotCreateOutputDir, "Cannot create output directory");
-
-            // FIXME: These exclusions should be external to the generator
-            filesList.removeAll("error.yaml");
-            filesList.removeAll("security.yaml");
-            filesList.removeAll("event-schemas");
-            filesList.removeAll("content-repo.yaml"); // Temporarily
-            filesList.removeAll("cas_login_redirect.yaml");
-            filesList.removeAll("cas_login_ticket.yaml");
-            filesList.removeAll("old_sync.yaml"); // Deprecated
-            filesList.removeAll("room_initial_sync.yaml"); // Deprecated
-            for(auto fn: filesList)
-                (*this)(path + fn, fullPath);
+            if (fn != "content-repo.yaml" &&
+                    fn != "cas_login_redirect.yaml" &&
+                    fn != "cas_login_ticket.yaml" &&
+                    fn != "old_sync.yaml" &&
+                    fn != "room_initial_sync.yaml")
+                doProcessFile(fn.toStdString(), path.toStdString());
         }
         return;
     }
-
-    Analyzer a(filePath.toStdString(), basePath.toStdString());
-    Model m { a.loadModel() };
-    m.nsName = "QMatrixClient::ServerApi";
-    Printer(_outputDirPath.toStdString(), a.getFilenameBase()).print(m);
+    doProcessFile(path.toStdString(), "");
 }
 
+Model Translator::processFile(string filePath, string baseFilePath) const
+{
+    // Strip the filename from baseFilePath, leaving only its directory
+    auto dirPos = baseFilePath.rfind('/');
+    if (dirPos == string::npos)
+        baseFilePath.clear();
+    else
+        baseFilePath.erase(dirPos + 1);
+
+    return doProcessFile(filePath, baseFilePath);
+}
+
+Model Translator::doProcessFile(string filePath, string baseDirPath) const
+{
+    Model m = Analyzer(filePath, baseDirPath, *this).loadModel();
+    m.nsName = "QMatrixClient::ServerApi";
+    Printer(_outputDirPath.toStdString(), m.filenameBase).print(m);
+    return m;
+}

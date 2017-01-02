@@ -24,14 +24,17 @@
 
 #include "model.h"
 
+class Translator;
+
 class Analyzer
 {
     public:
         using Node = YAML::Node;
         using NodeType = YAML::NodeType;
 
-        Analyzer(const std::string& filePath, const std::string& basePath)
-                : fileName(filePath), baseDir(basePath)
+        Analyzer(const std::string& filePath, const std::string& basePath,
+                 const Translator& translator)
+            : fileName(filePath), baseDir(basePath), translator(translator)
         { }
 
         Model loadModel() const;
@@ -40,6 +43,7 @@ class Analyzer
     private:
         std::string fileName;
         std::string baseDir;
+        const Translator& translator;
 
         Node loadYaml() const;
 
@@ -53,9 +57,9 @@ class Analyzer
         }
 
         TypeUsage resolveType(const Node& node) const;
+        std::string getType(const Node& node);
 
         void addParameter(std::string name, const Node& node,
-                          std::vector<std::string>& includes,
-                          Call& callOverload,
+                          Model::imports_type& includes, Call& callOverload,
                           const std::string& in = "body") const;
 };

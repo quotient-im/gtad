@@ -4,10 +4,8 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include <QtCore/QFileInfo>
-#include <QtCore/QDir>
-
 #include "exception.h"
+#include "translator.h"
 
 using namespace std;
 
@@ -78,19 +76,11 @@ TypeUsage Analyzer::resolveType(const Node& node) const
 {
     if (node["$ref"])
     {
+        string localFilePath = getString(node, "$ref");
         // The referenced file's path is relative to the current file's path;
         // we have to prepend a path to the current file's directory so that
         // YAML-Cpp finds the file.
-        QFileInfo currentFileInfo { QString::fromStdString(fileName) };
-        string currentFileDirPath = currentFileInfo.dir().path().toStdString();
-        if (currentFileDirPath == ".")
-            currentFileDirPath.clear();
-        else
-            currentFileDirPath.push_back('/');
-
-        string localFilePath = getString(node, "$ref");
-        Analyzer a(localFilePath, baseDir + currentFileDirPath);
-        Model m = a.loadModel();
+        Model m = translator.processFile(localFilePath, baseDir + fileName);
         if (m.types.empty())
         {
             cerr << "File " << localFilePath
@@ -104,7 +94,7 @@ TypeUsage Analyzer::resolveType(const Node& node) const
             fail(YamlFailsSchema);
         }
 
-        return TypeUsage(m.types.back().name, "\"" + a.getFilenameBase() + ".h\"");
+        return TypeUsage(m.types.back().name, "\"" + m.filenameBase + ".h\"");
     }
 
     string yamlType = getString(node, "type");
@@ -144,18 +134,71 @@ TypeUsage Analyzer::resolveType(const Node& node) const
     fail(UnknownParameterType);
 }
 
-void Analyzer::addParameter(string name, const Node& node, vector<string>& includes,
-                            Call& callOverload, const string& in) const
+string Analyzer::getType(const Node& node)
+{
+    if (node["$ref"])
+    {
+        string localFilePath = getString(node, "$ref");
+        // The referenced file's path is relative to the current file's path;
+        // we have to prepend a path to the current file's directory so that
+        // YAML-Cpp finds the file.
+        Model m = translator.processFile(localFilePath, baseDir + fileName);
+        if (m.types.empty())
+        {
+            cerr << "File " << localFilePath
+                 << " doesn't have data definitions" << endl;
+            fail(YamlFailsSchema);
+        }
+        if (m.types.size() > 1)
+        {
+            cerr << "File " << localFilePath
+                 << " has more than one data structure definition" << endl;
+            fail(YamlFailsSchema);
+        }
+
+        return m.types.back().name;
+    }
+
+    string yamlType = getString(node, "type");
+    if (yamlType == "array")
+    {
+        auto arrayElType = get(node, "items", NodeType::Map);
+
+        auto innerType = getString(arrayElType, "type");
+        if (innerType == "string")
+            return "string*";
+        // TODO: items can have [properties]; we'll have to create a separate
+        // struct to describe such type
+        return yamlType;
+    }
+    if (yamlType == "boolean" || yamlType == "object") // TODO: object can have [properties] too, probably
+        return yamlType;
+
+    string yamlFormat = node["format"] ? getString(node, "format") : "";
+
+    if (yamlType == "integer" || yamlType == "string")
+        return yamlFormat.empty() ? yamlType : yamlFormat;
+
+    if (yamlType == "number")
+        return yamlFormat == "float" ? "float" : "double";
+
+    cerr << fileName << ":" << node.Mark().line + 1 << ": unknown type: " << yamlType;
+    fail(UnknownParameterType);
+}
+
+void Analyzer::addParameter(string name, const Node& node,
+                            Model::imports_type& includes, Call& callOverload,
+                            const string& in) const
 {
     auto type = resolveType(node);
     VarDecl p(type.name, name);
+//    VarDecl p(getType(node), name);
     callOverload.addParam(p, in);
     cout << "  Added input parameter for " << in << ": " << p.toString();
 
-    if (!type.import.empty() &&
-            find(includes.begin(), includes.end(), type.import) == includes.end())
+    if (!type.import.empty())
     {
-        includes.emplace_back(type.import);
+        includes.insert(type.import);
         cout << "(with #include " << type.import<< ")";
     }
     cout << endl;
@@ -172,7 +215,7 @@ Model Analyzer::loadModel() const
 {
     Node yaml = loadYaml();
 
-    Model model;
+    Model model { getFilenameBase() };
     // Detect which file we have, with a call, or just with a data definition
     if (auto paths = yaml["paths"])
     {
@@ -249,10 +292,10 @@ Model Analyzer::loadModel() const
         }
     } else {
         assert(yaml, NodeType::Map);
-        auto bareFilename = getFilenameBase();
+        auto bareFilename = model.filenameBase;
         auto n = bareFilename.rfind('/');
         if (n != string::npos)
-            bareFilename = bareFilename.substr(n + 1);
+            bareFilename.erase(0, n + 1);
         model.types.emplace_back(convertMultiword(bareFilename));
     }
     return model;

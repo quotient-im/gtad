@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <unordered_set>
 
 std::string convertMultiword(std::string s);
 
@@ -121,12 +122,17 @@ struct CallClass
 
 struct Model
 {
+    using imports_type = std::unordered_set<std::string>;
+
+    const std::string filenameBase;
     std::string nsName;
-    std::vector<std::string> imports;
+    mutable imports_type imports;
     std::vector<StructDef> types;
     std::vector<CallClass> callClasses;
 
-    explicit Model(const std::string& nameSpace = "") : nsName(nameSpace) { }
+    explicit Model(const std::string& fnBase, const std::string& nameSpace = "")
+        : filenameBase(fnBase), nsName(nameSpace)
+    { }
     Model(Model&) = delete;
     Model(Model&&) = default;
     Call& addCall(const std::string& path, const std::string& verb,
