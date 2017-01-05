@@ -21,16 +21,19 @@
 #include <QtCore/QString>
 
 class Model;
+class TypeUsage;
 
 class Translator
 {
     public:
         explicit Translator(const QString& outputDirPath);
         void operator()(QString path) const;
-        Model processFile(std::string filePath, std::string baseFilePath) const;
+
+        Model processFile(std::string filePath, std::string baseDirPath) const;
+        TypeUsage mapType(const std::string& swaggerType,
+                          const std::string& swaggerFormat, bool constRef) const;
+        TypeUsage mapArrayType(const TypeUsage& innerType, bool constRef) const;
 
     private:
         QString _outputDirPath;
-
-        Model doProcessFile(std::string filePath, std::string baseDirPath) const;
 };

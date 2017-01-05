@@ -67,6 +67,8 @@ string makeClassName(const string& path, const string& verb)
         return "SetPusher";
     if (path == "/sync")
         return "Sync";
+    if (path == "/publicRooms" && verb == "post")
+        return "SearchPublicRooms";
     if (path.find("/initialSync") != string::npos)
     {
         cerr << "Warning: initialSync endpoints are deprecated" << endl;

@@ -5,7 +5,6 @@
 #include <functional>
 
 #include "exception.h"
-#include "formatting.h"
 
 enum {
     CannotWriteToFile = PrinterCodes,
@@ -41,12 +40,18 @@ void Printer::print(const Model& model)
     if (!model.callClasses.empty())
         hS << "#include \"serverapi/servercallsetup.h\"\n\n";
 
-    if (!model.types.empty())
-        model.imports.insert("<QtCore/QJsonObject>");
+    // TODO: Should go to the place that defines a new struct
+    if (!model.types.empty() &&
+            model.imports.find("<QtCore/QJsonValue>") == model.imports.end())
+        hS << "#include <QtCore/QJsonValue>" << '\n';
 
     for (const auto& header: model.imports)
-        hS << "#include " << header << "\n";
-    hS << "\n";
+        if (header.front() == '<')
+            hS << "#include " << header << '\n';
+    for (const auto& header: model.imports)
+        if (header.front() != '<')
+            hS << "#include " << header << '\n';
+    hS << '\n';
 
     if ([&] {
                 for (const auto& cm: model.callClasses)
@@ -75,7 +80,7 @@ void Printer::printDataDef(const StructDef& dm)
     Scope _scope(hS, "struct ", dm.name, "{", "};");
     for(const auto& field: dm.fields)
         hS << offset << field.toString() << ";\n";
-    hS << '\n' << offset << "QJsonObject toJson() const;\n";
+    hS << '\n' << offset << "operator QJsonValue() const;\n";
 }
 
 void printSignature(Printer::stream_type& s, const string& returnType,
@@ -171,7 +176,7 @@ void Printer::printConstructors(const CallClass& cm, const string& ns)
             if (!call.queryParams.empty())
             {
                 cppS << offset << "Query q;\n";
-                for (auto qp: call.queryParams)
+                for (const auto& qp: call.queryParams)
                 {
                     cppS << offset << "q.addQueryItem(\""
                          << qp.name << "\", " << qp.name << ");\n";
@@ -180,14 +185,14 @@ void Printer::printConstructors(const CallClass& cm, const string& ns)
             if (!call.bodyParams.empty())
             {
                 cppS << offset << "Data d;\n";
-                for (auto bp: call.bodyParams)
+                for (const auto& bp: call.bodyParams)
                 {
                     cppS << offset << "d.insert(\""
                          << bp.name << "\", " << bp.name << ");\n";
                 }
             }
             WrappedLine lw { cppS };
-            lw << "return " << returnType << "(" << soft_endl(" ");
+            lw << "return " << returnType << "(" << soft_endl();
             printInitializer(lw, cm.className, call);
             if (!(call.queryParams.empty() && call.bodyParams.empty() && call.needsToken))
             {

@@ -44,12 +44,20 @@ struct VarDecl
 
 struct TypeUsage
 {
+    using imports_type = std::vector<std::string>;
+
     std::string name;
-    std::string import;
+    imports_type imports;
 
     explicit TypeUsage(const std::string& typeName,
-                       const std::string& requiresImport = "")
-        : name(typeName), import(requiresImport)
+                       const imports_type& requiredImports = {},
+                       const std::string& appendImport = {})
+        : name(typeName), imports(requiredImports)
+    {
+        if (!appendImport.empty()) imports.push_back(appendImport);
+    }
+    TypeUsage(const std::string& typeName, const std::string& import)
+        : TypeUsage(typeName, imports_type { import })
     { }
 };
 
@@ -124,18 +132,21 @@ struct Model
 {
     using imports_type = std::unordered_set<std::string>;
 
-    const std::string filenameBase;
+    const std::string fileDir;
+    const std::string filename;
     std::string nsName;
-    mutable imports_type imports;
+    imports_type imports;
     std::vector<StructDef> types;
     std::vector<CallClass> callClasses;
 
-    explicit Model(const std::string& fnBase, const std::string& nameSpace = "")
-        : filenameBase(fnBase), nsName(nameSpace)
+    Model(const std::string& fileDir, const std::string& fileName,
+          const std::string& nameSpace = "")
+        : fileDir(fileDir), filename(fileName), nsName(nameSpace)
     { }
     Model(Model&) = delete;
     Model(Model&&) = default;
     Call& addCall(const std::string& path, const std::string& verb,
                   bool needsToken, const std::string& responseTypename);
 };
+
 

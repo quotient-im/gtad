@@ -18,9 +18,10 @@
 
 #pragma once
 
+#include <string>
+
 #include <yaml-cpp/node/node.h>
 #include <yaml-cpp/node/type.h>
-#include <string>
 
 #include "model.h"
 
@@ -33,33 +34,38 @@ class Analyzer
         using NodeType = YAML::NodeType;
 
         Analyzer(const std::string& filePath, const std::string& basePath,
-                 const Translator& translator)
-            : fileName(filePath), baseDir(basePath), translator(translator)
-        { }
+                 const Translator& translator);
 
-        Model loadModel() const;
-        std::string getFilenameBase() const;
+        Model loadModel();
 
     private:
         std::string fileName;
         std::string baseDir;
+        Model model;
         const Translator& translator;
 
         Node loadYaml() const;
 
         const Node& assert(const Node& node, NodeType::value checkedType) const;
         Node get(const Node& node, const std::string& subnodeName,
-                 NodeType::value checkedType) const;
+                 NodeType::value checkedType, bool allowNonexistent = false) const;
 
         std::string getString(const Node& node, const std::string& subnodeName) const
         {
             return get(node, subnodeName, NodeType::Scalar).as<std::string>();
         }
+        std::string getString(const Node& node, const std::string& subnodeName,
+                              const std::string& defaultValue) const
+        {
+            if (Node n = get(node, subnodeName, NodeType::Scalar, true))
+                return n.as<std::string>();
+            else
+                return defaultValue;
+        }
 
-        TypeUsage resolveType(const Node& node) const;
-        std::string getType(const Node& node);
+        TypeUsage resolveType(const Node& node, bool constRef);
 
-        void addParameter(std::string name, const Node& node,
-                          Model::imports_type& includes, Call& callOverload,
-                          const std::string& in = "body") const;
+        void addParameter(std::string name, const Node& node, Call& call,
+                          const std::string& in = "body");
+
 };

@@ -43,29 +43,57 @@ void Translator::operator()(QString path) const
                     fn != "cas_login_ticket.yaml" &&
                     fn != "old_sync.yaml" &&
                     fn != "room_initial_sync.yaml")
-                doProcessFile(fn.toStdString(), path.toStdString());
+                processFile(fn.toStdString(), path.toStdString());
         }
         return;
     }
-    doProcessFile(path.toStdString(), "");
+    processFile(path.toStdString(), "");
 }
 
-Model Translator::processFile(string filePath, string baseFilePath) const
+TypeUsage Translator::mapType(const string& swaggerType, const string& swaggerFormat,
+                              bool constRef) const
 {
-    // Strip the filename from baseFilePath, leaving only its directory
-    auto dirPos = baseFilePath.rfind('/');
-    if (dirPos == string::npos)
-        baseFilePath.clear();
-    else
-        baseFilePath.erase(dirPos + 1);
-
-    return doProcessFile(filePath, baseFilePath);
+    TypeUsage tu =
+        swaggerType == "boolean" ? TypeUsage("bool") :
+        swaggerType == "integer" ?
+            swaggerFormat == "int64" ? TypeUsage("std::int64_t", "<cstdint>") :
+            swaggerFormat == "int32" ? TypeUsage("std::int32_t", "<cstdint>") :
+            TypeUsage("int") :
+        swaggerType == "number" ?
+            TypeUsage(swaggerFormat == "float" ? "float" : "double") :
+        swaggerType == "string" ?
+            (swaggerFormat == "byte" || swaggerFormat == "binary" ?
+                TypeUsage("QByteArray", "<QtCore/QByteArray>") :
+            swaggerFormat == "date" ? TypeUsage("QDate", "<QtCore/QDate>") :
+            swaggerFormat == "date-time" ?
+                TypeUsage("QDateTime", "<QtCore/QDateTime>") :
+            TypeUsage("QString", "<QtCore/QString>")) :
+        swaggerType == "array" ? TypeUsage("QJsonArray", "<QtCore/QJsonArray>") :
+        swaggerType == "object" ? TypeUsage("QJsonObject", "<QtCore/QJsonObject>") :
+        TypeUsage("");
+    if (tu.name.front() == 'Q' && constRef)
+        tu.name = "const " + tu.name + '&';
+    return tu;
 }
 
-Model Translator::doProcessFile(string filePath, string baseDirPath) const
+TypeUsage Translator::mapArrayType(const TypeUsage& innerType, bool constRef) const
+{
+    TypeUsage tu =
+        innerType.name == "QString" ?
+            TypeUsage("QStringList", "<QtCore/QStringList>") :
+        TypeUsage("QVector<" + innerType.name + ">",
+                     innerType.imports, "<QtCore/QVector>");
+    if (tu.name.front() == 'Q' && constRef)
+        tu.name = "const " + tu.name + '&';
+    return tu;
+}
+
+Model Translator::processFile(string filePath, string baseDirPath) const
 {
     Model m = Analyzer(filePath, baseDirPath, *this).loadModel();
     m.nsName = "QMatrixClient::ServerApi";
-    Printer(_outputDirPath.toStdString(), m.filenameBase).print(m);
+
+    Printer(_outputDirPath.toStdString() + m.fileDir, m.filename).print(m);
     return m;
 }
+
