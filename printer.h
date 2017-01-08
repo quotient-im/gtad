@@ -14,17 +14,16 @@ class Printer
                 const std::string& filenameBase);
 
         void print(const Model& model);
+
+    private:
+        stream_type hS;
+        stream_type cppS;
+
         void printDataDef(const StructDef& dm);
         void printCall(const std::string& ns, const CallClass& cm);
         void printConstructors(const CallClass& cm, const std::string& ns = "");
         void printInitializer(SrcFormatting::WrappedLine& lw,
                               const std::string& callName,
                               const Call& callOverload);
-        void printParamInitializer(const Call::params_type& params,
-                                   const std::string& containerName);
-
-    private:
-        stream_type hS;
-        stream_type cppS;
-
+        void printParamInitializers(const Call& call, bool withSetters);
 };

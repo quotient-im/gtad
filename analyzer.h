@@ -50,22 +50,24 @@ class Analyzer
         Node get(const Node& node, const std::string& subnodeName,
                  NodeType::value checkedType, bool allowNonexistent = false) const;
 
-        std::string getString(const Node& node, const std::string& subnodeName) const
+        template <typename T>
+        T get(const Node& node, const std::string& subnodeName) const
         {
-            return get(node, subnodeName, NodeType::Scalar).as<std::string>();
+            return get(node, subnodeName, NodeType::Scalar).as<T>();
         }
-        std::string getString(const Node& node, const std::string& subnodeName,
-                              const std::string& defaultValue) const
+        template <typename T>
+        T get(const Node& node, const std::string& subnodeName,
+              const T& defaultValue) const
         {
             if (Node n = get(node, subnodeName, NodeType::Scalar, true))
-                return n.as<std::string>();
+                return n.as<T>();
             else
                 return defaultValue;
         }
 
         TypeUsage resolveType(const Node& node, bool constRef);
 
-        void addParameter(std::string name, const Node& node, Call& call,
-                          const std::string& in = "body");
+        void addParameter(const std::string& name, const Node& node, Call& call,
+                          bool required, const std::string& in = "body");
 
 };

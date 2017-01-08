@@ -8,7 +8,7 @@
 
 enum {
     CannotWriteToFile = PrinterCodes,
-    ClassHasNoCalls, UnbalancedBracesInPath, ParameterHasNoInTarget,
+    ClassHasNoCalls, UnbalancedBracesInPath,
 };
 
 using namespace std;
@@ -87,6 +87,16 @@ void printSignature(Printer::stream_type& s, const string& returnType,
                     const string& name, const Call::params_type& params,
                     const string& qualifier = "")
 {
+    // Supported signatures:
+    // in .h:
+    //retval name
+    //className
+    //
+    // in .cpp:
+    //retval nsName::className
+    //retval className::name
+    //className::name
+
     bool header = qualifier.empty();
     WrappedLine lw { s };
     lw << (returnType.empty() ? "" : returnType + " ")
@@ -102,7 +112,7 @@ void printSignature(Printer::stream_type& s, const string& returnType,
             lw << ',' << soft_endl(" ");
         }
     }
-    lw << (header ? ");" : ")");
+    lw << ')'; if (header) lw << ';';
 }
 
 void Printer::printCall(const string& ns, const CallClass& cm)
@@ -157,6 +167,11 @@ WrappedLine& operator<<(WrappedLine& lw, const appendParam& ap)
     return lw << "," << soft_endl(" ") << ap._s;
 }
 
+inline string dumpName(const std::string& name)
+{
+    return '"' + name + "\", " + name;
+}
+
 void Printer::printConstructors(const CallClass& cm, const string& ns)
 {
     bool asFunction = !ns.empty();
@@ -173,24 +188,7 @@ void Printer::printConstructors(const CallClass& cm, const string& ns)
         if (asFunction)
         {
             Scope body(cppS, "{", "}");
-            if (!call.queryParams.empty())
-            {
-                cppS << offset << "Query q;\n";
-                for (const auto& qp: call.queryParams)
-                {
-                    cppS << offset << "q.addQueryItem(\""
-                         << qp.name << "\", " << qp.name << ");\n";
-                }
-            }
-            if (!call.bodyParams.empty())
-            {
-                cppS << offset << "Data d;\n";
-                for (const auto& bp: call.bodyParams)
-                {
-                    cppS << offset << "d.insert(\""
-                         << bp.name << "\", " << bp.name << ");\n";
-                }
-            }
+            printParamInitializers(call, false);
             WrappedLine lw { cppS };
             lw << "return " << returnType << "(" << soft_endl();
             printInitializer(lw, cm.className, call);
@@ -216,29 +214,39 @@ void Printer::printConstructors(const CallClass& cm, const string& ns)
                 cppS << offset << (call.needsToken ? ")" : ", false )") << '\n';
             }
             Scope body(cppS, "{", "}");
+            printParamInitializers(call, true);
         }
 
-        for (const auto& p: {call.queryParams, call.headerParams, call.bodyParams})
-            if (!p.empty())
-                unsupportedCalls = true;
+        if (!call.headerParams.empty())
+            unsupportedCalls = true;
     }
     if (unsupportedCalls)
     {
         cerr << "Warning: " << cm.className << " has one or more "
-                "call overloads with parameters outside the path; "
+                "call overloads with parameters in HTTP headers; "
                 "these are not supported at the moment" << endl;
     }
 }
 
-// Supported signatures:
-// in .h:
-//retval name
-//className
-//
-// in .cpp:
-//retval nsName::className
-//retval className::name
-//className::name
+void Printer::printParamInitializers(const Call& call, bool withSetters)
+{
+    if (!call.queryParams.empty())
+    {
+        cppS << offset << "Query q;\n";
+        for (const auto& qp: call.queryParams)
+            cppS << offset << "q.addQueryItem(" << dumpName(qp.name) << ");\n";
+        if (withSetters)
+            cppS << offset << "setQuery(q);\n";
+    }
+    if (!call.bodyParams.empty())
+    {
+        cppS << offset << "Data d;\n";
+        for (const auto& bp: call.bodyParams)
+            cppS << offset << "d.insert(" << dumpName(bp.name) << ");\n";
+        if (withSetters)
+            cppS << offset << "setData(d);\n";
+    }
+}
 
 void Printer::printInitializer(WrappedLine& lw, const std::string& callName,
                                const Call& callOverload)
@@ -275,24 +283,3 @@ void Printer::printInitializer(WrappedLine& lw, const std::string& callName,
     lw << ")";
 }
 
-inline string dumpJsonPair(const std::string& name)
-{
-    return "{ \"" + name + "\", " + name + " }";
-}
-
-void Printer::printParamInitializer(const Call::params_type& params,
-                                    const string& containerName)
-{
-    Scope paramInitializer(cppS, containerName + "(", ")\n", params.size() > 1);
-    switch (params.size())
-    {
-        case 0: break;
-        case 1: cppS << "{ " << dumpJsonPair(params.front().name) << " }"; break;
-        default:
-            cppS << offset << "{ " << dumpJsonPair(params.front().name);
-            for_each(params.begin() + 1, params.end(), [&](const VarDecl& p) {
-                    cppS << '\n' << offset << ", " << dumpJsonPair(p.name);
-                });
-            cppS << '\n' << offset << '}';
-    }
-}

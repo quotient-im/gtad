@@ -29,16 +29,24 @@ struct VarDecl
 {
     std::string type;
     std::string name;
-    bool required = false;
-    bool isRequired() const { return required; }
+    bool required;
+    std::string defaultValue;
 
-    VarDecl(const std::string& t, const std::string& n)
-        : type(t), name(n)
+    static std::string setupDefault(const std::string& type,
+                                    const std::string& defaultValue);
+
+    VarDecl(const std::string& type, const std::string& name,
+            bool required = true, const std::string& defaultValue = {})
+            : type(type), name(name), required(required)
+            , defaultValue(setupDefault(type, defaultValue))
     { }
+
+    bool isRequired() const { return required; }
 
     std::string toString(bool withDefault = false) const
     {
-        return type + " " + (withDefault && !required ? name + " = {}" : name);
+        return type + " " +
+                (withDefault && !required ? name + " = " + defaultValue : name);
     }
 };
 
@@ -117,7 +125,7 @@ struct CallClass
               const std::string& responseTypeName,
               const std::string& replyFormatType = "const QJsonObject&")
         : className(callName)
-        , replyFormatVar(replyFormatType, "reply")
+        , replyFormatVar (replyFormatType, "reply", true)
         , responseType(responseTypeName)
     { }
     Call& addCall(const std::string& path, const std::string& verb,

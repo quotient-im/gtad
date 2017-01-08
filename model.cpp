@@ -13,6 +13,14 @@ enum {
 
 using namespace std;
 
+string VarDecl::setupDefault(const string& type, const string& defaultValue)
+{
+    return !defaultValue.empty() ? defaultValue :
+        type == "bool" ? "false" :
+        type == "int" ? "0" :
+        "{}";
+}
+
 void capitalize(string& s, string::size_type pos = 0)
 {
     if (pos < s.size())
@@ -205,3 +213,4 @@ Call::params_type Call::collateParams() const
                      mem_fn(&VarDecl::isRequired));
     return allCollated;
 }
+

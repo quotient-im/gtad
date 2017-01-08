@@ -2,7 +2,6 @@
 
 #include <iostream>
 #include <algorithm>
-#include <functional>
 
 #include <yaml-cpp/yaml.h>
 
@@ -14,7 +13,6 @@ using namespace std::placeholders;
 
 enum {
     CannotReadFromInput = AnalyzerCodes, UnknownParameterType,
-    ComplexTypeOutsideBody,
     YamlFailsSchema
 };
 
@@ -90,11 +88,11 @@ TypeUsage Analyzer::resolveType(const Node& node, bool constRef)
 {
     assert(node, NodeType::Map);
 
-    auto refFilename = getString(node, "$ref", "");
+    auto refFilename = get<string>(node, "$ref", "");
     if (refFilename.empty())
         if (auto allOf = get(node, "allOf", NodeType::Sequence, true))
             // Fortunately, we have no multiple inheritance in CS API specs
-            refFilename = getString(allOf[0], "$ref");
+            refFilename = get<string>(allOf[0], "$ref");
     if (!refFilename.empty())
     {
         // The referenced file's path is relative to the current file's path;
@@ -118,14 +116,14 @@ TypeUsage Analyzer::resolveType(const Node& node, bool constRef)
         // In theory, there can be more [properties] after [allOf]
     }
 
-    auto yamlType = getString(node, "type");
+    auto yamlType = get<string>(node, "type");
     if (yamlType == "array")
     {
         auto arrayElType = get(node, "items", NodeType::Map);
         return translator.mapArrayType(resolveType(arrayElType, false), constRef);
     }
     TypeUsage tu =
-            translator.mapType(yamlType, getString(node, "format", ""), constRef);
+            translator.mapType(yamlType, get<string>(node, "format", ""), constRef);
     if (!tu.name.empty())
         return tu;
 
@@ -133,13 +131,13 @@ TypeUsage Analyzer::resolveType(const Node& node, bool constRef)
     fail(UnknownParameterType);
 }
 
-void Analyzer::addParameter(string name, const Node& node, Call& call,
-                            const string& in)
+void Analyzer::addParameter(const string& name, const Node& node, Call& call,
+                            bool required, const string& in)
 {
     auto type = resolveType(node, true);
-    VarDecl p(type.name, name);
+    VarDecl p { type.name, name, required };
     call.addParam(p, in);
-    cout << "  Added input parameter for " << in << ": " << p.toString() << endl;
+    cout << "  Added input parameter for " << in << ": " << p.toString(true) << endl;
 
     model.imports.insert(type.imports.begin(), type.imports.end());
 }
@@ -182,21 +180,33 @@ Model Analyzer::loadModel()
                         get(yamlCall, "parameters", NodeType::Sequence, true))
                 {
                     assert(yamlParam, NodeType::Map);
-                    auto name = getString(yamlParam, "name");
-                    auto in = getString(yamlParam, "in");
+                    auto name = get<string>(yamlParam, "name");
+                    auto in = get<string>(yamlParam, "in");
+                    auto required =
+                            in == "path" || get<bool>(yamlParam, "required", false);
                     if (in == "body")
                     {
                         auto schema = get(yamlParam, "schema", NodeType::Map);
                         if (auto properties = get(schema, "properties",
                                                   NodeType::Map, true))
+                        {
+                            auto requiredList = get(properties, "required",
+                                                    NodeType::Sequence, true);
                             for (const NodePair& property: properties)
-                                addParameter(property.first.as<string>(),
-                                             property.second, call);
-                        else
-                            addParameter(name, schema, call); // No inline schema details
+                            {
+                                name = property.first.as<string>();
+                                required = find_if(requiredList.begin(),
+                                                   requiredList.end(),
+                                                   [=] (const Node& n) {
+                                                       return name == n.as<string>();
+                                                   }) != requiredList.end();
+                                addParameter(name, property.second, call, required);
+                            }
+                        } else
+                            addParameter(name, schema, call, required); // No inline schema details
                     }
                     else
-                        addParameter(name, yamlParam, call, in);
+                        addParameter(name, yamlParam, call, required, in);
                 }
 
                 auto yamlResponses = get(yamlCall, "responses", NodeType::Map);
