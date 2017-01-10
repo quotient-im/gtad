@@ -84,7 +84,8 @@ Node Analyzer::get(const Node& node, const string& subnodeName,
     fail(YamlFailsSchema);
 }
 
-TypeUsage Analyzer::resolveType(const Node& node, bool constRef)
+TypeUsage Analyzer::analyzeType(const Node& node, Analyzer::InOut inOut,
+                                bool constRef)
 {
     assert(node, NodeType::Map);
 
@@ -119,8 +120,20 @@ TypeUsage Analyzer::resolveType(const Node& node, bool constRef)
     auto yamlType = get<string>(node, "type");
     if (yamlType == "array")
     {
-        auto arrayElType = get(node, "items", NodeType::Map);
-        return translator.mapArrayType(resolveType(arrayElType, false), constRef);
+        auto elementType = get(node, "items", NodeType::Map);
+        if (elementType.size() > 0)
+            return translator.mapArrayType(
+                    analyzeType(elementType, inOut, false), constRef);
+    }
+    if (yamlType == "object")
+    {
+        if (auto objectFieldsDef = get(node, "properties", NodeType::Map, true))
+        {
+            if (objectFieldsDef.size() == 0)
+                return TypeUsage("");
+            // TODO: Create a structure and fill it with the properties
+        } else if (inOut == Out)
+            return TypeUsage("");
     }
     TypeUsage tu =
             translator.mapType(yamlType, get<string>(node, "format", ""), constRef);
@@ -134,12 +147,7 @@ TypeUsage Analyzer::resolveType(const Node& node, bool constRef)
 void Analyzer::addParameter(const string& name, const Node& node, Call& call,
                             bool required, const string& in)
 {
-    auto type = resolveType(node, true);
-    VarDecl p { type.name, name, required };
-    call.addParam(p, in);
-    cout << "  Added input parameter for " << in << ": " << p.toString(true) << endl;
-
-    model.imports.insert(type.imports.begin(), type.imports.end());
+    model.addCallParam(call, analyzeType(node, In, true), name, required, in);
 }
 
 Model Analyzer::loadModel()
@@ -168,15 +176,37 @@ Model Analyzer::loadModel()
                 string verb = yaml_call_pair.first.as<string>();
                 Node yamlCall = assert(yaml_call_pair.second, NodeType::Map);
 
+                auto yamlResponses = get(yamlCall, "responses", NodeType::Map);
+                if (auto normalResponse = yamlResponses["200"])
+                {
+                    if (auto respSchema = get(normalResponse, "schema",
+                                              NodeType::Map, true))
+                    {
+                        TypeUsage tu = analyzeType(respSchema, Out, false);
+                        if (!tu.name.empty())
+                        {
+                            cerr << "Warning: skipping " << path << " - " << verb
+                                 << ": non-trivial '200' response" << endl;
+                            continue;
+                        }
+                    }
+                }
+                else
+                {
+                    cerr << "Warning: skipping " << path << " - " << verb
+                         << ": no '200' response" << endl;
+                    continue;
+                }
+
                 bool needsToken = false;
                 if (auto security =
                         get(yamlCall, "security", NodeType::Sequence, true))
                     needsToken = security[0]["accessToken"].IsDefined();
                 Call& call = model.addCall(path, verb, needsToken, "");
 
-                cout << path << " - " << verb << endl;
+                cout << "Loading " << path << " - " << verb << endl;
 
-                for (auto yamlParam:
+                for (const auto& yamlParam:
                         get(yamlCall, "parameters", NodeType::Sequence, true))
                 {
                     assert(yamlParam, NodeType::Map);
@@ -208,11 +238,6 @@ Model Analyzer::loadModel()
                     else
                         addParameter(name, yamlParam, call, required, in);
                 }
-
-                auto yamlResponses = get(yamlCall, "responses", NodeType::Map);
-                auto normalResponse = yamlResponses["200"];
-                if (!normalResponse || (normalResponse && normalResponse["schema"]))
-                    cerr << "Warning: Non-trivial responses not supported yet" << endl;
             }
         }
     } else {

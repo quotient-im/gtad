@@ -181,7 +181,7 @@ void Printer::printConstructors(const CallClass& cm, const string& ns)
     {
         cppS << endl;
         Call::params_type allParams = call.collateParams();
-        const char* const returnType = asFunction ? "CallConfigNoReplyBody" : "";
+        const char* const returnType = asFunction ? "VoidReplyCallConfig" : "";
         printSignature(hS, returnType, cm.className, allParams);
         printSignature(cppS, returnType, cm.className, allParams,
                        asFunction ? ns : cm.className);

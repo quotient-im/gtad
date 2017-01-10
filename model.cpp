@@ -196,6 +196,8 @@ void Call::addParam(const VarDecl& param, const string& in)
         if (map[i] == in)
         {
             allParams[i].push_back(param);
+            cout << "Added input parameter for " << in << ": "
+                 << param.toString(true) << endl;
             return;
         }
 

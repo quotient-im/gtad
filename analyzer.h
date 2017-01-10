@@ -65,7 +65,8 @@ class Analyzer
                 return defaultValue;
         }
 
-        TypeUsage resolveType(const Node& node, bool constRef);
+        enum InOut { In, Out };
+        TypeUsage analyzeType(const Node& node, InOut inOut, bool constRef);
 
         void addParameter(const std::string& name, const Node& node, Call& call,
                           bool required, const std::string& in = "body");

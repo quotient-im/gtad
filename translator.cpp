@@ -22,16 +22,11 @@ Translator::Translator(const QString& outputDirPath)
 {
     if (!_outputDirPath.endsWith('/'))
         _outputDirPath.append('/');
-    QDir d { _outputDirPath };
-    if (!d.exists() && !d.mkpath("."))
-        fail(CannotCreateOutputDir, "Cannot create output directory");
 }
 
 void Translator::operator()(QString path) const
 {
-    QFileInfo inputFileInfo { path };
-
-    if (inputFileInfo.isDir())
+    if (QFileInfo(path).isDir())
     {
         if (!path.isEmpty() && !path.endsWith('/'))
             path.push_back('/');
@@ -92,8 +87,14 @@ Model Translator::processFile(string filePath, string baseDirPath) const
 {
     Model m = Analyzer(filePath, baseDirPath, *this).loadModel();
     m.nsName = "QMatrixClient::ServerApi";
+    if (!m.callClasses.empty() || !m.types.empty())
+    {
+        QDir d { _outputDirPath + m.fileDir.c_str() };
+        if (!d.exists() && !d.mkpath("."))
+            fail(CannotCreateOutputDir, "Cannot create output directory");
+        Printer(_outputDirPath.toStdString() + m.fileDir, m.filename).print(m);
+    }
 
-    Printer(_outputDirPath.toStdString() + m.fileDir, m.filename).print(m);
     return m;
 }
 

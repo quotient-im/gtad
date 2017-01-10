@@ -155,6 +155,12 @@ struct Model
     Model(Model&&) = default;
     Call& addCall(const std::string& path, const std::string& verb,
                   bool needsToken, const std::string& responseTypename);
+    void addCallParam(Call& call, const TypeUsage& type, const std::string& name,
+                      bool required, const std::string& in)
+    {
+        call.addParam(VarDecl(type.name, name, required), in);
+        imports.insert(type.imports.begin(), type.imports.end());
+    }
 };
 
 
