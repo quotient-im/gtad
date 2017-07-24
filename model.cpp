@@ -13,7 +13,7 @@ enum {
 
 using namespace std;
 
-string VarDecl::setupDefault(const string& type, const string& defaultValue)
+string VarDecl::setupDefault(string type, string defaultValue)
 {
     return !defaultValue.empty() ? defaultValue :
         type == "bool" ? "false" :

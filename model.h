@@ -19,6 +19,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 #include <array>
 #include <unordered_set>
@@ -32,13 +33,13 @@ struct VarDecl
     bool required;
     std::string defaultValue;
 
-    static std::string setupDefault(const std::string& type,
-                                    const std::string& defaultValue);
+    static std::string setupDefault(std::string type,
+                                    std::string defaultValue);
 
-    VarDecl(const std::string& type, const std::string& name,
-            bool required = true, const std::string& defaultValue = {})
-            : type(type), name(name), required(required)
-            , defaultValue(setupDefault(type, defaultValue))
+    VarDecl(std::string type, std::string name,
+            bool required = true, std::string defaultValue = {})
+            : type(std::move(type)), name(std::move(name)), required(required)
+            , defaultValue(setupDefault(type, std::move(defaultValue)))
     { }
 
     bool isRequired() const { return required; }
@@ -57,15 +58,16 @@ struct TypeUsage
     std::string name;
     imports_type imports;
 
-    explicit TypeUsage(const std::string& typeName,
-                       const imports_type& requiredImports = {},
-                       const std::string& appendImport = {})
-        : name(typeName), imports(requiredImports)
+    explicit TypeUsage(std::string typeName,
+                       imports_type requiredImports = {},
+                       std::string appendImport = {})
+        : name(std::move(typeName)), imports(std::move(requiredImports))
     {
-        if (!appendImport.empty()) imports.push_back(appendImport);
+        if (!appendImport.empty())
+            imports.emplace_back(std::move(appendImport));
     }
     TypeUsage(const std::string& typeName, const std::string& import)
-        : TypeUsage(typeName, imports_type { import })
+        : TypeUsage(typeName, imports_type(1, import))
     { }
 };
 
@@ -74,7 +76,7 @@ struct StructDef
     std::string name;
     std::vector<VarDecl> fields;
 
-    explicit StructDef(const std::string& typeName) : name(typeName) { }
+    explicit StructDef(std::string typeName) : name(std::move(typeName)) { }
 };
 
 using ResponseType = TypeUsage;
@@ -83,15 +85,18 @@ struct Call
 {
     using params_type = std::vector<VarDecl>;
 
-    Call(const std::string& callPath, const std::string& callVerb,
-         bool callNeedsToken)
-        : path(callPath), verb(callVerb), needsToken(callNeedsToken)
+    Call(std::string callPath, std::string callVerb, bool callNeedsToken)
+        : path(std::move(callPath)), verb(std::move(callVerb))
+        , needsToken(callNeedsToken)
     { }
+    ~Call() = default;
     Call(Call&) = delete;
-    Call(Call&& other)
-        : path(other.path), verb(other.verb), allParams(other.allParams)
-        , needsToken(other.needsToken)
+    Call operator=(Call&) = delete;
+    Call(Call&& other) noexcept
+        : path(std::move(other.path)), verb(std::move(other.verb))
+        , allParams(std::move(other.allParams)), needsToken(other.needsToken)
     { }
+    Call operator=(Call&&) = delete;
 
     void addParam(const VarDecl& param, const std::string& in);
     params_type::size_type paramsTotalSize() const
@@ -121,12 +126,12 @@ struct CallClass
     VarDecl replyFormatVar;
     ResponseType responseType;
 
-    CallClass(const std::string& callName,
-              const std::string& responseTypeName,
-              const std::string& replyFormatType = "const QJsonObject&")
-        : className(callName)
-        , replyFormatVar (replyFormatType, "reply", true)
-        , responseType(responseTypeName)
+    CallClass(std::string callName,
+              std::string responseTypeName,
+              std::string replyFormatType = "const QJsonObject&")
+        : className(std::move(callName))
+        , replyFormatVar (std::move(replyFormatType), "reply", true)
+        , responseType(std::move(responseTypeName))
     { }
     Call& addCall(const std::string& path, const std::string& verb,
                   bool needsToken)
@@ -147,12 +152,15 @@ struct Model
     std::vector<StructDef> types;
     std::vector<CallClass> callClasses;
 
-    Model(const std::string& fileDir, const std::string& fileName,
-          const std::string& nameSpace = "")
-        : fileDir(fileDir), filename(fileName), nsName(nameSpace)
+    Model(std::string fileDir, std::string fileName, std::string nameSpace = "")
+        : fileDir(std::move(fileDir)), filename(std::move(fileName))
+        , nsName(std::move(nameSpace))
     { }
+    ~Model() = default;
     Model(Model&) = delete;
+    Model operator=(Model&) = delete;
     Model(Model&&) = default;
+    Model& operator=(Model&&) = delete;
     Call& addCall(const std::string& path, const std::string& verb,
                   bool needsToken, const std::string& responseTypename);
     void addCallParam(Call& call, const TypeUsage& type, const std::string& name,
