@@ -68,11 +68,11 @@ string makeClassName(const string& path, const string& verb)
 
     // Special cases
     if (path == "/account/password")
-        return "ChangeAccountPassword";
+        return "ChangePassword";
     if (path == "/account/deactivate")
         return "DeactivateAccount";
     if (path == "/pushers/set")
-        return "SetPusher";
+        return "PostPusher";
     if (path == "/sync")
         return "Sync";
     if (path == "/publicRooms" && verb == "post")
@@ -84,13 +84,6 @@ string makeClassName(const string& path, const string& verb)
     }
     if (regex_match(path, makeRegex("/join/{}")))
         return "JoinByAlias";
-    if (regex_match(path, makeRegex("/room/{}")))
-    {
-        if (verb == "get")
-            return "ResolveRoom";
-        else if (verb == "put")
-            return "SetRoomAlias";
-    }
     if (regex_match(path, makeRegex("/download/{}/{}(/{})?")))
         return "Download";
     if (regex_match(path, makeRegex("/sendToDevice/{}/{}")))
@@ -101,6 +94,8 @@ string makeClassName(const string& path, const string& verb)
         return "SetPresence";
     if (regex_match(path, makeRegex("/rooms/{}/receipt/{}/{}")))
         return "PostReceipt";
+    if (regex_search(path, regex("/invite$"))) // /rooms/{id}/invite
+        return "InviteUser";
 
     std::smatch m;
 
@@ -125,10 +120,14 @@ string makeClassName(const string& path, const string& verb)
     string adjustedVerb = capitalizedCopy(verb);
 
     // /smth1/smth2[/{}] -> VerbSmth1Smth2
-    //     /presence/list/{userId}, get|post -> Get|PostPresenceList
+    //     /presence/list/{userId}, get|post -> Get|ModifyPresenceList
     //     /account/3pid|password, get|post -> Get|PostAccount3pid|Password
     if (regex_search(path, m, makeRegex("^/#/#(?:/{})?")))
+    {
+        if (m[1] == "presence" && verb == "post")
+            return "ModifyPresenceList";
         return adjustedVerb + capitalizedCopy(m[1]) + capitalizedCopy(m[2]);
+    }
 
     if (adjustedVerb == "Put")
         adjustedVerb = "Set";
@@ -147,13 +146,27 @@ string makeClassName(const string& path, const string& verb)
     if (adjustedVerb == "Post")
         adjustedVerb.clear();
 
+    if (regex_match(path, makeRegex("/room/{}")))
+    {
+        if (verb == "get")
+            return "GetRoomIdByAlias";
+        return adjustedVerb + "RoomAlias";
+    }
+    // /rooms/{id}/join, post; |messages|state, get -> Join, GetMessages, GetState
+    if (regex_match(path, m, makeRegex("/rooms/{}/#")))
+        return adjustedVerb + capitalizedCopy(m[1]) + "Room";
+
     // /smth[s/[{}]] - note non-greedy matching before the smth's "s"
     //   all -> VerbSmth:
     //     /upload, /createRoom, /register -> Upload, CreateRoom, Register
     //     /devices, /publicRooms -> GetDevices, GetPublicRooms
     //     /devices/{deviceId} -> Get|Set|DeleteDevice
     if (regex_match(path, m, makeRegex("/#?(s?/{})?")))
+    {
+        if (m[1] == "device" && verb == "set")
+            return "UpdateDevice";
         return adjustedVerb + capitalizedCopy(m[1]);
+    }
 
     // /smth1s/{}/{}/[{}[/smth2]] -> VerbSmth1[Smth2]
     //     /thumbnail/{}/{}
@@ -173,20 +186,25 @@ string makeClassName(const string& path, const string& verb)
     fail(CannotResolveClassName);
 }
 
-Call& Model::addCall(const string& path, const string& verb,
-                     bool needsToken, const string& responseTypename)
+Call& Model::addCall(string path, string verb, string name, bool needsToken,
+                     string responseTypename)
 {
     string className = makeClassName(path, verb);
-    if (callClasses.empty() || className != callClasses.back().className)
+    if (className != capitalizedCopy(name))
+        cout << "Warning: className/operationId mismatch: "
+             << className << " != " << name << endl;
+    if (callClasses.empty() || name != callClasses.back().className)
     {
         if (!callClasses.empty() &&
                 callClasses.back().responseType.name != responseTypename)
             fail(ConflictingOverloads, "Call overloads return different types");
 
-        callClasses.emplace_back(className, responseTypename);
+        callClasses.emplace_back(name, std::move(responseTypename));
     }
 
-    return callClasses.back().addCall(path, capitalizedCopy(verb), needsToken);
+    return callClasses.back()
+        .addCall(std::move(path), capitalizedCopy(std::move(verb)),
+                 std::move(name), needsToken);
 }
 
 void Call::addParam(const VarDecl& param, const string& in)

@@ -185,7 +185,7 @@ Model Analyzer::loadModel()
                         TypeUsage tu = analyzeType(respSchema, Out, false);
                         if (!tu.name.empty())
                         {
-                            cerr << "Warning: skipping " << path << " - " << verb
+                            cerr << "Not implemented: skipping " << path << " - " << verb
                                  << ": non-trivial '200' response" << endl;
                             continue;
                         }
@@ -193,18 +193,20 @@ Model Analyzer::loadModel()
                 }
                 else
                 {
-                    cerr << "Warning: skipping " << path << " - " << verb
+                    cerr << "Not implemented: skipping " << path << " - " << verb
                          << ": no '200' response" << endl;
                     continue;
                 }
 
+                auto callName = get<string>(yamlCall, "operationId");
                 bool needsToken = false;
                 if (auto security =
                         get(yamlCall, "security", NodeType::Sequence, true))
                     needsToken = security[0]["accessToken"].IsDefined();
-                Call& call = model.addCall(path, verb, needsToken, "");
+                Call& call = model.addCall(path, verb, callName, needsToken, "");
 
-                cout << "Loading " << path << " - " << verb << endl;
+                cout << "Loading " << callName << ": "
+                     << path << " - " << verb << endl;
 
                 for (const auto& yamlParam:
                         get(yamlCall, "parameters", NodeType::Sequence, true))

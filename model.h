@@ -38,8 +38,8 @@ struct VarDecl
 
     VarDecl(std::string type, std::string name,
             bool required = true, std::string defaultValue = {})
-            : type(std::move(type)), name(std::move(name)), required(required)
-            , defaultValue(setupDefault(type, std::move(defaultValue)))
+        : type(std::move(type)), name(std::move(name)), required(required)
+        , defaultValue(setupDefault(type, std::move(defaultValue)))
     { }
 
     bool isRequired() const { return required; }
@@ -85,9 +85,10 @@ struct Call
 {
     using params_type = std::vector<VarDecl>;
 
-    Call(std::string callPath, std::string callVerb, bool callNeedsToken)
+    Call(std::string callPath, std::string callVerb, std::string callName,
+         bool callNeedsToken)
         : path(std::move(callPath)), verb(std::move(callVerb))
-        , needsToken(callNeedsToken)
+        , name(std::move(callName)), needsToken(callNeedsToken)
     { }
     ~Call() = default;
     Call(Call&) = delete;
@@ -109,6 +110,7 @@ struct Call
 
     std::string path;
     std::string verb;
+    std::string name;
     std::array<params_type, 4> allParams;
     params_type& pathParams = allParams[0];
     params_type& queryParams = allParams[1];
@@ -133,10 +135,10 @@ struct CallClass
         , replyFormatVar (std::move(replyFormatType), "reply", true)
         , responseType(std::move(responseTypeName))
     { }
-    Call& addCall(const std::string& path, const std::string& verb,
+    Call& addCall(std::string path, std::string verb, std::string name,
                   bool needsToken)
     {
-        callOverloads.emplace_back(path, verb, needsToken);
+        callOverloads.emplace_back(path, verb, name, needsToken);
         return callOverloads.back();
     }
 };
@@ -161,8 +163,8 @@ struct Model
     Model operator=(Model&) = delete;
     Model(Model&&) = default;
     Model& operator=(Model&&) = delete;
-    Call& addCall(const std::string& path, const std::string& verb,
-                  bool needsToken, const std::string& responseTypename);
+    Call& addCall(std::string path, std::string verb, std::string name, bool needsToken,
+                  std::string responseTypename);
     void addCallParam(Call& call, const TypeUsage& type, const std::string& name,
                       bool required, const std::string& in)
     {
