@@ -18,16 +18,14 @@
 
 #pragma once
 
-#include <QtCore/QString>
+#include "model.h"
 
-class Model;
-class TypeUsage;
+#include <QtCore/QString>
 
 class Translator
 {
     public:
         explicit Translator(const QString& outputDirPath);
-        void operator()(QString path) const;
 
         Model processFile(std::string filePath, std::string baseDirPath) const;
         TypeUsage mapType(const std::string& swaggerType,

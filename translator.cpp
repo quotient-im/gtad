@@ -1,13 +1,11 @@
 #include "translator.h"
 
-#include <string>
-
-#include <QtCore/QDir>
-
 #include "model.h"
 #include "analyzer.h"
 #include "exception.h"
 #include "printer.h"
+
+#include <QtCore/QDir>
 
 using namespace std;
 
@@ -22,27 +20,6 @@ Translator::Translator(const QString& outputDirPath)
 {
     if (!_outputDirPath.endsWith('/'))
         _outputDirPath.append('/');
-}
-
-void Translator::operator()(QString path) const
-{
-    if (QFileInfo(path).isDir())
-    {
-        if (!path.isEmpty() && !path.endsWith('/'))
-            path.push_back('/');
-        QStringList filesList = QDir(path).entryList(QDir::Readable|QDir::Files);
-        for (auto fn: filesList)
-        {
-            if (fn != "content-repo.yaml" &&
-                    fn != "cas_login_redirect.yaml" &&
-                    fn != "cas_login_ticket.yaml" &&
-                    fn != "old_sync.yaml" &&
-                    fn != "room_initial_sync.yaml")
-                processFile(fn.toStdString(), path.toStdString());
-        }
-        return;
-    }
-    processFile(path.toStdString(), "");
 }
 
 TypeUsage Translator::mapType(const string& swaggerType, const string& swaggerFormat,
@@ -86,12 +63,14 @@ TypeUsage Translator::mapArrayType(const TypeUsage& innerType, bool constRef) co
 Model Translator::processFile(string filePath, string baseDirPath) const
 {
     Model m = Analyzer(filePath, baseDirPath, *this).loadModel();
-    m.nsName = "QMatrixClient::ServerApi";
     if (!m.callClasses.empty() || !m.types.empty())
     {
-        QDir d { _outputDirPath + m.fileDir.c_str() };
-        if (!d.exists() && !d.mkpath("."))
-            fail(CannotCreateOutputDir, "Cannot create output directory");
+        if (!m.fileDir.empty())
+        {
+            QDir d { _outputDirPath + m.fileDir.c_str() };
+            if (!d.exists() && !d.mkpath("."))
+                fail(CannotCreateOutputDir, "Cannot create output directory");
+        }
         Printer(_outputDirPath.toStdString() + m.fileDir, m.filename).print(m);
     }
 

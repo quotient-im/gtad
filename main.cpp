@@ -16,22 +16,28 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include <QtCore/QCoreApplication>
-#include <QtCore/QCommandLineParser>
-
 #include "translator.h"
 #include "exception.h"
+
+#include <QtCore/QCoreApplication>
+#include <QtCore/QCommandLineParser>
+#include <QtCore/QDir>
+
+enum ErrorCode
+{
+    CannotCreateOutputDir = 1
+};
 
 int main( int argc, char* argv[] )
 {
     QCoreApplication app(argc, argv);
-    QCoreApplication::setOrganizationName("Quaternion");
-    QCoreApplication::setApplicationName("qmatrixclient-api-generator");
+    QCoreApplication::setOrganizationName("QMatrixClient");
+    QCoreApplication::setApplicationName("apigen");
     QCoreApplication::setApplicationVersion("0.0");
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QCoreApplication::translate("main",
-        "Client-server API source files generator for libqmatrixclient"));
+        "Client-server API source files generator"));
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -41,16 +47,42 @@ int main( int argc, char* argv[] )
     parser.addOption(outputDirOption);
 
     parser.addPositionalArgument("files",
-        QCoreApplication::translate("main", "Files with API definition in Swagger format."),
+        QCoreApplication::translate("main", "Files or directories with API definition in Swagger format. Append a hyphen to exclude a file/directory."),
         "files...");
 
     parser.process(app);
 
     try
     {
-        auto filePaths = parser.positionalArguments();
-        std::for_each(filePaths.begin(), filePaths.end(),
-                      Translator(parser.value(outputDirOption)));
+        QStringList paths, exclusions;
+        for (auto path: parser.positionalArguments())
+        {
+            if (path.endsWith('-'))
+            {
+                path.chop(1);
+                exclusions.append(path);
+            }
+            else
+                paths.append(path);
+        }
+
+        auto outputDir = parser.value(outputDirOption);
+        Translator t(outputDir);
+        for(auto path: paths)
+        {
+            if (!QFileInfo(path).isDir())
+            {
+                t.processFile(path.toStdString(), "");
+                continue;
+            }
+
+            if (!path.isEmpty() && !path.endsWith('/'))
+                path.push_back('/');
+            QStringList filesList = QDir(path).entryList(QDir::Readable|QDir::Files);
+            for (const auto& fn: filesList)
+                if (!exclusions.contains(fn))
+                    t.processFile(fn.toStdString(), path.toStdString());
+        }
     }
     catch (Exception& e)
     {
