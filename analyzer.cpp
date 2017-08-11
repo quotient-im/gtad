@@ -20,15 +20,19 @@ using YAML::Node;
 using YAML::NodeType;
 using NodePair = pair<Node, Node>;
 
+void eraseSuffix(string* path, const string& suffix)
+{
+    auto trimAt = path->size() - suffix.size();
+    if (path->find(suffix, trimAt) != string::npos)
+        path->erase(trimAt);
+}
+
 Model initModel(string path)
 {
-    if (path.find(".yaml", path.size() - 5) != string::npos)
-        path.erase(path.size() - 5);
+    eraseSuffix(&path, ".yaml");
     auto dirPos = path.rfind('/');
-    if (dirPos == string::npos)
-        return Model("", path);
-    else
-        return Model(path.substr(0, dirPos + 1), path.substr(dirPos + 1));
+    // The below code assumes that npos == -1 and that unsigned overflow works
+    return Model(path.substr(0, dirPos + 1), path.substr(dirPos + 1));
 }
 
 Analyzer::Analyzer(const std::string& filePath, const std::string& basePath,
