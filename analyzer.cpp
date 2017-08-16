@@ -1,24 +1,20 @@
 #include "analyzer.h"
 
-#include <iostream>
-#include <algorithm>
-
-#include <yaml-cpp/yaml.h>
-
 #include "exception.h"
 #include "translator.h"
 
+#include "yaml.h"
+
 using namespace std;
 using namespace std::placeholders;
+using YAML::Node;
+using YAML::NodeType;
+using NodePair = YamlMap::NodePair;
 
 enum {
     CannotReadFromInput = AnalyzerCodes, UnknownParameterType,
-    YamlFailsSchema
+    InvalidDataDefinition
 };
-
-using YAML::Node;
-using YAML::NodeType;
-using NodePair = pair<Node, Node>;
 
 void eraseSuffix(string* path, const string& suffix)
 {
@@ -41,63 +37,14 @@ Analyzer::Analyzer(const std::string& filePath, const std::string& basePath,
         , model(initModel(filePath)), translator(translator)
 { }
 
-Node Analyzer::loadYaml() const
-{
-    try {
-        cout << "Loading from " << baseDir + fileName << endl;
-        return YAML::LoadFile(baseDir + fileName);
-    }
-    catch (YAML::BadFile &)
-    {
-        fail(CannotReadFromInput, "Couldn't read YAML from input");
-    }
-}
-
-static const char* typenames[] = { "Undefined", "Null", "Scalar", "Sequence", "Map" };
-
-const Node& Analyzer::assert(const Node& node, NodeType::value checkedType) const
-{
-    if (node)
-    {
-        if (node.Type() == checkedType)
-            return node;
-
-        cerr << fileName << ":" << node.Mark().line + 1 << ": the node "
-             << "has a wrong type (expected " << typenames[checkedType]
-             << ", got " << typenames[node.Type()] << endl;
-    }
-    else
-        cerr << fileName << ": Analyzer::assert() on undefined node; check"
-                "the higher-level node with get()" << endl;
-    fail(YamlFailsSchema);
-}
-
-Node Analyzer::get(const Node& node, const string& subnodeName,
-                   NodeType::value checkedType, bool allowNonexistent) const
-{
-    Node subnode = node[subnodeName];
-    if (allowNonexistent || (subnode.IsDefined() && subnode.Type() == checkedType))
-        return subnode;
-
-    cerr << fileName << ":" << node.Mark().line + 1 << ": " << subnodeName;
-    if (subnode)
-        cerr << " has a wrong type (expected " << typenames[checkedType]
-             << ", got " << typenames[subnode.Type()] << endl;
-    else
-        cerr << " is undefined" << endl;
-    fail(YamlFailsSchema);
-}
-
-TypeUsage Analyzer::analyzeType(const Node& node, Analyzer::InOut inOut,
+TypeUsage Analyzer::analyzeType(const YamlMap& node, Analyzer::InOut inOut,
                                 bool constRef)
 {
-    assert(node, NodeType::Map);
-
-    auto refFilename = get<string>(node, "$ref", "");
+    auto refFilename = node["$ref"].as<string>("");
     if (refFilename.empty())
-        if (auto allOf = get(node, "allOf", NodeType::Sequence, true))
+        if (auto allOf = node.getSequence("allOf", true))
             // Fortunately, we have no multiple inheritance in CS API specs
-            refFilename = get<string>(allOf[0], "$ref");
+            refFilename = YamlMap(allOf[0]).getScalar("$ref").as<string>();
     if (!refFilename.empty())
     {
         // The referenced file's path is relative to the current file's path;
@@ -108,30 +55,30 @@ TypeUsage Analyzer::analyzeType(const Node& node, Analyzer::InOut inOut,
         {
             cerr << "File " << refFilename
                  << " doesn't have data definitions" << endl;
-            fail(YamlFailsSchema);
+            fail(InvalidDataDefinition);
         }
         if (m.types.size() > 1)
         {
             cerr << "File " << refFilename
                  << " has more than one data structure definition" << endl;
-            fail(YamlFailsSchema);
+            fail(InvalidDataDefinition);
         }
 
         return { m.types.back().name, "\"" + m.fileDir + m.filename + ".h\"" };
         // In theory, there can be more [properties] after [allOf]
     }
 
-    auto yamlType = get<string>(node, "type");
+    auto yamlType = node.getScalar("type").as<string>();
     if (yamlType == "array")
     {
-        auto elementType = get(node, "items", NodeType::Map);
+        auto elementType = node.getMap("items");
         if (elementType.size() > 0)
             return translator.mapArrayType(
                     analyzeType(elementType, inOut, false), constRef);
     }
     if (yamlType == "object")
     {
-        if (auto objectFieldsDef = get(node, "properties", NodeType::Map, true))
+        if (auto objectFieldsDef = node.getMap("properties", true))
         {
             if (objectFieldsDef.size() == 0)
                 return TypeUsage("");
@@ -140,15 +87,15 @@ TypeUsage Analyzer::analyzeType(const Node& node, Analyzer::InOut inOut,
             return TypeUsage("");
     }
     TypeUsage tu =
-            translator.mapType(yamlType, get<string>(node, "format", ""), constRef);
+            translator.mapType(yamlType, node["format"].as<string>(""), constRef);
     if (!tu.name.empty())
         return tu;
 
-    cerr << fileName << ":" << node.Mark().line + 1 << ": unknown type: " << yamlType;
+    cerr << node.location() << ": unknown type: " << yamlType;
     fail(UnknownParameterType);
 }
 
-void Analyzer::addParameter(const string& name, const Node& node, Call& call,
+void Analyzer::addParameter(const string& name, const YamlNode& node, Call& call,
                             bool required, const string& in)
 {
     model.addCallParam(call, analyzeType(node, In, true), name, required, in);
@@ -156,16 +103,15 @@ void Analyzer::addParameter(const string& name, const Node& node, Call& call,
 
 Model Analyzer::loadModel()
 {
-    Node yaml = loadYaml();
-    assert(yaml, NodeType::Map);
+    cout << "Loading from " << baseDir + fileName << endl;
+    YamlMap yaml(YamlNode(baseDir + fileName));
 
     // Detect which file we have: calls or data definition
-    if (auto paths = get(yaml, "paths", NodeType::Map, true))
+    if (const auto paths = yaml.getMap("paths", true))
     {
-        auto produces = yaml["produces"];
+        const auto produces = yaml.getSequence("produces");
         bool allCallsReturnJson = produces.size() == 1 &&
-                                  produces.begin()->as<string>() ==
-                                  "application/json";
+                  produces[0].as<string>() == "application/json";
 
         for (const NodePair& yaml_path: paths)
         {
@@ -174,17 +120,15 @@ Model Analyzer::loadModel()
             while (*path.rbegin() == ' ' || *path.rbegin() == '/')
                 path.erase(path.size() - 1);
 
-            assert(yaml_path.second, NodeType::Map);
-            for (const NodePair& yaml_call_pair: yaml_path.second)
+            for (const NodePair& yaml_call_pair: YamlMap(yaml_path.second))
             {
-                string verb = yaml_call_pair.first.as<string>();
-                Node yamlCall = assert(yaml_call_pair.second, NodeType::Map);
+                const string verb = yaml_call_pair.first.as<string>();
+                const YamlMap yamlCall { yaml_call_pair.second };
 
-                auto yamlResponses = get(yamlCall, "responses", NodeType::Map);
-                if (auto normalResponse = yamlResponses["200"])
+                const auto yamlResponses = yamlCall.getMap("responses");
+                if (auto normalResponse = yamlResponses.getMap("200", true))
                 {
-                    if (auto respSchema = get(normalResponse, "schema",
-                                              NodeType::Map, true))
+                    if (auto respSchema = normalResponse.getMap("schema", true))
                     {
                         TypeUsage tu = analyzeType(respSchema, Out, false);
                         if (!tu.name.empty())
@@ -202,33 +146,32 @@ Model Analyzer::loadModel()
                     continue;
                 }
 
-                auto callName = get<string>(yamlCall, "operationId");
+                auto callName = yamlCall.getScalar("operationId").as<string>();
                 bool needsToken = false;
-                if (auto security =
-                        get(yamlCall, "security", NodeType::Sequence, true))
+                if (const auto security = yamlCall.getSequence("security", true))
                     needsToken = security[0]["accessToken"].IsDefined();
                 Call& call = model.addCall(path, verb, callName, needsToken, "");
 
                 cout << "Loading " << callName << ": "
                      << path << " - " << verb << endl;
 
-                for (const auto& yamlParam:
-                        get(yamlCall, "parameters", NodeType::Sequence, true))
+                for (const YamlMap yamlParam:
+                        yamlCall.getSequence("parameters", true))
                 {
-                    assert(yamlParam, NodeType::Map);
-                    auto name = get<string>(yamlParam, "name");
-                    auto in = get<string>(yamlParam, "in");
+                    auto name = yamlParam.getScalar("name").as<string>();
+                    const auto in = yamlParam.getScalar("in").as<string>();
                     auto required =
-                            in == "path" || get<bool>(yamlParam, "required", false);
+                        in == "path" ||
+                            yamlParam.getScalar("required", true).as<bool>(false);
                     if (in == "body")
                     {
-                        auto schema = get(yamlParam, "schema", NodeType::Map);
-                        if (auto properties = get(schema, "properties",
-                                                  NodeType::Map, true))
+                        const auto schema = yamlParam.getMap("schema");
+                        if (const auto properties =
+                                schema.getMap("properties", true))
                         {
-                            auto requiredList = get(properties, "required",
-                                                    NodeType::Sequence, true);
-                            for (const NodePair& property: properties)
+                            const auto requiredList =
+                                properties.getSequence("required", true);
+                            for (const NodePair property: properties)
                             {
                                 name = property.first.as<string>();
                                 required = find_if(requiredList.begin(),

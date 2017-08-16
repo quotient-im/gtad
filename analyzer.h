@@ -18,21 +18,17 @@
 
 #pragma once
 
-#include <string>
-
-#include <yaml-cpp/node/node.h>
-#include <yaml-cpp/node/type.h>
-
 #include "model.h"
 
+#include <string>
+
 class Translator;
+class YamlNode;
+class YamlMap;
 
 class Analyzer
 {
     public:
-        using Node = YAML::Node;
-        using NodeType = YAML::NodeType;
-
         Analyzer(const std::string& filePath, const std::string& basePath,
                  const Translator& translator);
 
@@ -44,31 +40,9 @@ class Analyzer
         Model model;
         const Translator& translator;
 
-        Node loadYaml() const;
-
-        const Node& assert(const Node& node, NodeType::value checkedType) const;
-        Node get(const Node& node, const std::string& subnodeName,
-                 NodeType::value checkedType, bool allowNonexistent = false) const;
-
-        template <typename T>
-        T get(const Node& node, const std::string& subnodeName) const
-        {
-            return get(node, subnodeName, NodeType::Scalar).as<T>();
-        }
-        template <typename T>
-        T get(const Node& node, const std::string& subnodeName,
-              const T& defaultValue) const
-        {
-            if (Node n = get(node, subnodeName, NodeType::Scalar, true))
-                return n.as<T>();
-            else
-                return defaultValue;
-        }
-
         enum InOut { In, Out };
-        TypeUsage analyzeType(const Node& node, InOut inOut, bool constRef);
+        TypeUsage analyzeType(const YamlMap& node, InOut inOut, bool constRef);
 
-        void addParameter(const std::string& name, const Node& node, Call& call,
-                          bool required, const std::string& in = "body");
-
+        void addParameter(const std::string& name, const YamlNode& node,
+                          Call& call, bool required, const std::string& in = "body");
 };
