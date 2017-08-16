@@ -41,6 +41,11 @@ int main( int argc, char* argv[] )
     parser.addHelpOption();
     parser.addVersionOption();
 
+    QCommandLineOption configPathOption("config",
+        QCoreApplication::translate("main", "API generator configuration in YAML format"),
+        "configfile");
+    parser.addOption(configPathOption);
+
     QCommandLineOption outputDirOption("out",
         QCoreApplication::translate("main", "Write generated files to <outputdir>."),
         "outputdir");
@@ -54,6 +59,8 @@ int main( int argc, char* argv[] )
 
     try
     {
+        Translator t(parser.value(configPathOption), parser.value(outputDirOption));
+
         QStringList paths, exclusions;
         for (auto path: parser.positionalArguments())
         {
@@ -65,9 +72,6 @@ int main( int argc, char* argv[] )
             else
                 paths.append(path);
         }
-
-        auto outputDir = parser.value(outputDirOption);
-        Translator t(outputDir);
         for(auto path: paths)
         {
             if (!QFileInfo(path).isDir())

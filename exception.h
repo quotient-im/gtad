@@ -20,7 +20,7 @@
 
 #include <string>
 
-enum { AnalyzerCodes = 0x1000, TranslatorCodes = 0x2000,
+enum { GeneralCodes = 0x0000, ParserCodes = 0x2000, AnalyzerCodes = 0x3000,
        PrinterCodes = 0x4000, InternalErrors = 0x8000 };
 
 struct Exception

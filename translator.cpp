@@ -1,25 +1,28 @@
 #include "translator.h"
 
-#include "model.h"
 #include "analyzer.h"
 #include "exception.h"
 #include "printer.h"
+
+#include "yaml.h"
 
 #include <QtCore/QDir>
 
 using namespace std;
 
-enum ErrorCode
-{
-    _Base = TranslatorCodes,
-    CannotCreateOutputDir, CannotWriteToFile
+enum {
+    _Base = GeneralCodes, CannotCreateOutputDir, CannotWriteToFile
 };
 
-Translator::Translator(const QString& outputDirPath)
-    : _outputDirPath(outputDirPath)
+Translator::Translator(QString configFilePath,
+                       QString outputDirPath)
+    : _configFilePath(std::move(configFilePath))
+    , _outputDirPath(std::move(outputDirPath))
 {
     if (!_outputDirPath.endsWith('/'))
         _outputDirPath.append('/');
+
+
 }
 
 TypeUsage Translator::mapType(const string& swaggerType, const string& swaggerFormat,
