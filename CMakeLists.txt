@@ -42,6 +42,7 @@ message( STATUS )
 option(YAML_CPP_BUILD_TOOLS "Enable testing and parse tools" OFF)
 option(YAML_CPP_BUILD_CONTRIB "Enable contrib stuff in library" OFF)
 add_subdirectory(yaml-cpp)
+add_subdirectory(mustache)
 
 list(APPEND api_generator_SRCS
         main.cpp
@@ -51,6 +52,7 @@ list(APPEND api_generator_SRCS
         model.cpp
         exception.cpp
         printer.cpp
+        yaml.cpp
 )
 
 add_executable(api-generator ${api_generator_SRCS})
