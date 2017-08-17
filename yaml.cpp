@@ -32,9 +32,43 @@ enum {
     CannotReadFromInput = ParserCodes, IncorrectYamlStructure
 };
 
-static const char* typenames[] = { "Undefined", "Null", "Scalar", "Sequence", "Map" };
+// Follows the YAML::NodeType::value enum; if that enum changes, this has
+// to be changed too (but it probably would only change if YAML standard is updated).
+static const char* const typenames[] {
+    "Undefined", "Null", "Scalar", "Sequence", "Map"
+};
 
-YAML::Node loadFromFile(const string& fileName)
+YamlSequence YamlNode::asSequence() const
+{
+    if (IsDefined())
+        checkType(YAML::NodeType::Sequence);
+    return YamlSequence(*this);
+}
+
+YamlMap YamlNode::asMap() const
+{
+    if (IsDefined())
+        checkType(YAML::NodeType::Map);
+    return YamlMap(*this);
+}
+
+void YamlNode::checkType(NodeType::value checkedType) const
+{
+    if (Type() == checkedType)
+        return;
+
+    cerr << location() << ": the node has a wrong type (expected "
+         << typenames[checkedType] << ", got " << typenames[Type()] << ")" << endl;
+
+    structureFail();
+}
+
+void YamlNode::structureFail() const
+{
+    fail(IncorrectYamlStructure);
+}
+
+YAML::Node makeNodeFromFile(const string& fileName)
 {
     try {
         return YAML::LoadFile(fileName);
@@ -45,28 +79,8 @@ YAML::Node loadFromFile(const string& fileName)
     }
 }
 
-YamlNode::YamlNode(const std::string& fileName)
-    : Node(loadFromFile(fileName)), _fileName(fileName)
-{ }
-
-void YamlNode::assert(NodeType::value checkedType) const
+YamlMap YamlMap::loadFromFile(const std::string& fileName)
 {
-    if (IsDefined())
-    {
-        if (Type() == checkedType)
-            return;
-
-        cerr << location() << ": the node has a wrong type (expected "
-             << typenames[checkedType] << ", got " << typenames[Type()] << endl;
-    }
-    else
-        cerr << _fileName << ": current node is undefined; use get()"
-            "on the higher-level node to pinpoint the location" << endl;
-    structureFail();
-}
-
-void YamlNode::structureFail() const
-{
-    fail(IncorrectYamlStructure);
+    return YamlNode(makeNodeFromFile(fileName), fileName);
 }
 

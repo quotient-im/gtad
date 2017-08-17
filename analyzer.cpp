@@ -42,9 +42,9 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, Analyzer::InOut inOut,
 {
     auto refFilename = node["$ref"].as<string>("");
     if (refFilename.empty())
-        if (auto allOf = node.getSequence("allOf", true))
+        if (auto allOf = node.get("allOf", true).asSequence())
             // Fortunately, we have no multiple inheritance in CS API specs
-            refFilename = YamlMap(allOf[0]).getScalar("$ref").as<string>();
+            refFilename = allOf.get(0).asMap().get("$ref").as<string>();
     if (!refFilename.empty())
     {
         // The referenced file's path is relative to the current file's path;
@@ -68,17 +68,17 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, Analyzer::InOut inOut,
         // In theory, there can be more [properties] after [allOf]
     }
 
-    auto yamlType = node.getScalar("type").as<string>();
+    auto yamlType = node.get("type").as<string>();
     if (yamlType == "array")
     {
-        auto elementType = node.getMap("items");
+        auto elementType = node.get("items").asMap();
         if (elementType.size() > 0)
             return translator.mapArrayType(
                     analyzeType(elementType, inOut, false), constRef);
     }
     if (yamlType == "object")
     {
-        if (auto objectFieldsDef = node.getMap("properties", true))
+        if (auto objectFieldsDef = node.get("properties", true).asMap())
         {
             if (objectFieldsDef.size() == 0)
                 return TypeUsage("");
@@ -104,12 +104,12 @@ void Analyzer::addParameter(const string& name, const YamlNode& node, Call& call
 Model Analyzer::loadModel()
 {
     cout << "Loading from " << baseDir + fileName << endl;
-    YamlMap yaml(YamlNode(baseDir + fileName));
+    auto yaml = YamlMap::loadFromFile(baseDir + fileName);
 
     // Detect which file we have: calls or data definition
-    if (const auto paths = yaml.getMap("paths", true))
+    if (const auto paths = yaml.get("paths", true).asMap())
     {
-        const auto produces = yaml.getSequence("produces");
+        const auto produces = yaml.get("produces").asSequence();
         bool allCallsReturnJson = produces.size() == 1 &&
                   produces[0].as<string>() == "application/json";
 
@@ -120,15 +120,15 @@ Model Analyzer::loadModel()
             while (*path.rbegin() == ' ' || *path.rbegin() == '/')
                 path.erase(path.size() - 1);
 
-            for (const NodePair& yaml_call_pair: YamlMap(yaml_path.second))
+            for (const NodePair& yaml_call_pair: yaml_path.second.asMap())
             {
                 const string verb = yaml_call_pair.first.as<string>();
                 const YamlMap yamlCall { yaml_call_pair.second };
 
-                const auto yamlResponses = yamlCall.getMap("responses");
-                if (auto normalResponse = yamlResponses.getMap("200", true))
+                const auto yamlResponses = yamlCall.get("responses").asMap();
+                if (auto normalResponse = yamlResponses.get("200", true).asMap())
                 {
-                    if (auto respSchema = normalResponse.getMap("schema", true))
+                    if (auto respSchema = normalResponse.get("schema", true).asMap())
                     {
                         TypeUsage tu = analyzeType(respSchema, Out, false);
                         if (!tu.name.empty())
@@ -146,9 +146,9 @@ Model Analyzer::loadModel()
                     continue;
                 }
 
-                auto callName = yamlCall.getScalar("operationId").as<string>();
+                auto callName = yamlCall.get("operationId").as<string>();
                 bool needsToken = false;
-                if (const auto security = yamlCall.getSequence("security", true))
+                if (const auto security = yamlCall.get("security", true).asSequence())
                     needsToken = security[0]["accessToken"].IsDefined();
                 Call& call = model.addCall(path, verb, callName, needsToken, "");
 
@@ -156,21 +156,21 @@ Model Analyzer::loadModel()
                      << path << " - " << verb << endl;
 
                 for (const YamlMap yamlParam:
-                        yamlCall.getSequence("parameters", true))
+                        yamlCall.get("parameters", true).asSequence())
                 {
-                    auto name = yamlParam.getScalar("name").as<string>();
-                    const auto in = yamlParam.getScalar("in").as<string>();
+                    auto name = yamlParam.get("name").as<string>();
+                    const auto in = yamlParam.get("in").as<string>();
                     auto required =
                         in == "path" ||
-                            yamlParam.getScalar("required", true).as<bool>(false);
+                            yamlParam.get("required", true).as<bool>(false);
                     if (in == "body")
                     {
-                        const auto schema = yamlParam.getMap("schema");
+                        const auto schema = yamlParam.get("schema").asMap();
                         if (const auto properties =
-                                schema.getMap("properties", true))
+                                schema.get("properties", true).asMap())
                         {
                             const auto requiredList =
-                                properties.getSequence("required", true);
+                                properties.get("required", true).asSequence();
                             for (const NodePair property: properties)
                             {
                                 name = property.first.as<string>();

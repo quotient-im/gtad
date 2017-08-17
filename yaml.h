@@ -84,10 +84,12 @@ class iterator_base
         std::string _fileName;
 };
 
+class YamlMap;
+class YamlSequence;
+
 class YamlNode : public YAML::Node
 {
     public:
-        explicit YamlNode(const std::string& fileName); // reads from the file
         YamlNode(const YAML::Node& rhs, std::string fileName)
             : Node(rhs), _fileName(std::move(fileName)) { }
 
@@ -106,32 +108,27 @@ class YamlNode : public YAML::Node
         };
         Location location() const { return Location(*this); }
 
-        template <typename KeyT>
-        YamlNode operator[](KeyT&& key) const
+        template <typename T>
+        T as() const
         {
-            return { YAML::Node::operator[](std::forward<KeyT>(key)), fileName() };
+            checkType(YAML::NodeType::Scalar);
+            return YAML::Node::as<T>();
         }
+
+        template <typename T, typename DT>
+        T as(const DT& defaultVal) const
+        {
+            if (IsDefined())
+                checkType(YAML::NodeType::Scalar);
+            return YAML::Node::as<T>(defaultVal);
+        };
+
+        YamlMap asMap() const;
+
+        YamlSequence asSequence() const;
 
     protected:
-        void assert(YAML::NodeType::value checkedType) const;
-
-        template <typename ReturnT, typename KeyT>
-        ReturnT get(KeyT&& subnodeKey, YAML::NodeType::value checkType,
-                    bool allowNonexistent = false) const
-        {
-            auto subnode = (*this)[std::forward<KeyT>(subnodeKey)];
-            if (subnode.IsDefined())
-            {
-                subnode.assert(checkType);
-                return subnode;
-            }
-            if (allowNonexistent)
-                return subnode;
-
-            std::cerr << location() << ": "
-                      << subnodeKey << " is undefined" << std::endl;
-            structureFail();
-        }
+        void checkType(YAML::NodeType::value checkedType) const;
 
         [[noreturn]] void structureFail() const;
     private:
@@ -147,14 +144,18 @@ class YamlSequence : public YamlNode
 
         YamlNode operator[](size_t idx) const
         {
-            return YamlNode::operator[](idx);
+            return { YAML::Node::operator[](idx), fileName() };
         }
 
-        template <typename ReturnT>
-        ReturnT get(size_t subnodeIdx, YAML::NodeType::value checkType,
-                    bool allowNonexistent = false) const
+        YamlNode get(size_t subnodeIdx, bool allowNonexistent = false) const
         {
-            return YamlNode::get<ReturnT>(subnodeIdx, checkType, allowNonexistent);
+            auto subnode = (*this)[subnodeIdx];
+            if (allowNonexistent || subnode.IsDefined())
+                return subnode;
+
+            std::cerr << location() << ": subnode #"
+                      << subnodeIdx << " is undefined" << std::endl;
+            structureFail();
         }
 
         using iterator = iterator_base<YamlNode>;
@@ -180,25 +181,24 @@ class YamlMap : public YamlNode
 
         YamlMap(YamlNode&& yn) : YamlNode(std::move(yn)) { }
 
+        static YamlMap loadFromFile(const std::string& fileName);
+
         template <typename KeyT>
-        YamlNode getScalar(KeyT&& subnodeKey, bool allowNonexistent = false) const
+        YamlNode operator[](KeyT&& key) const
         {
-            return get<YamlNode>(std::forward<KeyT>(subnodeKey),
-                                 YAML::NodeType::Scalar, allowNonexistent);
+            return { YAML::Node::operator[](std::forward<KeyT>(key)), fileName() };
         }
 
         template <typename KeyT>
-        YamlSequence getSequence(KeyT&& subnodeKey, bool allowNonexistent = false) const
+        YamlNode get(KeyT&& subnodeKey, bool allowNonexistent = false) const
         {
-            return get<YamlSequence>(std::forward<KeyT>(subnodeKey),
-                                     YAML::NodeType::Sequence, allowNonexistent);
-        }
+            auto subnode = (*this)[std::forward<KeyT>(subnodeKey)];
+            if (allowNonexistent || subnode.IsDefined())
+                return subnode;
 
-        template <typename KeyT>
-        YamlMap getMap(KeyT&& subnodeKey, bool allowNonexistent = false) const
-        {
-            return get<YamlMap>(std::forward<KeyT>(subnodeKey),
-                                YAML::NodeType::Map, allowNonexistent);
+            std::cerr << location() << ": "
+                      << subnodeKey << " is undefined" << std::endl;
+            structureFail();
         }
 
         struct NodePair : public std::pair<YamlNode, YamlNode>
