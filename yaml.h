@@ -131,6 +131,7 @@ class YamlNode : public YAML::Node
         void checkType(YAML::NodeType::value checkedType) const;
 
         [[noreturn]] void structureFail() const;
+
     private:
         std::string _fileName;
 };
@@ -138,9 +139,19 @@ class YamlNode : public YAML::Node
 class YamlSequence : public YamlNode
 {
     public:
-        YamlSequence(const YamlNode& yn) : YamlNode(yn) { }
+        YamlSequence(const YamlNode& yn)
+            : YamlNode(yn)
+        {
+            if (IsDefined())
+                checkType(YAML::NodeType::Sequence);
+        }
 
-        YamlSequence(YamlNode&& yn) : YamlNode(std::move(yn)) { }
+        YamlSequence(YamlNode&& yn)
+            : YamlNode(std::move(yn))
+        {
+            if (IsDefined())
+                checkType(YAML::NodeType::Sequence);
+        }
 
         YamlNode operator[](size_t idx) const
         {
@@ -177,9 +188,19 @@ class YamlSequence : public YamlNode
 class YamlMap : public YamlNode
 {
     public:
-        YamlMap(const YamlNode& yn) : YamlNode(yn) { }
+        YamlMap(const YamlNode& yn)
+            : YamlNode(yn)
+        {
+            if (IsDefined())
+                checkType(YAML::NodeType::Map);
+        }
 
-        YamlMap(YamlNode&& yn) : YamlNode(std::move(yn)) { }
+        YamlMap(YamlNode&& yn)
+            : YamlNode(std::move(yn))
+        {
+            if (IsDefined())
+                checkType(YAML::NodeType::Map);
+        }
 
         static YamlMap loadFromFile(const std::string& fileName);
 

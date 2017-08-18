@@ -40,15 +40,11 @@ static const char* const typenames[] {
 
 YamlSequence YamlNode::asSequence() const
 {
-    if (IsDefined())
-        checkType(YAML::NodeType::Sequence);
     return YamlSequence(*this);
 }
 
 YamlMap YamlNode::asMap() const
 {
-    if (IsDefined())
-        checkType(YAML::NodeType::Map);
     return YamlMap(*this);
 }
 
