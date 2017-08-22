@@ -14,15 +14,47 @@ enum {
     _Base = GeneralCodes, CannotCreateOutputDir, CannotWriteToFile
 };
 
-Translator::Translator(QString configFilePath,
-                       QString outputDirPath)
-    : _configFilePath(std::move(configFilePath))
-    , _outputDirPath(std::move(outputDirPath))
+Translator::Translator(const QString& configFilePath, QString outputDirPath)
+    : _outputDirPath(outputDirPath.endsWith('/') ?
+                     std::move(outputDirPath) : outputDirPath + '/')
+    , _printer(
+        [&]() {
+            using namespace kainjow::mustache;
+
+            Printer::context_type env;
+            const auto configY = YamlMap::loadFromFile(configFilePath.toStdString());
+
+            for (const auto p: configY["env"].asMap())
+            {
+                const auto pName = p.first.as<string>();
+                if (p.second.IsScalar())
+                    env.set(pName, p.second.as<string>());
+                else
+                {
+                    const auto pDefinition = *p.second.asMap().begin();
+                    const auto pType = pDefinition.first.as<string>();
+                    const YamlNode defaultVal = pDefinition.second;
+                    if (pType == "set")
+                        env.set(pName, { data::type::list });
+                    else if (pType == "bool")
+                        env.set(pName, { defaultVal.as<bool>() });
+                    else
+                        env.set(pName, { defaultVal.as<string>() });
+                }
+            }
+
+            vector<string> outputFiles;
+            for (const auto f: configY["files"].asSequence())
+                outputFiles.emplace_back(f.as<string>());
+
+            QString configDir = QFileInfo(configFilePath).dir().path();
+            if (!configDir.isEmpty())
+                configDir += '/';
+
+            return Printer { std::move(env), outputFiles, configDir.toStdString() };
+        }())
 {
-    if (!_outputDirPath.endsWith('/'))
-        _outputDirPath.append('/');
-
-
+    // TODO: Load types translation table
 }
 
 TypeUsage Translator::mapType(const string& swaggerType, const string& swaggerFormat,
@@ -74,7 +106,7 @@ Model Translator::processFile(string filePath, string baseDirPath) const
             if (!d.exists() && !d.mkpath("."))
                 fail(CannotCreateOutputDir, "Cannot create output directory");
         }
-        Printer(_outputDirPath.toStdString() + m.fileDir, m.filename).print(m);
+        _printer.print(m, _outputDirPath.toStdString());
     }
 
     return m;

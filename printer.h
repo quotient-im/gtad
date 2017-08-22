@@ -1,29 +1,25 @@
 #pragma once
 
-#include <string>
-
 #include "model.h"
-#include "formatting.h"
+
+#include "mustache/mustache.hpp"
 
 class Printer
 {
     public:
-        using stream_type = SrcFormatting::osrcfstream;
+        using context_type = kainjow::mustache::data;
+        using template_type = kainjow::mustache::mustache;
+        using templates_type = std::vector<std::pair<template_type, template_type>>;
 
-        Printer(const std::string& basePath,
-                const std::string& filenameBase);
+        Printer(context_type&& context,
+                const std::vector<std::string>& templateFileNames,
+                const std::string& inputBasePath);
+        Printer(Printer&) = delete;
+        Printer(Printer&&) = default;
 
-        void print(const Model& model);
+        void print(const Model& model, const std::string& outputBasePath) const;
 
     private:
-        stream_type hS;
-        stream_type cppS;
-
-        void printDataDef(const StructDef& dm);
-        void printCall(const std::string& ns, const CallClass& cm);
-        void printConstructors(const CallClass& cm, const std::string& ns = "");
-        void printInitializer(SrcFormatting::WrappedLine& lw,
-                              const std::string& callName,
-                              const Call& callOverload);
-        void printParamInitializers(const Call& call, bool withSetters);
+        context_type _context;
+        templates_type _templates;
 };

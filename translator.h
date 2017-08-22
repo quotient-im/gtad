@@ -19,13 +19,14 @@
 #pragma once
 
 #include "model.h"
+#include "printer.h"
 
 #include <QtCore/QString>
 
 class Translator
 {
     public:
-        explicit Translator(QString configFilePath, QString outputDirPath);
+        Translator(const QString& configFilePath, QString outputDirPath);
 
         Model processFile(std::string filePath, std::string baseDirPath) const;
         TypeUsage mapType(const std::string& swaggerType,
@@ -33,6 +34,6 @@ class Translator
         TypeUsage mapArrayType(const TypeUsage& innerType, bool constRef) const;
 
     private:
-        QString _configFilePath;
         QString _outputDirPath;
+        Printer _printer;
 };
