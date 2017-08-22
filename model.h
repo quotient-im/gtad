@@ -24,7 +24,10 @@
 #include <array>
 #include <unordered_set>
 
+
 std::string convertMultiword(std::string s);
+void eraseSuffix(std::string* path, const std::string& suffix);
+std::string dropSuffix(std::string path, const std::string& suffix);
 
 struct VarDecl
 {
@@ -149,14 +152,12 @@ struct Model
 
     const std::string fileDir;
     const std::string filename;
-    std::string nsName;
     imports_type imports;
     std::vector<StructDef> types;
     std::vector<CallClass> callClasses;
 
-    Model(std::string fileDir, std::string fileName, std::string nameSpace = "")
+    Model(std::string fileDir, std::string fileName)
         : fileDir(std::move(fileDir)), filename(std::move(fileName))
-        , nsName(std::move(nameSpace))
     { }
     ~Model() = default;
     Model(Model&) = delete;

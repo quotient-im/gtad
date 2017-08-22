@@ -16,13 +16,6 @@ enum {
     InvalidDataDefinition
 };
 
-void eraseSuffix(string* path, const string& suffix)
-{
-    auto trimAt = path->size() - suffix.size();
-    if (path->find(suffix, trimAt) != string::npos)
-        path->erase(trimAt);
-}
-
 Model initModel(string path)
 {
     eraseSuffix(&path, ".yaml");

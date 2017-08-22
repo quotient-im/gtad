@@ -47,6 +47,20 @@ string convertMultiword(string s)
     return s;
 }
 
+void eraseSuffix(string* path, const string& suffix)
+{
+    auto trimAt = path->size() - suffix.size();
+    if (path->find(suffix, trimAt) != string::npos)
+        path->erase(trimAt);
+}
+
+string dropSuffix(string path, const string& suffix)
+{
+    auto trimAt = path.size() - suffix.size();
+    return path.find(suffix, trimAt) != string::npos ?
+           string(path.begin(), path.end() - suffix.size()) : std::move(path);
+}
+
 regex makeRegex(const string& pattern)
 {
     // Prepare a regex using regexes.
