@@ -24,8 +24,8 @@
 #include <array>
 #include <unordered_set>
 
-
-std::string convertMultiword(std::string s);
+std::string capitalizedCopy(std::string s);
+std::string camelCase(std::string s);
 void eraseSuffix(std::string* path, const std::string& suffix);
 std::string dropSuffix(std::string path, const std::string& suffix);
 
@@ -126,15 +126,15 @@ struct Model;
 
 struct CallClass
 {
-    std::string className;
+    std::string operationId;
     std::vector<Call> callOverloads;
     VarDecl replyFormatVar;
     ResponseType responseType;
 
-    CallClass(std::string callName,
+    CallClass(std::string operationId,
               std::string responseTypeName,
               std::string replyFormatType = "const QJsonObject&")
-        : className(std::move(callName))
+        : operationId(std::move(operationId))
         , replyFormatVar (std::move(replyFormatType), "reply", true)
         , responseType(std::move(responseTypeName))
     { }
@@ -164,7 +164,7 @@ struct Model
     Model operator=(Model&) = delete;
     Model(Model&&) = default;
     Model& operator=(Model&&) = delete;
-    Call& addCall(std::string path, std::string verb, std::string name, bool needsToken,
+    Call& addCall(std::string path, std::string verb, std::string operationId, bool needsToken,
                   std::string responseTypename);
     void addCallParam(Call& call, const TypeUsage& type, const std::string& name,
                       bool required, const std::string& in)

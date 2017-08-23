@@ -139,13 +139,13 @@ Model Analyzer::loadModel()
                     continue;
                 }
 
-                auto callName = yamlCall.get("operationId").as<string>();
+                auto operationId = yamlCall.get("operationId").as<string>();
                 bool needsToken = false;
                 if (const auto security = yamlCall.get("security", true).asSequence())
                     needsToken = security[0]["accessToken"].IsDefined();
-                Call& call = model.addCall(path, verb, callName, needsToken, "");
+                Call& call = model.addCall(path, verb, operationId, needsToken, "");
 
-                cout << "Loading " << callName << ": "
+                cout << "Loading " << operationId << ": "
                      << path << " - " << verb << endl;
 
                 for (const YamlMap yamlParam:
@@ -183,7 +183,7 @@ Model Analyzer::loadModel()
             }
         }
     } else {
-        model.types.emplace_back(convertMultiword(model.filename));
+        model.types.emplace_back(camelCase(model.filename));
     }
     return std::move(model);
 }

@@ -24,7 +24,7 @@ string VarDecl::setupDefault(string type, string defaultValue)
 void capitalize(string& s, string::size_type pos = 0)
 {
     if (pos < s.size())
-        s[pos] = toupper(s[pos], locale("C"));
+        s[pos] = toupper(s[pos], locale::classic());
 }
 
 string capitalizedCopy(string s)
@@ -33,7 +33,7 @@ string capitalizedCopy(string s)
     return s;
 }
 
-string convertMultiword(string s)
+string camelCase(string s)
 {
     string::size_type pos = 0;
     while (pos < s.size())
@@ -118,7 +118,7 @@ string makeClassName(const string& path, const string& verb)
     //   /register/email/requestToken -> RequestTokenToRegister
     //   /account/password/email/requestToken -> RequestTokenToAccountPassword
     if (regex_match(path, m, makeRegex("/(#(?:/#)?)/email/requestToken")))
-        return "RequestTokenTo" + convertMultiword(m[1]);
+        return "RequestTokenTo" + camelCase(m[1]);
 
     // /login/cas/smth -> VerbCasSmth (GetCasTicket|Redirect) (should it be in the API at all?)
     if (regex_search(path, m, makeRegex("^/login/cas/#")))
@@ -155,7 +155,7 @@ string makeClassName(const string& path, const string& verb)
     //     /user/{id}/filter/{id} -> GetUserFilter
     //     /user/{id}/filter -> PostUserFilter
     if (regex_match(path, m, makeRegex("/user/{}(?:/#/{})?/#?(s?/{})?")))
-        return adjustedVerb + "User" + convertMultiword(m[2]);
+        return adjustedVerb + "User" + camelCase(m[2]);
 
     if (adjustedVerb == "Post")
         adjustedVerb.clear();
@@ -194,31 +194,33 @@ string makeClassName(const string& path, const string& verb)
     //     /rooms/{id}/smth/{} -> Get|SetSmth
     //     /profile/{}/display_name|avatar_url -> Get|SetDisplayName
     if (regex_match(path, m, makeRegex("/#/{}/#(/{}){0,2}")))
-        return adjustedVerb + convertMultiword(m[2]);
+        return adjustedVerb + camelCase(m[2]);
 
     cerr << "Couldn't create a class name for path " << path << ", verb: " << verb;
     fail(CannotResolveClassName);
 }
 
-Call& Model::addCall(string path, string verb, string name, bool needsToken,
+Call& Model::addCall(string path, string verb, string operationId, bool needsToken,
                      string responseTypename)
 {
-    string className = makeClassName(path, verb);
-    if (className != capitalizedCopy(name))
-        cout << "Warning: className/operationId mismatch: "
-             << className << " != " << name << endl;
-    if (callClasses.empty() || name != callClasses.back().className)
+//    string className = makeClassName(path, verb);
+//    if (className != capitalizedCopy(operationId))
+//        cout << "Warning: className/operationId mismatch: "
+//             << className << " != " << capitalizedCopy(operationId) << endl;
+    if (callClasses.empty() || operationId != callClasses.back().operationId)
     {
         if (!callClasses.empty() &&
                 callClasses.back().responseType.name != responseTypename)
             fail(ConflictingOverloads, "Call overloads return different types");
 
-        callClasses.emplace_back(name, std::move(responseTypename));
+        callClasses.emplace_back(operationId, std::move(responseTypename));
     }
 
+    transform(verb.begin(), verb.end(), verb.begin(),
+              [] (char c) { return toupper(c, locale::classic()); });
     return callClasses.back()
-        .addCall(std::move(path), capitalizedCopy(std::move(verb)),
-                 std::move(name), needsToken);
+        .addCall(std::move(path), std::move(verb),
+                 std::move(operationId), needsToken);
 }
 
 void Call::addParam(const VarDecl& param, const string& in)
