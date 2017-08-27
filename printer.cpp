@@ -50,22 +50,22 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
             return render(embeddedTemplate, false);
         }
     });
-    _context.set("@cap", lambda2 {
-        [](const string& s, const basic_renderer<string>& render) {
-            return capitalizedCopy(render(s));
+    _context.set("@cap", lambda3 {
+        [](const string& s, const basic_renderer2<string>& render) {
+            return capitalizedCopy(render(s, false));
         }
     });
-    _context.set("@toupper", lambda2 {
-        [](string s, const basic_renderer<string>& render) {
-            s = render(s);
+    _context.set("@toupper", lambda3 {
+        [](string s, const basic_renderer2<string>& render) {
+            s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
                       [] (char c) { return toupper(c, locale::classic()); });
             return s;
         }
     });
-    _context.set("@tolower", lambda2 {
-        [](string s, const basic_renderer<string>& render) {
-            s = render(s);
+    _context.set("@tolower", lambda3 {
+        [](string s, const basic_renderer2<string>& render) {
+            s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
                       [] (char c) { return tolower(c, locale::classic()); });
             return s;
