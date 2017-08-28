@@ -36,8 +36,8 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
     : _context(context)
 {
     // Enriching the context with "My Mustache library"
-    _context.set("@filePartial", lambda3 {
-        [inputBasePath, this](const string& s, const renderer2& render) {
+    _context.set("@filePartial", lambda {
+        [inputBasePath, this](const string& s, const renderer& render) {
             ifstream ifs { inputBasePath + s };
             if (!ifs.good())
             {
@@ -50,21 +50,22 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
             return render(embeddedTemplate, false);
         }
     });
-    _context.set("@cap", lambda3 {
-        [](const string& s, const basic_renderer2<string>& render) {
+    _context.set("@cap", lambda {
+        [](const string& s, const renderer& render)
+        {
             return capitalizedCopy(render(s, false));
         }
     });
-    _context.set("@toupper", lambda3 {
-        [](string s, const basic_renderer2<string>& render) {
+    _context.set("@toupper", lambda {
+        [](string s, const renderer& render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
                       [] (char c) { return toupper(c, locale::classic()); });
             return s;
         }
     });
-    _context.set("@tolower", lambda3 {
-        [](string s, const basic_renderer2<string>& render) {
+    _context.set("@tolower", lambda {
+        [](string s, const renderer& render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
                       [] (char c) { return tolower(c, locale::classic()); });
