@@ -127,12 +127,34 @@ void Printer::print(const Model& model) const
     auto context = _context;
     context.set("filenameBase", model.filename);
     {
+        // Imports
         list mImports;
         for (const auto& import: model.imports)
             mImports.emplace_back(import);
         setList(&context, "imports", std::move(mImports));
     }
     {
+        // Data definitions
+        list mTypes;
+        for (const auto& type: model.types)
+        {
+            object mType { { "classname", type.name } };
+            list mFields;
+            for (const auto& f: type.fields)
+            {
+                mFields.emplace_back(
+                    object { { "datatype", f.type }
+                           , { "name", f.name }
+                    });
+            }
+            setList(&mType, "vars", move(mFields));
+            mTypes.emplace_back(object { { "model", move(mType) } });
+        }
+        if (!mTypes.empty())
+            context.set("models", mTypes);
+    }
+    {
+        // Operations
         list mClasses;
         for (const auto& callClass: model.callClasses)
         {
