@@ -84,14 +84,17 @@ struct StructDef
 
 using ResponseType = TypeUsage;
 
+std::vector<std::string> splitPath(const std::string& path);
+
 struct Call
 {
     using params_type = std::vector<VarDecl>;
 
     Call(std::string callPath, std::string callVerb, std::string callName,
          bool callNeedsToken)
-        : path(std::move(callPath)), verb(std::move(callVerb))
-        , name(std::move(callName)), needsToken(callNeedsToken)
+        : path(std::move(callPath)), pathParts(splitPath(path))
+        , verb(std::move(callVerb)), name(std::move(callName))
+        , needsToken(callNeedsToken)
     { }
     ~Call() = default;
     Call(Call&) = delete;
@@ -112,6 +115,7 @@ struct Call
     params_type collateParams() const;
 
     std::string path;
+    std::vector<std::string> pathParts;
     std::string verb;
     std::string name;
     std::array<params_type, 4> allParams;

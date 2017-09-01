@@ -8,7 +8,7 @@
 
 enum {
     CannotResolveClassName = InternalErrors,
-    ConflictingOverloads, UnknownInValue,
+    ConflictingOverloads, UnknownInValue, UnbalancedBracesInPath
 };
 
 using namespace std;
@@ -221,6 +221,30 @@ Call& Model::addCall(string path, string verb, string operationId, bool needsTok
     return callClasses.back()
         .addCall(std::move(path), std::move(verb),
                  std::move(operationId), needsToken);
+}
+
+vector<string> splitPath(const string& path)
+{
+    vector<string> parts;
+    for (auto i = path.begin(); i != path.end();)
+    {
+        auto i1 = find(i, path.end(), '{');
+        auto i2 = find(i1, path.end(), '}');
+        if (i1 == path.end())
+        {
+            parts.emplace_back('"' + string{i, path.end()} + '"');
+            break;
+        }
+        if (i2 == path.end())
+            fail(UnbalancedBracesInPath, "The path has '{' without matching '}'");
+
+        cout << string {i, i1};
+        cout << string {i1+1, i2};
+        parts.emplace_back('"' + string{i, i1} + '"');
+        parts.emplace_back(i1 + 1, i2);
+        i = i2 + 1;
+    }
+    return parts;
 }
 
 void Call::addParam(const VarDecl& param, const string& in)
