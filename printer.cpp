@@ -20,7 +20,6 @@
 
 #include "exception.h"
 
-#include <fstream>
 #include <algorithm>
 #include <locale>
 
@@ -32,31 +31,37 @@ using namespace std;
 using namespace kainjow::mustache;
 
 Printer::Printer(context_type&& context, const vector<string>& templateFileNames,
-                 const string& inputBasePath)
-    : _context(context)
+                 const string& inputBasePath, string outputBasePath,
+                 const string& outFilesListPath)
+    : _context(context), _outputBasePath(std::move(outputBasePath))
 {
     // Enriching the context with "My Mustache library"
-    _context.set("@filePartial", lambda {
+    _context.set("@filePartial", lambda2 {
         [inputBasePath, this](const string& s, const renderer& render) {
             ifstream ifs { inputBasePath + s };
             if (!ifs.good())
             {
-                cerr << "Failed to open file for a partial: "
-                     << inputBasePath + s << endl;
-                return "/* Failed to open " + inputBasePath + s + " */";
+                ifs.open(inputBasePath + s + ".mustache");
+                if (!ifs.good())
+                {
+                    cerr << "Failed to open file for a partial: "
+                         << inputBasePath + s << endl;
+                    // FIXME: Figure a better error reporting mechanism
+                    return "/* Failed to open " + inputBasePath + s + " */";
+                }
             }
             string embeddedTemplate;
             getline(ifs, embeddedTemplate, '\0'); // Won't work on files with NULs
             return render(embeddedTemplate, false);
         }
     });
-    _context.set("@cap", lambda {
+    _context.set("@cap", lambda2 {
         [](const string& s, const renderer& render)
         {
             return capitalizedCopy(render(s, false));
         }
     });
-    _context.set("@toupper", lambda {
+    _context.set("@toupper", lambda2 {
         [](string s, const renderer& render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
@@ -64,7 +69,7 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
             return s;
         }
     });
-    _context.set("@tolower", lambda {
+    _context.set("@tolower", lambda2 {
         [](string s, const renderer& render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
@@ -93,6 +98,13 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
         _templates.emplace_back(dropSuffix(templateFileName, ".mustache"),
                                 std::move(fileTemplate));
     }
+    if (!outFilesListPath.empty())
+    {
+        cout << "Opening " << _outputBasePath << outFilesListPath << endl;
+        _outFilesList.open(_outputBasePath + outFilesListPath);
+        if (!_outFilesList)
+            cerr << "No out files list set or cannot write to the file";
+    }
 }
 
 template <typename ObjT>
@@ -110,7 +122,7 @@ inline void setList(ObjT* object, const string& name, list&& list)
     (*object)[name] = list;
 }
 
-void Printer::print(const Model& model, const string& outputBasePath) const
+void Printer::print(const Model& model) const
 {
     auto context = _context;
     context.set("filenameBase", model.filename);
@@ -130,6 +142,11 @@ void Printer::print(const Model& model, const string& outputBasePath) const
                               , { "httpMethod",  call.verb }
                               , { "path", call.path }
                               };
+                list mPathParts;
+                for (const auto& pp: call.pathParts)
+                    mPathParts.emplace_back(object { { "part", pp } });
+                setList(&mClass, "pathParts", move(mPathParts));
+
                 for (const auto& pp: {
                     make_pair("pathParams", call.pathParams),
                     make_pair("queryParams", call.queryParams),
@@ -141,29 +158,34 @@ void Printer::print(const Model& model, const string& outputBasePath) const
                     list mParams;
                     for (const auto& param: pp.second)
                     {
-                        object&& mParam { { "dataType", param.type }
-                                        , { "baseName", param.name }
-                                        , { "paramName", param.name } };
-                        mParams.emplace_back(mParam);
+                        mParams.emplace_back(
+                            object { { "dataType", param.type }
+                                   , { "baseName", param.name }
+                                   , { "paramName", param.name }
+                            });
                     }
                     setList(&mClass, pp.first, move(mParams));
                 }
                 mClasses.emplace_back(move(mClass));
             }
         }
-        context.set("operations",
-            object { { "className", "!!!TODO:undefined!!!" },
-                     { "operation", mClasses } }
-        );
+        if (!mClasses.empty())
+            context.set("operations",
+                object { { "className", "!!!TODO:undefined!!!" },
+                         { "operation", mClasses } }
+            );
     }
     for (auto fileTemplate: _templates)
     {
         ostringstream fileNameStr;
-        fileNameStr << outputBasePath << model.fileDir;
+        fileNameStr << _outputBasePath << model.fileDir;
         fileTemplate.first.render({ "base", model.filename }, fileNameStr);
         if (!fileTemplate.first.error_message().empty())
+        {
             cerr << "When rendering the filename:" << endl
                  << fileTemplate.first.error_message() << endl;
+            continue; // FIXME: should be fail()
+        }
         const auto fileName = fileNameStr.str();
         cout << "Printing " << fileName << endl;
 
@@ -175,7 +197,9 @@ void Printer::print(const Model& model, const string& outputBasePath) const
         }
         fileTemplate.second.set_custom_escape([](const string& s) { return s; });
         fileTemplate.second.render(context, ofs);
-        if (!fileTemplate.second.error_message().empty())
+        if (fileTemplate.second.error_message().empty())
+            _outFilesList << fileName << endl;
+        else
             cerr << "When rendering the file:" << endl
                  << fileTemplate.second.error_message() << endl;
     }

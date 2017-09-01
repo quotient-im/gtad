@@ -44,14 +44,16 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
             }
 
             vector<string> outputFiles;
-            for (const auto f: configY["files"].asSequence())
+            for (const auto f: configY["templates"].asSequence())
                 outputFiles.emplace_back(f.as<string>());
 
             QString configDir = QFileInfo(configFilePath).dir().path();
             if (!configDir.isEmpty())
                 configDir += '/';
 
-            return Printer { std::move(env), outputFiles, configDir.toStdString() };
+            return Printer { std::move(env), outputFiles, configDir.toStdString(),
+                             _outputDirPath.toStdString(),
+                             configY["outFilesList"].as<string>("") };
         }())
 {
     // TODO: Load types translation table
@@ -106,7 +108,7 @@ Model Translator::processFile(string filePath, string baseDirPath) const
             if (!d.exists() && !d.mkpath("."))
                 fail(CannotCreateOutputDir, "Cannot create output directory");
         }
-        _printer.print(m, _outputDirPath.toStdString());
+        _printer.print(m);
     }
 
     return m;

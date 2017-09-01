@@ -4,6 +4,8 @@
 
 #include "mustache/mustache.hpp"
 
+#include <fstream>
+
 class Printer
 {
     public:
@@ -13,13 +15,16 @@ class Printer
 
         Printer(context_type&& context,
                 const std::vector<std::string>& templateFileNames,
-                const std::string& inputBasePath);
+                const std::string& inputBasePath, std::string outputBasePath,
+                const std::string& outFilesListPath);
         Printer(Printer&) = delete;
         Printer(Printer&&) = default;
 
-        void print(const Model& model, const std::string& outputBasePath) const;
+        void print(const Model& model) const;
 
     private:
         context_type _context;
         templates_type _templates;
+        const std::string _outputBasePath;
+        mutable std::ofstream _outFilesList;
 };
