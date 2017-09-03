@@ -1,0 +1,38 @@
+image: Visual Studio 2015
+
+environment:
+  DEPLOY_DIR: apigen-%APPVEYOR_BUILD_VERSION%
+  matrix:
+  - QTDIR: C:\Qt\5.8\msvc2015_64
+    VS_FOLDER: Microsoft Visual Studio 14.0
+    PLATFORM: x64
+  - QTDIR: C:\Qt\5.6\msvc2015
+    VS_FOLDER: Microsoft Visual Studio 14.0
+    PLATFORM: x86
+
+init:
+- call "%QTDIR%\bin\qtenv2.bat"
+- set PATH=C:\Qt\Tools\QtCreator\bin;%PATH%
+- call "%ProgramFiles(x86)%\%VS_FOLDER%\VC\vcvarsall.bat" %platform%
+- cd /D "%APPVEYOR_BUILD_FOLDER%"
+
+before_build:
+- git submodule update --init --recursive
+- mkdir build && cd build
+- cmake -G "NMake Makefiles JOM" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX="%DEPLOY_DIR%" ..
+
+build_script:
+- cmake --build .
+
+after_build:
+- cmake --build . --target install
+- 7z a api-generator.zip "%DEPLOY_DIR%\"
+
+# Uncomment this to connect to the AppVeyor build worker
+#on_finish:
+#  - ps: $blockRdp = $true; iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
+
+test: off
+
+artifacts:
+- path: api-generator.zip
