@@ -17,14 +17,13 @@ class Printer
                 const std::vector<std::string>& templateFileNames,
                 const std::string& inputBasePath, std::string outputBasePath,
                 const std::string& outFilesListPath);
-        Printer(Printer&) = delete;
-        Printer(Printer&&) = default;
+        Printer(Printer&& p) = default;
 
         void print(const Model& model) const;
 
     private:
         context_type _context;
         templates_type _templates;
-        const std::string _outputBasePath;
+        std::string _outputBasePath;
         mutable std::ofstream _outFilesList;
 };

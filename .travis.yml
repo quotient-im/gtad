@@ -1,17 +1,28 @@
 language: cpp
+
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    - llvm-toolchain-precise-3.8
+    packages:
+    - g++-5
+    - clang-3.8
+    - qt5-default
+
 matrix:
   include:
   - os: linux
-    dist: trusty
-    compiler: gcc
+    env: [ ENV_EVAL="CC=gcc-5 && CXX=g++-5" ]
   - os: linux
-    dist: trusty
-    compiler: clang
+    env: [ ENV_EVAL="CC=clang-3.8 && CXX=clang++-3.8" ]
   - os: osx
+    env: [ ENV_EVAL="brew update && brew install qt5 && CMAKE_PREFIX_PATH=/usr/local/opt/qt" ]
+
 install:
-- if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew update; else sudo apt-get update -qq; fi
-- if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew install qt5; export PATH="$PATH:/usr/local/opt/qt/bin"; else sudo apt-get install -y qt5-default qtdeclarative5-dev; fi
+- eval "${ENV_EVAL}"
+
 script:
 - mkdir build && cd build
-- cmake ..
+- cmake -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}" ..
 - cmake --build .
