@@ -102,12 +102,9 @@ Model Translator::processFile(string filePath, string baseDirPath) const
     Model m = Analyzer(filePath, baseDirPath, *this).loadModel();
     if (!m.callClasses.empty() || !m.types.empty())
     {
-        if (!m.fileDir.empty())
-        {
-            QDir d { _outputDirPath + m.fileDir.c_str() };
-            if (!d.exists() && !d.mkpath("."))
-                fail(CannotCreateOutputDir, "Cannot create output directory");
-        }
+        QDir d { _outputDirPath + m.fileDir.c_str() };
+        if (!d.exists() && !d.mkpath("."))
+            fail(CannotCreateOutputDir, "Cannot create output directory");
         _printer.print(m);
     }
 
