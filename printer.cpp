@@ -103,7 +103,7 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
         cout << "Opening " << _outputBasePath << outFilesListPath << endl;
         _outFilesList.open(_outputBasePath + outFilesListPath);
         if (!_outFilesList)
-            cerr << "No out files list set or cannot write to the file";
+            cerr << "No out files list set or cannot write to the file" << endl;
     }
 }
 
