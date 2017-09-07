@@ -139,6 +139,8 @@ class YamlNode : public YAML::Node
 class YamlSequence : public YamlNode
 {
     public:
+        YamlSequence(const YamlSequence&) = default;
+        YamlSequence(YamlSequence&&) = default;
         YamlSequence(const YamlNode& yn)
             : YamlNode(yn)
         {
@@ -188,6 +190,8 @@ class YamlSequence : public YamlNode
 class YamlMap : public YamlNode
 {
     public:
+        YamlMap(const YamlMap&) = default;
+        YamlMap(YamlMap&&) = default;
         YamlMap(const YamlNode& yn)
             : YamlNode(yn)
         {
