@@ -13,11 +13,11 @@ enum {
 
 using namespace std;
 
-string VarDecl::setupDefault(string type, string defaultValue)
+string VarDecl::setupDefault(TypeUsage type, string defaultValue)
 {
     return !defaultValue.empty() ? defaultValue :
-        type == "bool" ? "false" :
-        type == "int" ? "0" :
+        type.name == "bool" ? "false" :
+        type.name == "int" ? "0" :
         "{}";
 }
 

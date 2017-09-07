@@ -23,23 +23,57 @@
 #include <vector>
 #include <array>
 #include <unordered_set>
+#include <unordered_map>
 
 std::string capitalizedCopy(std::string s);
 std::string camelCase(std::string s);
 void eraseSuffix(std::string* path, const std::string& suffix);
 std::string dropSuffix(std::string path, const std::string& suffix);
 
+struct TypeUsage
+{
+    using imports_type = std::vector<std::string>;
+
+    std::string name;
+    std::unordered_map<std::string, std::string> attributes;
+    std::unordered_map<std::string, std::vector<std::string>> lists;
+    std::vector<TypeUsage> innerTypes;
+    imports_type imports;
+
+    explicit TypeUsage(std::string typeName,
+                       imports_type requiredImports = {},
+                       std::vector<TypeUsage> dependentTypes = {})
+        : name(std::move(typeName)), imports(std::move(requiredImports))
+        , innerTypes(std::move(dependentTypes))
+    {
+        if (!innerTypes.empty())
+        {
+            for (const auto& t: innerTypes)
+                imports.insert(imports.end(), t.imports.begin(), t.imports.end());
+        }
+    }
+    TypeUsage(const std::string& typeName, const std::string& import)
+        : TypeUsage(typeName, imports_type(1, import))
+    { }
+
+    TypeUsage operator()(const TypeUsage& innerType) const
+    {
+        TypeUsage tu = *this;
+        tu.innerTypes = { innerType };
+        return tu;
+    }
+};
+
 struct VarDecl
 {
-    std::string type;
+    TypeUsage type;
     std::string name;
     bool required;
     std::string defaultValue;
 
-    static std::string setupDefault(std::string type,
-                                    std::string defaultValue);
+    static std::string setupDefault(TypeUsage type, std::string defaultValue);
 
-    VarDecl(std::string type, std::string name,
+    VarDecl(TypeUsage type, std::string name,
             bool required = true, std::string defaultValue = {})
         : type(std::move(type)), name(std::move(name)), required(required)
         , defaultValue(setupDefault(type, std::move(defaultValue)))
@@ -49,29 +83,9 @@ struct VarDecl
 
     std::string toString(bool withDefault = false) const
     {
-        return type + " " +
+        return type.name + " " +
                 (withDefault && !required ? name + " = " + defaultValue : name);
     }
-};
-
-struct TypeUsage
-{
-    using imports_type = std::vector<std::string>;
-
-    std::string name;
-    imports_type imports;
-
-    explicit TypeUsage(std::string typeName,
-                       imports_type requiredImports = {},
-                       std::string appendImport = {})
-        : name(std::move(typeName)), imports(std::move(requiredImports))
-    {
-        if (!appendImport.empty())
-            imports.emplace_back(std::move(appendImport));
-    }
-    TypeUsage(const std::string& typeName, const std::string& import)
-        : TypeUsage(typeName, imports_type(1, import))
-    { }
 };
 
 struct StructDef
@@ -137,7 +151,7 @@ struct CallClass
 
     CallClass(std::string operationId,
               std::string responseTypeName,
-              std::string replyFormatType = "const QJsonObject&")
+              TypeUsage replyFormatType = TypeUsage("const QJsonObject&"))
         : operationId(std::move(operationId))
         , replyFormatVar (std::move(replyFormatType), "reply", true)
         , responseType(std::move(responseTypeName))
@@ -173,7 +187,7 @@ struct Model
     void addCallParam(Call& call, const TypeUsage& type, const std::string& name,
                       bool required, const std::string& in)
     {
-        call.addParam(VarDecl(type.name, name, required), in);
+        call.addParam(VarDecl(type, name, required), in);
         imports.insert(type.imports.begin(), type.imports.end());
     }
 };

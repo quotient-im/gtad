@@ -34,6 +34,12 @@ class Translator
         TypeUsage mapArrayType(const TypeUsage& innerType, bool constRef) const;
 
     private:
+        template <typename T>
+        using map_t = std::vector<std::pair<std::string, T>>;
+        // In JSON/YAML, the below looks like:
+        // <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
+        map_t<map_t<TypeUsage>> _typesMap;
+
         QString _outputDirPath;
-        Printer _printer;
+        std::unique_ptr<Printer> _printer;
 };

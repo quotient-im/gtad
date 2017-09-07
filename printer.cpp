@@ -122,6 +122,39 @@ inline void setList(ObjT* object, const string& name, list&& list)
     (*object)[name] = list;
 }
 
+string renderType(const TypeUsage& tu)
+{
+    if (tu.innerTypes.empty())
+        return tu.name;
+
+    cout << "Rendering type " << tu.name
+         << " with " << tu.innerTypes.size() << " inner types" << endl;
+    // Template type
+    mustache m { tu.name };
+    object mInnerTypes;
+    int i = 0;
+    for (const auto& t: tu.innerTypes)
+        mInnerTypes.emplace(to_string(++i), renderType(t)); // {{1}}, {{2}} and so on
+
+    return m.render(mInnerTypes);
+}
+
+void dumpTypeAttrs(const TypeUsage& tu, object* fieldDef)
+{
+    for (const auto& attr: tu.attributes)
+    {
+        cout << "Dumping attr: " << attr.first << "=" << attr.second << endl;
+        fieldDef->emplace(attr);
+    }
+    for (const auto& listAttr: tu.lists)
+    {
+        list mAttrValue;
+        for (const auto& i: listAttr.second)
+            mAttrValue.emplace_back(i);
+        fieldDef->emplace(listAttr.first, move(mAttrValue));
+    }
+}
+
 void Printer::print(const Model& model) const
 {
     auto context = _context;
@@ -142,10 +175,10 @@ void Printer::print(const Model& model) const
             list mFields;
             for (const auto& f: type.fields)
             {
-                mFields.emplace_back(
-                    object { { "datatype", f.type }
-                           , { "name", f.name }
-                    });
+                object fieldDef { { "name", f.name }
+                                , { "datatype", renderType(f.type) } };
+                dumpTypeAttrs(f.type, &fieldDef);
+                mFields.emplace_back(move(fieldDef));
             }
             setList(&mType, "vars", move(mFields));
             mTypes.emplace_back(object { { "model", move(mType) } });
@@ -163,7 +196,7 @@ void Printer::print(const Model& model) const
                 object mClass { { "operationId", callClass.operationId }
                               , { "httpMethod",  call.verb }
                               , { "path", call.path }
-                              };
+                };
                 list mPathParts;
                 for (const auto& pp: call.pathParts)
                     mPathParts.emplace_back(object { { "part", pp } });
@@ -180,11 +213,12 @@ void Printer::print(const Model& model) const
                     list mParams;
                     for (const auto& param: pp.second)
                     {
-                        mParams.emplace_back(
-                            object { { "dataType", param.type }
-                                   , { "baseName", param.name }
-                                   , { "paramName", param.name }
-                            });
+                        object mParam { { "dataType", renderType(param.type) }
+                                      , { "baseName", param.name }
+                                      , { "paramName", param.name }
+                        };
+                        dumpTypeAttrs(param.type, &mParam);
+                        mParams.emplace_back(move(mParam));
                     }
                     setList(&mClass, pp.first, move(mParams));
                 }
@@ -193,8 +227,8 @@ void Printer::print(const Model& model) const
         }
         if (!mClasses.empty())
             context.set("operations",
-                object { { "className", "!!!TODO:undefined!!!" },
-                         { "operation", mClasses } }
+                        object { { "className", "!!!TODO:undefined!!!" },
+                                 { "operation", mClasses } }
             );
     }
     for (auto fileTemplate: _templates)
