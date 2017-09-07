@@ -4,10 +4,8 @@ addons:
   apt:
     sources:
     - ubuntu-toolchain-r-test
-    - llvm-toolchain-precise-3.8
     packages:
     - g++-5
-    - clang-3.8
     - qt5-default
 
 matrix:
@@ -15,9 +13,9 @@ matrix:
   - os: linux
     env: [ ENV_EVAL="CC=gcc-5 && CXX=g++-5" ]
   - os: linux
-    env: [ ENV_EVAL="CC=clang-3.8 && CXX=clang++-3.8" ]
+    env: [ ENV_EVAL="CC=clang && CXX=clang++" ]
   - os: osx
-    env: [ ENV_EVAL="brew update && brew install qt5 && CMAKE_PREFIX_PATH=/usr/local/opt/qt" ]
+    env: [ ENV_EVAL="brew update && brew install qt5" CMAKE_PREFIX_PATH=/usr/local/opt/qt" ]
 
 install:
 - eval "${ENV_EVAL}"
