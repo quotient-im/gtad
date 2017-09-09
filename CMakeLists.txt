@@ -45,14 +45,15 @@ add_subdirectory(yaml-cpp)
 add_subdirectory(mustache)
 
 list(APPEND api_generator_SRCS
-        main.cpp
-        translator.cpp
-        analyzer.cpp
-        formatting.cpp
-        model.cpp
-        exception.cpp
-        printer.cpp
-        yaml.cpp
+    main.cpp
+    translator.cpp
+    analyzer.cpp
+    formatting.cpp
+    model.cpp
+    exception.cpp
+    printer.cpp
+    yaml.cpp
+    util.cpp
 )
 
 add_executable(api-generator ${api_generator_SRCS})

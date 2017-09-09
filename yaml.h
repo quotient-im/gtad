@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include "util.h"
+
 #include <yaml-cpp/node/node.h>
 #include <yaml-cpp/node/convert.h>
 #include <yaml-cpp/node/iterator.h>
@@ -206,7 +208,8 @@ class YamlMap : public YamlNode
                 checkType(YAML::NodeType::Map);
         }
 
-        static YamlMap loadFromFile(const std::string& fileName);
+        static YamlMap loadFromFile(const std::string& fileName,
+            const pair_vector_t<std::string>& replacePairs = {});
 
         template <typename KeyT>
         YamlNode operator[](KeyT&& key) const

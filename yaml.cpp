@@ -22,6 +22,8 @@
 
 #include <yaml-cpp/node/parse.h>
 
+#include <regex>
+
 using Node = YAML::Node;
 using NodeType = YAML::NodeType;
 using std::cerr;
@@ -64,10 +66,20 @@ void YamlNode::structureFail() const
     fail(IncorrectYamlStructure);
 }
 
-YAML::Node makeNodeFromFile(const string& fileName)
+YAML::Node makeNodeFromFile(const string& fileName,
+                            const pair_vector_t<string>& replacePairs)
 {
     try {
-        return YAML::LoadFile(fileName);
+        if (replacePairs.empty())
+            return YAML::LoadFile(fileName);
+
+        string fileContents = readFile(fileName);
+        if (fileContents.empty())
+            fail(CannotReadFromInput);
+        for (const auto& subst: replacePairs)
+            fileContents = std::regex_replace(fileContents,
+                         std::regex(subst.first), subst.second);
+        return YAML::Load(fileContents);
     }
     catch (YAML::BadFile &)
     {
@@ -75,8 +87,9 @@ YAML::Node makeNodeFromFile(const string& fileName)
     }
 }
 
-YamlMap YamlMap::loadFromFile(const std::string& fileName)
+YamlMap YamlMap::loadFromFile(const std::string& fileName,
+                              const pair_vector_t<std::string>& replacePairs)
 {
-    return YamlNode(makeNodeFromFile(fileName), fileName);
+    return YamlNode(makeNodeFromFile(fileName, replacePairs), fileName);
 }
 
