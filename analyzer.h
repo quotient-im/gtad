@@ -19,6 +19,7 @@
 #pragma once
 
 #include "model.h"
+#include "util.h"
 
 #include <string>
 
@@ -32,7 +33,7 @@ class Analyzer
         Analyzer(const std::string& filePath, const std::string& basePath,
                  const Translator& translator);
 
-        Model loadModel();
+        Model loadModel(const pair_vector_t<std::string>& substitutions);
 
     private:
         std::string fileName;

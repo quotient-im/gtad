@@ -13,6 +13,23 @@ enum {
 
 using namespace std;
 
+TypeUsage TypeUsage::operator()(const TypeUsage& innerType) const
+{
+    TypeUsage tu = *this;
+    tu.innerTypes.push_back(innerType);
+
+    auto& tuImports = tu.lists["imports"];
+    const auto singleInnerImport = innerType.attributes.find("imports");
+    if (singleInnerImport != innerType.attributes.end())
+        tuImports.push_back(singleInnerImport->second);
+    const auto innerImports = innerType.lists.find("imports");
+    if (innerImports != innerType.lists.end())
+        tuImports.insert(tuImports.end(),
+             innerImports->second.begin(), innerImports->second.end());
+
+    return tu;
+}
+
 string VarDecl::setupDefault(TypeUsage type, string defaultValue)
 {
     return !defaultValue.empty() ? defaultValue :
@@ -274,3 +291,22 @@ Call::params_type Call::collateParams() const
     return allCollated;
 }
 
+void Model::addCallParam(Call& call, const TypeUsage& type, const std::string& name,
+                         bool required, const std::string& in)
+{
+    call.addParam(VarDecl(type, name, required), in);
+
+    const auto oldSize = imports.size();
+    const auto singleTypeImport = type.attributes.find("imports");
+    if (singleTypeImport != type.attributes.end())
+        imports.insert(singleTypeImport->second);
+    const auto typeImportsIt = type.lists.find("imports");
+    if (typeImportsIt != type.lists.end())
+    {
+        const auto& typeImports = typeImportsIt->second;
+        imports.insert(typeImports.begin(), typeImports.end());
+    }
+    if (imports.size() != oldSize)
+        cout << "Added " << imports.size() - oldSize
+             << " imports to the model" << endl;
+}

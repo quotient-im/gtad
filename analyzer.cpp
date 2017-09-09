@@ -12,8 +12,8 @@ using YAML::NodeType;
 using NodePair = YamlMap::NodePair;
 
 enum {
-    CannotReadFromInput = AnalyzerCodes, UnknownParameterType,
-    InvalidDataDefinition
+    CannotReadFromInput = AnalyzerCodes, IncompatibleSwaggerVersion,
+    UnknownParameterType, InvalidDataDefinition
 };
 
 Model initModel(string path)
@@ -94,14 +94,23 @@ void Analyzer::addParameter(const string& name, const YamlNode& node, Call& call
     model.addCallParam(call, analyzeType(node, In, true), name, required, in);
 }
 
-Model Analyzer::loadModel()
+Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
 {
     cout << "Loading from " << baseDir + fileName << endl;
-    auto yaml = YamlMap::loadFromFile(baseDir + fileName);
+    auto yaml = YamlMap::loadFromFile(baseDir + fileName, substitutions);
 
-    // Detect which file we have: calls or data definition
+    // Detect which file we have: API description or just data definition
+    // TODO: This should be refactored to two separate methods, since we shouldn't
+    // allow loading an API description file referenced from another API description.
     if (const auto paths = yaml.get("paths", true).asMap())
     {
+        if (yaml.get("swagger").as<string>() != "2.0")
+            fail(IncompatibleSwaggerVersion,
+                 "This software only supports swagger version 2.0 for now");
+
+        model.hostAddress = yaml["host"].as<string>("");
+        model.basePath = yaml["basePath"].as<string>("");
+
         const auto produces = yaml.get("produces").asSequence();
         bool allCallsReturnJson = produces.size() == 1 &&
                   produces[0].as<string>() == "application/json";

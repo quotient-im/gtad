@@ -118,6 +118,7 @@ inline void setList(ObjT* object, const string& name, list&& list)
         (*object)[name + '?'] = false;
         for_each(list.begin(), list.end() - 1,
                  bind(&data::set, _1, "hasMore", true));
+        list.back().set("last", true);
     }
     (*object)[name] = list;
 }
@@ -127,8 +128,6 @@ string renderType(const TypeUsage& tu)
     if (tu.innerTypes.empty())
         return tu.name;
 
-    cout << "Rendering type " << tu.name
-         << " with " << tu.innerTypes.size() << " inner types" << endl;
     // Template type
     mustache m { tu.name };
     object mInnerTypes;
@@ -142,10 +141,8 @@ string renderType(const TypeUsage& tu)
 void dumpTypeAttrs(const TypeUsage& tu, object* fieldDef)
 {
     for (const auto& attr: tu.attributes)
-    {
-        cout << "Dumping attr: " << attr.first << "=" << attr.second << endl;
         fieldDef->emplace(attr);
-    }
+
     for (const auto& listAttr: tu.lists)
     {
         list mAttrValue;
@@ -227,9 +224,11 @@ void Printer::print(const Model& model) const
         }
         if (!mClasses.empty())
             context.set("operations",
-                        object { { "className", "!!!TODO:undefined!!!" },
-                                 { "operation", mClasses } }
-            );
+                        object { { "className", "NOT_IMPLEMENTED" }
+                               , { "operation", mClasses }
+                        });
+        context.set("basePathWithoutHost", model.basePath);
+        context.set("basePath", model.hostAddress + model.basePath);
     }
     for (auto fileTemplate: _templates)
     {

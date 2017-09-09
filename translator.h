@@ -20,6 +20,7 @@
 
 #include "model.h"
 #include "printer.h"
+#include "util.h"
 
 #include <QtCore/QString>
 
@@ -34,11 +35,10 @@ class Translator
         TypeUsage mapArrayType(const TypeUsage& innerType, bool constRef) const;
 
     private:
-        template <typename T>
-        using map_t = std::vector<std::pair<std::string, T>>;
+        pair_vector_t<std::string> _substitutions;
         // In JSON/YAML, the below looks like:
         // <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
-        map_t<map_t<TypeUsage>> _typesMap;
+        pair_vector_t<pair_vector_t<TypeUsage>> _typesMap;
 
         QString _outputDirPath;
         std::unique_ptr<Printer> _printer;

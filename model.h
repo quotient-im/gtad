@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include "util.h"
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,30 +40,15 @@ struct TypeUsage
     std::unordered_map<std::string, std::string> attributes;
     std::unordered_map<std::string, std::vector<std::string>> lists;
     std::vector<TypeUsage> innerTypes;
-    imports_type imports;
 
-    explicit TypeUsage(std::string typeName,
-                       imports_type requiredImports = {},
-                       std::vector<TypeUsage> dependentTypes = {})
-        : name(std::move(typeName)), imports(std::move(requiredImports))
-        , innerTypes(std::move(dependentTypes))
+    explicit TypeUsage(std::string typeName) : name(std::move(typeName)) { }
+    TypeUsage(std::string typeName, std::string import)
+        : TypeUsage(move(typeName))
     {
-        if (!innerTypes.empty())
-        {
-            for (const auto& t: innerTypes)
-                imports.insert(imports.end(), t.imports.begin(), t.imports.end());
-        }
+        lists.emplace("imports", imports_type { move(import) });
     }
-    TypeUsage(const std::string& typeName, const std::string& import)
-        : TypeUsage(typeName, imports_type(1, import))
-    { }
 
-    TypeUsage operator()(const TypeUsage& innerType) const
-    {
-        TypeUsage tu = *this;
-        tu.innerTypes = { innerType };
-        return tu;
-    }
+    TypeUsage operator()(const TypeUsage& innerType) const;
 };
 
 struct VarDecl
@@ -170,6 +157,9 @@ struct Model
 
     const std::string fileDir;
     const std::string filename;
+
+    std::string hostAddress;
+    std::string basePath;
     imports_type imports;
     std::vector<StructDef> types;
     std::vector<CallClass> callClasses;
@@ -182,14 +172,10 @@ struct Model
     Model operator=(Model&) = delete;
     Model(Model&&) = default;
     Model& operator=(Model&&) = delete;
-    Call& addCall(std::string path, std::string verb, std::string operationId, bool needsToken,
-                  std::string responseTypename);
+    Call& addCall(std::string path, std::string verb, std::string operationId,
+                  bool needsToken, std::string responseTypename);
     void addCallParam(Call& call, const TypeUsage& type, const std::string& name,
-                      bool required, const std::string& in)
-    {
-        call.addParam(VarDecl(type, name, required), in);
-        imports.insert(type.imports.begin(), type.imports.end());
-    }
+                      bool required, const std::string& in);
 };
 
 

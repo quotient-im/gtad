@@ -30,8 +30,6 @@ TypeUsage parseTypeEntry(const YamlNode& yamlTypeNode)
         auto attrName = attr.first.as<string>();
         if (attrName == "type")
             continue;
-        if (attrName == "imports")
-            typeUsage.imports.emplace_back(attr.second.as<string>());
         if (attr.second.Type() == NodeType::Scalar)
             typeUsage.attributes.emplace(move(attrName),
                                          attr.second.as<string>());
@@ -50,10 +48,14 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
 {
     const auto configY = YamlMap::loadFromFile(configFilePath.toStdString());
 
+    for (const auto& subst: configY["preprocess"].asMap())
+        _substitutions.emplace_back(subst.first.as<string>(),
+                                    subst.second.as<string>());
+
     for (const auto& type: configY["types"].asMap())
     {
         const auto typeValue = type.second;
-        map_t<TypeUsage> formatsMap;
+        pair_vector_t<TypeUsage> formatsMap;
         switch (typeValue.Type())
         {
             case YAML::NodeType::Scalar: // Use a type with no regard to format
@@ -169,7 +171,7 @@ TypeUsage Translator::mapArrayType(const TypeUsage& innerType, bool constRef) co
 
 Model Translator::processFile(string filePath, string baseDirPath) const
 {
-    Model m = Analyzer(filePath, baseDirPath, *this).loadModel();
+    Model m = Analyzer(filePath, baseDirPath, *this).loadModel(_substitutions);
     if (!m.callClasses.empty() || !m.types.empty())
     {
         QDir d { _outputDirPath + m.fileDir.c_str() };
