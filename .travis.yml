@@ -11,10 +11,12 @@ addons:
 matrix:
   include:
   - os: linux
+    compiler: gcc
     env: [ ENV_EVAL="CC=gcc-5 && CXX=g++-5" ]
   - os: linux
-    env: [ ENV_EVAL="CC=clang && CXX=clang++" ]
+    compiler: clang
   - os: osx
+    osx_image: xcode8.3
     env: [ ENV_EVAL="brew update && brew install qt5" CMAKE_PREFIX_PATH=/usr/local/opt/qt" ]
 
 install:
