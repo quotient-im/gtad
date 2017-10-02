@@ -110,15 +110,13 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
 template <typename ObjT>
 inline void setList(ObjT* object, const string& name, list&& list)
 {
-    if (list.empty())
-        (*object)[name + '?'] = true;
-    else
+    (*object)[name + '?'] = !list.empty();
+    if (!list.empty())
     {
         using namespace placeholders;
-        (*object)[name + '?'] = false;
         for_each(list.begin(), list.end() - 1,
                  bind(&data::set, _1, "hasMore", true));
-        list.back().set("last", true);
+        list.back().set("last?", true);
     }
     (*object)[name] = list;
 }
