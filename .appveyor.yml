@@ -1,9 +1,9 @@
 image: Visual Studio 2015
 
 environment:
-  DEPLOY_DIR: apigen-%APPVEYOR_BUILD_VERSION%
+  DEPLOY_DIR: gtad-%APPVEYOR_BUILD_VERSION%
   matrix:
-  - QTDIR: C:\Qt\5.8\msvc2015_64
+  - QTDIR: C:\Qt\5.9\msvc2015_64
     VS_FOLDER: Microsoft Visual Studio 14.0
     PLATFORM: x64
   - QTDIR: C:\Qt\5.6\msvc2015
@@ -26,7 +26,7 @@ build_script:
 
 after_build:
 - cmake --build . --target install
-- 7z a api-generator.zip "%DEPLOY_DIR%\"
+- 7z a gtad.zip "%DEPLOY_DIR%\"
 
 # Uncomment this to connect to the AppVeyor build worker
 #on_finish:
@@ -35,4 +35,4 @@ after_build:
 test: off
 
 artifacts:
-- path: api-generator.zip
+- path: gtad.zip

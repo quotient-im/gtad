@@ -16,7 +16,6 @@ matrix:
   - os: linux
     compiler: clang
   - os: osx
-    osx_image: xcode8.3
     env: [ ENV_EVAL="brew update && brew install qt5" CMAKE_PREFIX_PATH=/usr/local/opt/qt" ]
 
 install:

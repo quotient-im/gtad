@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 2.8.11) # Maybe works with even older versions
 
-project(api-generator)
-enable_language(CXX)
+project(gtad CXX)
 
 include(CheckCXXCompilerFlag)
 
@@ -29,7 +28,7 @@ set(CMAKE_AUTOMOC OFF)
 
 message( STATUS )
 message( STATUS "=============================================================================" )
-message( STATUS "                       api-generator Build Information" )
+message( STATUS "                       GTAD Build Information" )
 message( STATUS "=============================================================================" )
 if (CMAKE_BUILD_TYPE)
     message( STATUS "Build type: ${CMAKE_BUILD_TYPE}")
@@ -44,11 +43,10 @@ option(YAML_CPP_BUILD_CONTRIB "Enable contrib stuff in library" OFF)
 add_subdirectory(yaml-cpp)
 add_subdirectory(mustache)
 
-list(APPEND api_generator_SRCS
+list(APPEND SRCS
     main.cpp
     translator.cpp
     analyzer.cpp
-    formatting.cpp
     model.cpp
     exception.cpp
     printer.cpp
@@ -56,6 +54,6 @@ list(APPEND api_generator_SRCS
     util.cpp
 )
 
-add_executable(api-generator ${api_generator_SRCS})
-target_include_directories(api-generator PRIVATE yaml-cpp/include)
-target_link_libraries(api-generator Qt5::Core yaml-cpp)
+add_executable(${CMAKE_PROJECT_NAME} ${SRCS})
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE yaml-cpp/include)
+target_link_libraries(${CMAKE_PROJECT_NAME} Qt5::Core yaml-cpp)
