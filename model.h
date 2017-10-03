@@ -107,12 +107,6 @@ struct Call
     Call operator=(Call&&) = delete;
 
     void addParam(const VarDecl& param, const std::string& in);
-    params_type::size_type paramsTotalSize() const
-    {
-        params_type::size_type s = 0;
-        for (const auto& p: allParams) s += p.size();
-        return s;
-    }
     params_type collateParams() const;
 
     std::string path;

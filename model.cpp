@@ -283,16 +283,17 @@ void Call::addParam(const VarDecl& param, const string& in)
 
 Call::params_type Call::collateParams() const
 {
-    params_type allCollated; allCollated.reserve(paramsTotalSize());
+    params_type allCollated;
     for (auto c: allParams)
-        copy(c.begin(), c.end(), back_inserter(allCollated));
+        allCollated.insert(allCollated.end(), c.begin(), c.end());
+
     stable_partition(allCollated.begin(), allCollated.end(),
                      mem_fn(&VarDecl::isRequired));
     return allCollated;
 }
 
-void Model::addCallParam(Call& call, const TypeUsage& type, const std::string& name,
-                         bool required, const std::string& in)
+void Model::addCallParam(Call& call, const TypeUsage& type, const string& name,
+                         bool required, const string& in)
 {
     call.addParam(VarDecl(type, name, required), in);
 
