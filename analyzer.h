@@ -42,8 +42,8 @@ class Analyzer
         const Translator& translator;
 
         enum InOut { In, Out };
-        TypeUsage analyzeType(const YamlMap& node, InOut inOut, bool constRef);
+        TypeUsage analyzeType(const YamlMap& node, Analyzer::InOut inOut);
 
-        void addParameter(const std::string& name, const YamlNode& node,
-                          Call& call, bool required, const std::string& in = "body");
+        ObjectSchema analyzeSchema(const YamlMap& yamlSchema);
+        TypeUsage tryResolveParentTypes(const YamlMap& yamlSchema);
 };

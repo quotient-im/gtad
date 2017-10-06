@@ -29,10 +29,11 @@ class Translator
     public:
         Translator(const QString& configFilePath, QString outputDirPath);
 
-        Model processFile(std::string filePath, std::string baseDirPath) const;
+        std::pair<Model, std::vector<std::string>>
+        processFile(std::string filePath, std::string baseDirPath) const;
         TypeUsage mapType(const std::string& swaggerType,
-                          const std::string& swaggerFormat, bool constRef) const;
-        TypeUsage mapArrayType(const TypeUsage& innerType, bool constRef) const;
+                          const std::string& swaggerFormat = {}) const;
+        TypeUsage mapArrayType(const TypeUsage& innerType) const;
 
     private:
         pair_vector_t<std::string> _substitutions;

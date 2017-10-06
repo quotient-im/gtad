@@ -49,6 +49,7 @@ struct TypeUsage
     }
 
     TypeUsage operator()(const TypeUsage& innerType) const;
+    bool empty() const { return name.empty(); }
 };
 
 struct VarDecl
@@ -75,15 +76,15 @@ struct VarDecl
     }
 };
 
-struct StructDef
+struct ObjectSchema
 {
-    std::string name;
+    std::vector<TypeUsage> parentTypes;
     std::vector<VarDecl> fields;
 
-    explicit StructDef(std::string typeName) : name(std::move(typeName)) { }
+    bool isTrivial() const { return parentTypes.size() == 1 && fields.empty(); }
 };
 
-using ResponseType = TypeUsage;
+using ResponseType = ObjectSchema;
 
 std::vector<std::string> splitPath(const std::string& path);
 
@@ -118,24 +119,20 @@ struct Call
     params_type& queryParams = allParams[1];
     params_type& headerParams = allParams[2];
     params_type& bodyParams = allParams[3];
+    // FIXME: This is Matrix-specific, should be replaced with proper
+    // securityDefinitions representation.
     bool needsToken;
 };
-
-struct Model;
 
 struct CallClass
 {
     std::string operationId;
     std::vector<Call> callOverloads;
-    VarDecl replyFormatVar;
     ResponseType responseType;
 
-    CallClass(std::string operationId,
-              std::string responseTypeName,
-              TypeUsage replyFormatType = TypeUsage("const QJsonObject&"))
+    CallClass(std::string operationId, ResponseType responseType)
         : operationId(std::move(operationId))
-        , replyFormatVar (std::move(replyFormatType), "reply", true)
-        , responseType(std::move(responseTypeName))
+        , responseType(std::move(responseType))
     { }
     Call& addCall(std::string path, std::string verb, std::string name,
                   bool needsToken)
@@ -155,21 +152,22 @@ struct Model
     std::string hostAddress;
     std::string basePath;
     imports_type imports;
-    std::vector<StructDef> types;
+    std::unordered_map<std::string, ObjectSchema> types;
     std::vector<CallClass> callClasses;
 
     Model(std::string fileDir, std::string fileName)
         : fileDir(std::move(fileDir)), filename(std::move(fileName))
     { }
     ~Model() = default;
-    Model(Model&) = delete;
-    Model operator=(Model&) = delete;
+    Model(const Model&) = delete;
+    Model operator=(const Model&) = delete;
     Model(Model&&) = default;
     Model& operator=(Model&&) = delete;
     Call& addCall(std::string path, std::string verb, std::string operationId,
-                  bool needsToken, std::string responseTypename);
-    void addCallParam(Call& call, const TypeUsage& type, const std::string& name,
-                      bool required, const std::string& in);
+                  bool needsToken, ResponseType responseType);
+    void addCallParam(Call& call, const VarDecl& param,
+                      const std::string& in = "body");
+    void addImports(const TypeUsage& type);
 };
 
 

@@ -137,8 +137,8 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
 // a handle to the actual TypeDef instance that would own all the stuff TypUsage
 // now has.
 
-TypeUsage Translator::mapType(const string& swaggerType, const string& swaggerFormat,
-                              bool constRef) const
+TypeUsage
+Translator::mapType(const string& swaggerType, const string& swaggerFormat) const
 {
     for (const auto& swTypePair: _typesMap)
     {
@@ -160,7 +160,7 @@ TypeUsage Translator::mapType(const string& swaggerType, const string& swaggerFo
     return TypeUsage("");
 }
 
-TypeUsage Translator::mapArrayType(const TypeUsage& innerType, bool constRef) const
+TypeUsage Translator::mapArrayType(const TypeUsage& innerType) const
 {
     for (const auto& swTypePair: _typesMap)
         if (swTypePair.first == "array")
@@ -169,17 +169,18 @@ TypeUsage Translator::mapArrayType(const TypeUsage& innerType, bool constRef) co
     return TypeUsage("");
 }
 
-Model Translator::processFile(string filePath, string baseDirPath) const
+pair<Model, vector<string>> Translator::processFile(string filePath,
+                                                    string baseDirPath) const
 {
     Model m = Analyzer(filePath, baseDirPath, *this).loadModel(_substitutions);
-    if (!m.callClasses.empty() || !m.types.empty())
-    {
-        QDir d { _outputDirPath + m.fileDir.c_str() };
-        if (!d.exists() && !d.mkpath("."))
-            fail(CannotCreateOutputDir, "Cannot create output directory");
-        _printer->print(m);
-    }
+    if (m.callClasses.empty() && m.types.empty())
+        return { std::move(m), {} };
 
-    return m;
+    QDir d { _outputDirPath + m.fileDir.c_str() };
+    if (!d.exists() && !d.mkpath("."))
+        fail(CannotCreateOutputDir, "Cannot create output directory");
+    auto fileNames = _printer->print(m);
+
+    return { std::move(m), std::move(fileNames) };
 }
 

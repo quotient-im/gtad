@@ -218,7 +218,7 @@ string makeClassName(const string& path, const string& verb)
 }
 
 Call& Model::addCall(string path, string verb, string operationId, bool needsToken,
-                     string responseTypename)
+                     ResponseType responseType)
 {
 //    string className = makeClassName(path, verb);
 //    if (className != capitalizedCopy(operationId))
@@ -226,11 +226,11 @@ Call& Model::addCall(string path, string verb, string operationId, bool needsTok
 //             << className << " != " << capitalizedCopy(operationId) << endl;
     if (callClasses.empty() || operationId != callClasses.back().operationId)
     {
-        if (!callClasses.empty() &&
-                callClasses.back().responseType.name != responseTypename)
-            fail(ConflictingOverloads, "Call overloads return different types");
+//        if (!callClasses.empty() &&
+//                callClasses.back().responseType.name != responseTypename)
+//            fail(ConflictingOverloads, "Call overloads return different types");
 
-        callClasses.emplace_back(operationId, std::move(responseTypename));
+        callClasses.emplace_back(operationId, std::move(responseType));
     }
 
     transform(verb.begin(), verb.end(), verb.begin(),
@@ -271,7 +271,7 @@ void Call::addParam(const VarDecl& param, const string& in)
         if (map[i] == in)
         {
             allParams[i].push_back(param);
-            cout << "Added input parameter for " << in << ": "
+            cout << "Added input parameter in " << in << ": "
                  << param.toString(true) << endl;
             return;
         }
@@ -292,11 +292,15 @@ Call::params_type Call::collateParams() const
     return allCollated;
 }
 
-void Model::addCallParam(Call& call, const TypeUsage& type, const string& name,
-                         bool required, const string& in)
+void Model::addCallParam(Call& call, const VarDecl& param, const string& in)
 {
-    call.addParam(VarDecl(type, name, required), in);
+    call.addParam(param, in);
 
+    addImports(param.type);
+}
+
+void Model::addImports(const TypeUsage& type)
+{
     const auto oldSize = imports.size();
     const auto singleTypeImport = type.attributes.find("imports");
     if (singleTypeImport != type.attributes.end())
@@ -309,5 +313,5 @@ void Model::addCallParam(Call& call, const TypeUsage& type, const string& name,
     }
     if (imports.size() != oldSize)
         cout << "Added " << imports.size() - oldSize
-             << " imports to the model" << endl;
+             << " import(s) to the model" << endl;
 }

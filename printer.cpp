@@ -166,9 +166,9 @@ vector<string> Printer::print(const Model& model) const
         list mTypes;
         for (const auto& type: model.types)
         {
-            object mType { { "classname", type.name } };
+            object mType { { "classname", type.first } };
             list mFields;
-            for (const auto& f: type.fields)
+            for (const auto& f: type.second.fields)
             {
                 object fieldDef { { "name", f.name }
                                 , { "datatype", renderType(f.type) } };
@@ -240,7 +240,7 @@ vector<string> Printer::print(const Model& model) const
                  << fileTemplate.first.error_message() << endl;
             continue; // FIXME: should be fail()
         }
-        const auto fileName = fileNameStr.str();
+        auto fileName = fileNameStr.str();
         cout << "Printing " << fileName << endl;
 
         ofstream ofs { fileName };
