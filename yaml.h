@@ -54,8 +54,8 @@ class iterator_base
         using pointer = V*;
         using reference = V;
 
-        iterator_base(iter_impl_t iter, std::string fileName)
-            : _impl(std::move(iter)), _fileName(std::move(fileName))
+        iterator_base(iter_impl_t iter, std::shared_ptr<std::string> fileName)
+            : _impl(std::move(iter)), _fileName(fileName)
         { }
 
         operator iterator_base<const V>() const
@@ -69,7 +69,7 @@ class iterator_base
         template <typename IterT>
         bool operator==(const IterT& rhs)
         {
-            return _impl == rhs._impl && _fileName == rhs._fileName;
+            return _impl == rhs._impl && *_fileName == *rhs._fileName;
         }
         template <typename IterT>
         bool operator!=(const IterT& rhs)
@@ -83,7 +83,7 @@ class iterator_base
 
     private:
         iter_impl_t _impl;
-        std::string _fileName;
+        std::shared_ptr<std::string> _fileName;
 };
 
 class YamlMap;
@@ -92,10 +92,10 @@ class YamlSequence;
 class YamlNode : public YAML::Node
 {
     public:
-        YamlNode(const YAML::Node& rhs, std::string fileName)
-            : Node(rhs), _fileName(std::move(fileName)) { }
+        YamlNode(const YAML::Node& rhs, std::shared_ptr<std::string> fileName)
+            : Node(rhs), _fileName(fileName) { }
 
-        std::string fileName() const { return _fileName; }
+        std::string fileName() const { return *_fileName; }
         class Location
         {
             friend class YamlNode;
@@ -123,7 +123,7 @@ class YamlNode : public YAML::Node
             if (IsDefined())
                 checkType(YAML::NodeType::Scalar);
             return YAML::Node::as<T>(defaultVal);
-        };
+        }
 
         YamlMap asMap() const;
 
@@ -134,8 +134,7 @@ class YamlNode : public YAML::Node
 
         [[noreturn]] void structureFail() const;
 
-    private:
-        std::string _fileName;
+        std::shared_ptr<std::string> _fileName;
 };
 
 class YamlSequence : public YamlNode
@@ -159,7 +158,7 @@ class YamlSequence : public YamlNode
 
         YamlNode operator[](size_t idx) const
         {
-            return { YAML::Node::operator[](idx), fileName() };
+            return { YAML::Node::operator[](idx), _fileName };
         }
 
         YamlNode get(size_t subnodeIdx, bool allowNonexistent = false) const
@@ -178,15 +177,15 @@ class YamlSequence : public YamlNode
 
         const_iterator begin() const
         {
-            return const_iterator(YAML::Node::begin(), fileName());
+            return const_iterator(YAML::Node::begin(), _fileName);
         }
-        iterator begin() { return iterator(YAML::Node::begin(), fileName()); }
+        iterator begin() { return iterator(YAML::Node::begin(), _fileName); }
 
         const_iterator end() const
         {
-            return const_iterator(YAML::Node::end(), fileName());
+            return const_iterator(YAML::Node::end(), _fileName);
         }
-        iterator end() { return iterator(YAML::Node::end(), fileName()); }
+        iterator end() { return iterator(YAML::Node::end(), _fileName); }
 };
 
 class YamlMap : public YamlNode
@@ -214,7 +213,7 @@ class YamlMap : public YamlNode
         template <typename KeyT>
         YamlNode operator[](KeyT&& key) const
         {
-            return { YAML::Node::operator[](std::forward<KeyT>(key)), fileName() };
+            return { YAML::Node::operator[](std::forward<KeyT>(key)), _fileName };
         }
 
         template <typename KeyT>
@@ -234,7 +233,7 @@ class YamlMap : public YamlNode
             NodePair(const NodePair&) = default;
             NodePair(NodePair&&) = default;
             NodePair(const std::pair<YAML::Node, YAML::Node>& p,
-                     const std::string& fileName)
+                     std::shared_ptr<std::string> fileName)
                 : pair(YamlNode(p.first, fileName), YamlNode(p.second, fileName))
             { }
         };
@@ -244,14 +243,14 @@ class YamlMap : public YamlNode
 
         const_iterator begin() const
         {
-            return const_iterator(YAML::Node::begin(), fileName());
+            return const_iterator(YAML::Node::begin(), _fileName);
         }
-        iterator begin() { return iterator(YAML::Node::begin(), fileName()); }
+        iterator begin() { return iterator(YAML::Node::begin(), _fileName); }
 
         const_iterator end() const
         {
-            return const_iterator(YAML::Node::end(), fileName());
+            return const_iterator(YAML::Node::end(), _fileName);
         }
-        iterator end() { return iterator(YAML::Node::end(), fileName()); }
+        iterator end() { return iterator(YAML::Node::end(), _fileName); }
 };
 

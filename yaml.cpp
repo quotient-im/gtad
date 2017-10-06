@@ -90,6 +90,7 @@ YAML::Node makeNodeFromFile(const string& fileName,
 YamlMap YamlMap::loadFromFile(const std::string& fileName,
                               const pair_vector_t<std::string>& replacePairs)
 {
-    return YamlNode(makeNodeFromFile(fileName, replacePairs), fileName);
+    return YamlNode(makeNodeFromFile(fileName, replacePairs),
+                    std::make_shared<string>(fileName));
 }
 
