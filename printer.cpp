@@ -150,7 +150,7 @@ void dumpTypeAttrs(const TypeUsage& tu, object* fieldDef)
     }
 }
 
-void Printer::print(const Model& model) const
+vector<string> Printer::print(const Model& model) const
 {
     auto context = _context;
     context.set("filenameBase", model.filename);
@@ -228,6 +228,7 @@ void Printer::print(const Model& model) const
         context.set("basePathWithoutHost", model.basePath);
         context.set("basePath", model.hostAddress + model.basePath);
     }
+    vector<string> fileNames;
     for (auto fileTemplate: _templates)
     {
         ostringstream fileNameStr;
@@ -255,5 +256,7 @@ void Printer::print(const Model& model) const
         else
             cerr << "When rendering the file:" << endl
                  << fileTemplate.second.error_message() << endl;
+        fileNames.emplace_back(std::move(fileName));
     }
+    return fileNames;
 }

@@ -19,7 +19,7 @@ class Printer
                 const std::string& outFilesListPath);
         Printer(Printer&& p) = default;
 
-        void print(const Model& model) const;
+        std::vector<std::string> print(const Model& model) const;
 
     private:
         context_type _context;
