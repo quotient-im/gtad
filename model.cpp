@@ -56,7 +56,7 @@ string camelCase(string s)
     while (pos < s.size())
     {
         capitalize(s, pos);
-        pos = s.find_first_of("/_ ", pos);
+        pos = s.find_first_of("/_ .", pos);
         if (pos == string::npos)
             break;
         s.erase(pos, 1);
