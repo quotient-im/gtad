@@ -191,7 +191,8 @@ vector<string> Printer::print(const Model& model) const
         {
             for (const auto& call: callClass.callOverloads)
             {
-                object mClass { { "operationId", callClass.operationId }
+                object mClass { { "operationId", call.name }
+                              , { "camelCaseOperationId", camelCase(call.name) }
                               , { "httpMethod",  call.verb }
                               , { "path", call.path }
                 };
