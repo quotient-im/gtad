@@ -136,17 +136,20 @@ string renderType(const TypeUsage& tu)
     return m.render(mInnerTypes);
 }
 
-void dumpTypeAttrs(const TypeUsage& tu, object* fieldDef)
+void dumpFieldAttrs(const VarDecl& param, object& fieldDef)
 {
-    for (const auto& attr: tu.attributes)
-        fieldDef->emplace(attr);
+    fieldDef["required?"] = param.required;
+    fieldDef["required"] = param.required; // Swagger compatibility
+    fieldDef["defaultValue"] = param.defaultValue;
+    for (const auto& attr: param.type.attributes)
+        fieldDef.emplace(attr);
 
-    for (const auto& listAttr: tu.lists)
+    for (const auto& listAttr: param.type.lists)
     {
         list mAttrValue;
         for (const auto& i: listAttr.second)
             mAttrValue.emplace_back(i);
-        fieldDef->emplace(listAttr.first, move(mAttrValue));
+        fieldDef.emplace(listAttr.first, move(mAttrValue));
     }
 }
 
@@ -172,7 +175,7 @@ vector<string> Printer::print(const Model& model) const
             {
                 object fieldDef { { "name", f.name }
                                 , { "datatype", renderType(f.type) } };
-                dumpTypeAttrs(f.type, &fieldDef);
+                dumpFieldAttrs(f, fieldDef);
                 mFields.emplace_back(move(fieldDef));
             }
             setList(&mType, "vars", move(mFields));
@@ -212,7 +215,7 @@ vector<string> Printer::print(const Model& model) const
                                       , { "baseName", param.name }
                                       , { "paramName", param.name }
                         };
-                        dumpTypeAttrs(param.type, &mParam);
+                        dumpFieldAttrs(param, mParam);
                         mParams.emplace_back(move(mParam));
                     }
                     setList(&mClass, pp.first, move(mParams));
