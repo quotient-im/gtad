@@ -115,9 +115,10 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema)
     if (!refTU.empty())
         s.parentTypes.emplace_back(std::move(refTU));
 
+    // TODO: Aren't "properties" and "required" mandatory inside "schema"?
     if (const auto properties = yamlSchema["properties"].asMap())
     {
-        const auto requiredList = properties["required"].asSequence();
+        const auto requiredList = yamlSchema["required"].asSequence();
         for (const NodePair property: properties)
         {
             const auto name = property.first.as<string>();
@@ -126,7 +127,6 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema)
             auto requiredIt =
                 find_if(requiredList.begin(), requiredList.end(),
                         [=](const Node& n) { return name == n.as<string>(); });
-
             s.fields.emplace_back(analyzeType(property.second, In),
                                   name, requiredIt != requiredList.end());
         }
