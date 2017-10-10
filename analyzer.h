@@ -46,4 +46,6 @@ class Analyzer
 
         ObjectSchema analyzeSchema(const YamlMap& yamlSchema);
         TypeUsage tryResolveParentTypes(const YamlMap& yamlSchema);
+        void addParamsFromSchema(VarDecls& varList, std::string name,
+                                 bool required, ObjectSchema bodyParamSchema);
 };

@@ -221,6 +221,28 @@ vector<string> Printer::print(const Model& model) const
                     }
                     setList(&mClass, pp.first, move(mParams));
                 }
+                {
+                    list mResponses;
+                    for (const auto& response: call.responses)
+                    {
+                        object mResponse { { "code", response.code }
+                                         , { "normalResponse?",
+                                                response.code == "200" }
+                        };
+                        list mProperties;
+                        for (const auto& p: response.properties)
+                        {
+                            object mProperty { { "dataType", renderType(p.type) }
+                                             , { "paramName", p.name }
+                            };
+                            dumpFieldAttrs(p, mProperty);
+                            mProperties.emplace_back(move(mProperty));
+                        }
+                        setList(&mResponse, "properties", move(mProperties));
+                        mResponses.emplace_back(move(mResponse));
+                    }
+                    setList(&mClass, "responses", move(mResponses));
+                }
                 mClasses.emplace_back(move(mClass));
             }
         }

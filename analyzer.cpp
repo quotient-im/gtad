@@ -137,6 +137,27 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema)
     return s;
 }
 
+void Analyzer::addParamsFromSchema(VarDecls& varList,
+   std::string name, bool required, ObjectSchema paramSchema)
+{
+    if (paramSchema.parentTypes.empty())
+    {
+        for (const auto & param: paramSchema.fields)
+            model.addVarDecl(varList, param);
+    } else if (paramSchema.trivial())
+    {
+        // Bare reference to another file where the type is defined.
+        model.addVarDecl(varList,
+            VarDecl(paramSchema.parentTypes.front(), move(name), required));
+    } else
+    {
+        const auto typeName = camelCase(name);
+        model.types.emplace(typeName, move(paramSchema));
+        model.addVarDecl(varList,
+                         VarDecl(TypeUsage(typeName), move(name), required));
+    }
+}
+
 Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
 {
     cout << "Loading from " << baseDir + fileName << endl;
@@ -166,35 +187,12 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                 const string verb = yaml_call_pair.first.as<string>();
                 const YamlMap yamlCall { yaml_call_pair.second };
 
-                const auto yamlResponses = yamlCall.get("responses").asMap();
-                if (auto normalResponse = yamlResponses["200"].asMap())
-                {
-                    if (auto respSchema = normalResponse["schema"].asMap())
-                    {
-                        auto schema = analyzeSchema(respSchema);
-                        if (!schema.fields.empty())
-                        {
-                            cerr << "Not implemented: skipping " << path << " - " << verb
-                                 << ": non-trivial '200' response" << endl;
-                            continue;
-                        }
-                    }
-                }
-                else
-                {
-                    cerr << "Not implemented: skipping " << path << " - " << verb
-                         << ": no '200' response" << endl;
-                    continue;
-                }
-
                 auto operationId = yamlCall.get("operationId").as<string>();
                 bool needsToken = false;
                 if (const auto security = yamlCall["security"].asSequence())
                     needsToken = security[0]["accessToken"].IsDefined();
 
-                // TODO: Pass the response type
-                Call& call = model.addCall(path, verb, operationId,
-                                           needsToken, {});
+                Call& call = model.addCall(path, verb, operationId, needsToken);
 
                 cout << "Loading " << operationId << ": "
                      << path << " - " << verb << endl;
@@ -202,56 +200,51 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                 for (const YamlMap yamlParam:
                         yamlCall["parameters"].asSequence())
                 {
-                    auto name = yamlParam.get("name").as<string>();
-                    const auto in = yamlParam.get("in").as<string>();
+                    auto&& name = yamlParam.get("name").as<string>();
+                    auto&& in = yamlParam.get("in").as<string>();
                     auto required =
                         in == "path" || yamlParam["required"].as<bool>(false);
                     if (in != "body")
                     {
-                        model.addCallParam(call,
-                            VarDecl(analyzeType(yamlParam, In), name, required),
-                            in);
+                        model.addVarDecl(call.getParamsBlock(in),
+                            VarDecl(analyzeType(yamlParam, In), name, required));
                         continue;
                     }
 
-                    auto bodyParamSchema = analyzeSchema(yamlParam.get("schema"));
-                    if (bodyParamSchema.parentTypes.empty())
+                    auto&& bodySchema = analyzeSchema(yamlParam.get("schema"));
+                    if (bodySchema.empty())
                     {
-                        // Special case: an empty schema for a body
-                        // parameter means a freeform object
-                        if (bodyParamSchema.fields.empty())
-                            model.addCallParam(call,
-                                VarDecl(translator.mapType("object"), name,
-                                        false));
-                        else
-                            for (const auto & param: bodyParamSchema.fields)
-                                model.addCallParam(call, param);
-                    } else if (bodyParamSchema.parentTypes.size() == 1 &&
-                               bodyParamSchema.fields.empty())
-                    {
-                        // Bare reference to another file where the type is
-                        // defined.
-                        model.addCallParam(call,
-                            VarDecl(bodyParamSchema.parentTypes.front(),
-                                    name, required));
-                    } else
-                    {
-                        const auto typeName = camelCase(name);
-                        model.types.emplace(typeName,
-                                            std::move(bodyParamSchema));
-                        model.addCallParam(call,
-                            VarDecl(TypeUsage(typeName), name, required));
+                        // Special case: an empty schema for a body parameter
+                        // means a freeform object.
+                        model.addVarDecl(call.bodyParams,
+                            VarDecl(translator.mapType("object"), name, false));
                     }
+                    else
+                        addParamsFromSchema(call.getParamsBlock("body"),
+                                            name, required, bodySchema);
+                }
+                const auto yamlResponses = yamlCall.get("responses").asMap();
+                if (const auto yamlResponse = yamlResponses["200"].asMap())
+                {
+                    Response response { "200", {} };
+                    if (auto yamlSchema = yamlResponse["schema"])
+                    {
+                        auto&& responseSchema = analyzeSchema(yamlSchema);
+                        if (!responseSchema.empty())
+                            addParamsFromSchema(response.properties,
+                                "result", true, responseSchema);
+                    }
+                    call.responses.emplace_back(move(response));
                 }
             }
         }
     } else {
         model.types.emplace(camelCase(model.filename), analyzeSchema(yaml));
-        for (auto type: model.types)
+        for (const auto& type: model.types)
         {
-            for (auto parentType: type.second.parentTypes)
+            for (const auto& parentType: type.second.parentTypes)
                 model.addImports(parentType);
-            for (auto field: type.second.fields)
+            for (const auto& field: type.second.fields)
                 model.addImports(field.type);
         }
     }

@@ -81,16 +81,23 @@ struct ObjectSchema
     std::vector<TypeUsage> parentTypes;
     std::vector<VarDecl> fields;
 
-    bool isTrivial() const { return parentTypes.size() == 1 && fields.empty(); }
+    bool empty() const { return parentTypes.empty() && fields.empty(); }
+    bool trivial() const { return parentTypes.size() == 1 && fields.empty(); }
 };
 
-using ResponseType = ObjectSchema;
+using VarDecls = std::vector<VarDecl>;
+
+struct Response
+{
+    std::string code;
+    VarDecls properties;
+};
 
 std::vector<std::string> splitPath(const std::string& path);
 
 struct Call
 {
-    using params_type = std::vector<VarDecl>;
+    using params_type = VarDecls;
 
     Call(std::string callPath, std::string callVerb, std::string callName,
          bool callNeedsToken)
@@ -107,7 +114,7 @@ struct Call
     { }
     Call operator=(Call&&) = delete;
 
-    void addParam(const VarDecl& param, const std::string& in);
+    Call::params_type& getParamsBlock(const std::string& name);
     params_type collateParams() const;
 
     std::string path;
@@ -122,24 +129,12 @@ struct Call
     // FIXME: This is Matrix-specific, should be replaced with proper
     // securityDefinitions representation.
     bool needsToken;
+    std::vector<Response> responses;
 };
 
 struct CallClass
 {
-    std::string operationId;
     std::vector<Call> callOverloads;
-    ResponseType responseType;
-
-    CallClass(std::string operationId, ResponseType responseType)
-        : operationId(std::move(operationId))
-        , responseType(std::move(responseType))
-    { }
-    Call& addCall(std::string path, std::string verb, std::string name,
-                  bool needsToken)
-    {
-        callOverloads.emplace_back(path, verb, name, needsToken);
-        return callOverloads.back();
-    }
 };
 
 struct Model
@@ -164,9 +159,8 @@ struct Model
     Model(Model&&) = default;
     Model& operator=(Model&&) = delete;
     Call& addCall(std::string path, std::string verb, std::string operationId,
-                  bool needsToken, ResponseType responseType);
-    void addCallParam(Call& call, const VarDecl& param,
-                      const std::string& in = "body");
+                  bool needsToken);
+    void addVarDecl(VarDecls& varList, VarDecl var);
     void addImports(const TypeUsage& type);
 };
 
