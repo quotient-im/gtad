@@ -43,8 +43,11 @@ TypeUsage Analyzer::tryResolveParentTypes(const YamlMap& yamlSchema)
     // The referenced file's path is relative to the current file's path;
     // we have to append a path to the current file's directory in order to
     // find the file.
+    cout << "Sub-processing file: " << refFilename << endl
+         << "  baseDir: " << baseDir << endl
+         << "  model dir: " << model.fileDir << endl;
     const auto processResult =
-        translator.processFile(refFilename, baseDir + model.fileDir);
+        translator.processFile(model.fileDir + refFilename, baseDir);
     const Model& m = processResult.first; // Looking forward to switching to C++17
     const auto& filesList = processResult.second;
     if (m.types.empty())
@@ -131,9 +134,9 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema)
                                   name, requiredIt != requiredList.end());
         }
     }
-    cout << "Parsed object schema: " << s.fields.size() << " property(ies), "
-         << s.parentTypes.size() << " parent type(s)"
-         << endl;
+    cout << "Parsed object schema at " << yamlSchema.location() << ": "
+         << s.fields.size() << " property(ies), "
+         << s.parentTypes.size() << " parent type(s)" << endl;
     return s;
 }
 

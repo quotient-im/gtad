@@ -155,6 +155,6 @@ void Model::addImports(const TypeUsage& type)
         imports.insert(typeImports.begin(), typeImports.end());
     }
     if (imports.size() != oldSize)
-        cout << "Added " << imports.size() - oldSize
-             << " import(s) to the model" << endl;
+        cout << "Model '" << filename
+             << "': added " << imports.size() - oldSize << " import(s)" << endl;
 }
