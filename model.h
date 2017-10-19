@@ -100,17 +100,17 @@ struct Call
     using params_type = VarDecls;
 
     Call(std::string callPath, std::string callVerb, std::string callName,
-         bool callNeedsToken)
+         bool callNeedsSecurity)
         : path(std::move(callPath)), pathParts(splitPath(path))
         , verb(std::move(callVerb)), name(std::move(callName))
-        , needsToken(callNeedsToken)
+        , needsSecurity(callNeedsSecurity)
     { }
     ~Call() = default;
     Call(Call&) = delete;
     Call operator=(Call&) = delete;
     Call(Call&& other) noexcept
         : path(std::move(other.path)), verb(std::move(other.verb))
-        , allParams(std::move(other.allParams)), needsToken(other.needsToken)
+        , allParams(std::move(other.allParams)), needsSecurity(other.needsSecurity)
     { }
     Call operator=(Call&&) = delete;
 
@@ -126,9 +126,8 @@ struct Call
     params_type& queryParams = allParams[1];
     params_type& headerParams = allParams[2];
     params_type& bodyParams = allParams[3];
-    // FIXME: This is Matrix-specific, should be replaced with proper
-    // securityDefinitions representation.
-    bool needsToken;
+    // TODO: Embed proper securityDefinitions representation.
+    bool needsSecurity;
     std::vector<Response> responses;
 };
 

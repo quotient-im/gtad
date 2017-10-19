@@ -195,6 +195,7 @@ vector<string> Printer::print(const Model& model) const
                               , { "camelCaseOperationId", camelCase(call.name) }
                               , { "httpMethod",  call.verb }
                               , { "path", call.path }
+                              , { "skipAuth", !call.needsSecurity }
                 };
                 list mPathParts;
                 for (const auto& pp: call.pathParts)

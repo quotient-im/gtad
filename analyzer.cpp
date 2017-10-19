@@ -191,11 +191,11 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                 const YamlMap yamlCall { yaml_call_pair.second };
 
                 auto operationId = yamlCall.get("operationId").as<string>();
-                bool needsToken = false;
+                bool needsSecurity = false;
                 if (const auto security = yamlCall["security"].asSequence())
-                    needsToken = security[0]["accessToken"].IsDefined();
+                    needsSecurity = security[0]["accessToken"].IsDefined();
 
-                Call& call = model.addCall(path, verb, operationId, needsToken);
+                Call& call = model.addCall(path, verb, operationId, needsSecurity);
 
                 cout << "Loading " << operationId << ": "
                      << path << " - " << verb << endl;
