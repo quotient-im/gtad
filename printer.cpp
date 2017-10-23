@@ -170,15 +170,23 @@ vector<string> Printer::print(const Model& model) const
         for (const auto& type: model.types)
         {
             object mType { { "classname", type.first } };
-            list mFields;
-            for (const auto& f: type.second.fields)
             {
-                object fieldDef { { "name", f.name }
-                                , { "datatype", renderType(f.type) } };
-                dumpFieldAttrs(f, fieldDef);
-                mFields.emplace_back(move(fieldDef));
+                list mParents;
+                for (const auto& t: type.second.parentTypes)
+                    mParents.emplace_back(renderType(t));
+                setList(&mType, "parents", move(mParents));
             }
-            setList(&mType, "vars", move(mFields));
+            {
+                list mFields;
+                for (const auto& f: type.second.fields)
+                {
+                    object fieldDef { { "name",     f.name },
+                                      { "datatype", renderType(f.type) } };
+                    dumpFieldAttrs(f, fieldDef);
+                    mFields.emplace_back(move(fieldDef));
+                }
+                setList(&mType, "vars", move(mFields));
+            }
             mTypes.emplace_back(object { { "model", move(mType) } });
         }
         if (!mTypes.empty())
