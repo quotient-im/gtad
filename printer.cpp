@@ -136,11 +136,19 @@ string renderType(const TypeUsage& tu)
     return m.render(mInnerTypes);
 }
 
-void dumpFieldAttrs(const VarDecl& param, object& fieldDef)
+object prepareField(const VarDecl& param)
 {
-    fieldDef["required?"] = param.required;
-    fieldDef["required"] = param.required; // Swagger compatibility
-    fieldDef["defaultValue"] = param.defaultValue;
+    auto paramName = camelCase(param.name);
+    paramName.front() =
+        tolower(paramName.front(), locale::classic());
+
+    object fieldDef { { "dataType", renderType(param.type) }
+                    , { "paramName", paramName }
+                    , { "required?", param.required }
+                    , { "required", param.required } // Swagger compatibility
+                    , { "defaultValue", param.defaultValue }
+    };
+
     for (const auto& attr: param.type.attributes)
         fieldDef.emplace(attr);
 
@@ -151,6 +159,7 @@ void dumpFieldAttrs(const VarDecl& param, object& fieldDef)
             mAttrValue.emplace_back(i);
         fieldDef.emplace(listAttr.first, move(mAttrValue));
     }
+    return fieldDef;
 }
 
 vector<string> Printer::print(const Model& model) const
@@ -180,9 +189,9 @@ vector<string> Printer::print(const Model& model) const
                 list mFields;
                 for (const auto& f: type.second.fields)
                 {
-                    object fieldDef { { "name",     f.name },
-                                      { "datatype", renderType(f.type) } };
-                    dumpFieldAttrs(f, fieldDef);
+                    object fieldDef = prepareField(f);
+                    fieldDef["name"] = f.name;
+                    fieldDef["datatype"] = renderType(f.type); // Swagger compat
                     mFields.emplace_back(move(fieldDef));
                 }
                 setList(&mType, "vars", move(mFields));
@@ -221,11 +230,8 @@ vector<string> Printer::print(const Model& model) const
                     list mParams;
                     for (const auto& param: pp.second)
                     {
-                        object mParam { { "dataType", renderType(param.type) }
-                                      , { "baseName", param.name }
-                                      , { "paramName", param.name }
-                        };
-                        dumpFieldAttrs(param, mParam);
+                        object mParam = prepareField(param);
+                        mParam["baseName"] = param.name;
                         mParams.emplace_back(move(mParam));
                     }
                     setList(&mClass, pp.first, move(mParams));
@@ -239,14 +245,9 @@ vector<string> Printer::print(const Model& model) const
                                                 response.code == "200" }
                         };
                         list mProperties;
+                        mProperties.reserve(response.properties.size());
                         for (const auto& p: response.properties)
-                        {
-                            object mProperty { { "dataType", renderType(p.type) }
-                                             , { "paramName", p.name }
-                            };
-                            dumpFieldAttrs(p, mProperty);
-                            mProperties.emplace_back(move(mProperty));
-                        }
+                            mProperties.emplace_back(prepareField(p));
                         setList(&mResponse, "properties", move(mProperties));
                         mResponses.emplace_back(move(mResponse));
                     }
