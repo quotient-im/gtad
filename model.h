@@ -114,6 +114,8 @@ struct Call
     { }
     Call operator=(Call&&) = delete;
 
+    static const std::array<const char*, 4> paramsBlockNames;
+    const Call::params_type& getParamsBlock(const std::string& name) const;
     Call::params_type& getParamsBlock(const std::string& name);
     params_type collateParams() const;
 

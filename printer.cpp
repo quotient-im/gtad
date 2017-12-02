@@ -107,18 +107,33 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
     }
 }
 
-template <typename ObjT>
-inline void setList(ObjT* object, const string& name, list&& list)
+template <typename ObjT, typename ContT, typename FnT>
+void setList(ObjT* object, const string& name, const ContT& source,
+             FnT convert)
 {
-    (*object)[name + '?'] = !list.empty();
-    if (!list.empty())
+    if (source.empty())
+        return; // Don't even bother to add the empty list
+
+    (*object)[name + '?'] = true;
+    auto mList = list(source.size());
+    auto mIt = mList.begin();
+    auto it = source.begin();
+    while (it != source.end())
     {
-        using namespace placeholders;
-        for_each(list.begin(), list.end() - 1,
-                 bind(&data::set, _1, "hasMore", true));
-        list.back().set("last?", true);
+        *mIt = convert(*it);
+        mIt->set("hasMore", ++it != source.end()); // Swagger compatibility
+        ++mIt;
     }
-    (*object)[name] = list;
+    mList.back().set("last?", true);
+    (*object)[name] = mList;
+
+}
+
+template <typename ObjT, typename ContT>
+void setList(ObjT* object, const string& name, const ContT& source)
+{
+    setList(object, name, source,
+            [](const typename ContT::value_type& v) { return v; });
 }
 
 string renderType(const TypeUsage& tu)
@@ -136,23 +151,27 @@ string renderType(const TypeUsage& tu)
     return m.render(mInnerTypes);
 }
 
-object prepareField(const VarDecl& param)
+object prepareField(const VarDecl& field)
 {
-    auto paramName = camelCase(param.name);
-    paramName.front() =
-        tolower(paramName.front(), locale::classic());
+    auto paramNameCamelCase = camelCase(field.name);
+    paramNameCamelCase.front() =
+        tolower(paramNameCamelCase.front(), locale::classic());
 
-    object fieldDef { { "dataType", renderType(param.type) }
-                    , { "paramName", paramName }
-                    , { "required?", param.required }
-                    , { "required", param.required } // Swagger compatibility
-                    , { "defaultValue", param.defaultValue }
+    auto dataType = renderType(field.type);
+    object fieldDef { { "dataType",           dataType }
+                    , { "baseName",           field.name }
+                    , { "paramName",          paramNameCamelCase } // Swagger compat
+                    , { "paramNameCamelCase", paramNameCamelCase }
+                      // TODO: paramNameSnakeCase
+                    , { "required?",          field.required }
+                    , { "required",           field.required } // Swagger compatibility
+                    , { "defaultValue",       field.defaultValue }
     };
 
-    for (const auto& attr: param.type.attributes)
+    for (const auto& attr: field.type.attributes)
         fieldDef.emplace(attr);
 
-    for (const auto& listAttr: param.type.lists)
+    for (const auto& listAttr: field.type.lists)
     {
         list mAttrValue;
         for (const auto& i: listAttr.second)
@@ -166,36 +185,21 @@ vector<string> Printer::print(const Model& model) const
 {
     auto context = _context;
     context.set("filenameBase", model.filename);
-    {
-        // Imports
-        list mImports;
-        for (const auto& import: model.imports)
-            mImports.emplace_back(import);
-        setList(&context, "imports", std::move(mImports));
-    }
+    setList(&context, "imports", model.imports);
     {
         // Data definitions
         list mTypes;
         for (const auto& type: model.types)
         {
             object mType { { "classname", type.first } };
-            {
-                list mParents;
-                for (const auto& t: type.second.parentTypes)
-                    mParents.emplace_back(renderType(t));
-                setList(&mType, "parents", move(mParents));
-            }
-            {
-                list mFields;
-                for (const auto& f: type.second.fields)
-                {
+            setList(&mType, "parents", type.second.parentTypes, renderType);
+            setList(&mType, "vars", type.second.fields,
+                [](const VarDecl& f) {
                     object fieldDef = prepareField(f);
                     fieldDef["name"] = f.name;
                     fieldDef["datatype"] = renderType(f.type); // Swagger compat
-                    mFields.emplace_back(move(fieldDef));
-                }
-                setList(&mType, "vars", move(mFields));
-            }
+                    return fieldDef;
+                });
             mTypes.emplace_back(object { { "model", move(mType) } });
         }
         if (!mTypes.empty())
@@ -214,45 +218,22 @@ vector<string> Printer::print(const Model& model) const
                               , { "path", call.path }
                               , { "skipAuth", !call.needsSecurity }
                 };
-                list mPathParts;
-                for (const auto& pp: call.pathParts)
-                    mPathParts.emplace_back(object { { "part", pp } });
-                setList(&mClass, "pathParts", move(mPathParts));
+                setList(&mClass, "pathParts", call.pathParts);
 
-                for (const auto& pp: {
-                    make_pair("pathParams", call.pathParams),
-                    make_pair("queryParams", call.queryParams),
-                    make_pair("headerParams", call.headerParams),
-                    make_pair("bodyParams", call.bodyParams),
-                    make_pair("allParams", call.collateParams())
-                })
-                {
-                    list mParams;
-                    for (const auto& param: pp.second)
-                    {
-                        object mParam = prepareField(param);
-                        mParam["baseName"] = param.name;
-                        mParams.emplace_back(move(mParam));
-                    }
-                    setList(&mClass, pp.first, move(mParams));
-                }
-                {
-                    list mResponses;
-                    for (const auto& response: call.responses)
-                    {
-                        object mResponse { { "code", response.code }
-                                         , { "normalResponse?",
-                                                response.code == "200" }
+                for (string blockName: Call::paramsBlockNames)
+                    setList(&mClass, blockName + "Params",
+                            call.getParamsBlock(blockName), prepareField);
+
+                setList(&mClass, "allParams", call.collateParams(), prepareField);
+                setList(&mClass, "responses", call.responses,
+                    [](const Response& r) {
+                        object mResponse { { "code", r.code }
+                                         , { "normalResponse?", r.code == "200" }
                         };
-                        list mProperties;
-                        mProperties.reserve(response.properties.size());
-                        for (const auto& p: response.properties)
-                            mProperties.emplace_back(prepareField(p));
-                        setList(&mResponse, "properties", move(mProperties));
-                        mResponses.emplace_back(move(mResponse));
-                    }
-                    setList(&mClass, "responses", move(mResponses));
-                }
+                        setList(&mResponse, "properties",
+                                r.properties, prepareField);
+                        return mResponse;
+                    });
                 mClasses.emplace_back(move(mClass));
             }
         }

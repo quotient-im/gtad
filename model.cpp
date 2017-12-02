@@ -114,15 +114,28 @@ vector<string> splitPath(const string& path)
     return parts;
 }
 
+
+const std::array<const char*, 4> Call::paramsBlockNames
+    { "path", "query", "header", "body" };
+
+size_t getParamsBlockIndex(const std::string& name)
+{
+    for (Call::params_type::size_type i = 0; i < 4; ++i)
+        if (Call::paramsBlockNames[i] == name)
+            return i;
+
+    cerr << "Unknown params block name: "<< name << endl;
+    fail(UnknownParamBlock);
+}
+
+const Call::params_type& Call::getParamsBlock(const std::string& name) const
+{
+    return allParams[getParamsBlockIndex(name)];
+}
+
 Call::params_type& Call::getParamsBlock(const string& name)
 {
-    static const char* const map[] { "path", "query", "header", "body" };
-    for (params_type::size_type i = 0; i < 4; ++i)
-        if (map[i] == name)
-            return allParams[i];
-
-    cerr << "Unknown params block value: "<< name << endl;
-    fail(UnknownParamBlock);
+    return allParams[getParamsBlockIndex(name)];
 }
 
 Call::params_type Call::collateParams() const
