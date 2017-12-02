@@ -110,6 +110,8 @@ class YamlNode : public YAML::Node
         };
         Location location() const { return Location(*this); }
 
+        bool empty() const { return size() == 0; }
+
         template <typename T>
         T as() const
         {
