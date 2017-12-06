@@ -102,7 +102,10 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, Analyzer::InOut inOut, stri
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
         {
             model.addSchema(schema);
-            return TypeUsage(schema);
+            TypeUsage tu = translator.mapType("schema");
+            tu.scope = schema.scope;
+            tu.name = tu.baseName = schema.name;
+            return tu;
         }
         // An In empty object is schemaless but existing, mapType("object")
         // Also, a nameless non-empty schema is now treated as a generic
