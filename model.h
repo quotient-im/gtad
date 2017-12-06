@@ -32,23 +32,28 @@ std::string camelCase(std::string s);
 void eraseSuffix(std::string* path, const std::string& suffix);
 std::string dropSuffix(std::string path, const std::string& suffix);
 
+struct ObjectSchema;
+
 struct TypeUsage
 {
     using imports_type = std::vector<std::string>;
 
+    std::string scope;
     std::string name;
+    std::string baseName;
     std::unordered_map<std::string, std::string> attributes;
     std::unordered_map<std::string, std::vector<std::string>> lists;
     std::vector<TypeUsage> innerTypes;
 
     explicit TypeUsage(std::string typeName) : name(std::move(typeName)) { }
+    explicit TypeUsage(const ObjectSchema& schema);
     TypeUsage(std::string typeName, std::string import)
         : TypeUsage(move(typeName))
     {
         lists.emplace("imports", imports_type { move(import) });
     }
 
-    TypeUsage operator()(const TypeUsage& innerType) const;
+    TypeUsage instantiate(TypeUsage&& innerType) const;
     bool empty() const { return name.empty(); }
 };
 
@@ -59,7 +64,8 @@ struct VarDecl
     bool required;
     std::string defaultValue;
 
-    static std::string setupDefault(TypeUsage type, std::string defaultValue);
+    static std::string setupDefault(const TypeUsage& type,
+                                    std::string defaultValue);
 
     VarDecl(TypeUsage type, std::string name,
             bool required = true, std::string defaultValue = {})
@@ -78,6 +84,8 @@ struct VarDecl
 
 struct ObjectSchema
 {
+    std::string scope; // Either empty (top-level) or a Call name
+    std::string name;
     std::vector<TypeUsage> parentTypes;
     std::vector<VarDecl> fields;
 
@@ -108,10 +116,7 @@ struct Call
     ~Call() = default;
     Call(Call&) = delete;
     Call operator=(Call&) = delete;
-    Call(Call&& other) noexcept
-        : path(std::move(other.path)), verb(std::move(other.verb))
-        , allParams(std::move(other.allParams)), needsSecurity(other.needsSecurity)
-    { }
+    Call(Call&&) = default;
     Call operator=(Call&&) = delete;
 
     static const std::array<const char*, 4> paramsBlockNames;
@@ -124,10 +129,10 @@ struct Call
     std::string verb;
     std::string name;
     std::array<params_type, 4> allParams;
-    params_type& pathParams = allParams[0];
-    params_type& queryParams = allParams[1];
-    params_type& headerParams = allParams[2];
-    params_type& bodyParams = allParams[3];
+    params_type& pathParams() { return allParams[0]; }
+    params_type& queryParams() { return allParams[1]; }
+    params_type& headerParams() { return allParams[2]; }
+    params_type& bodyParams() { return allParams[3]; }
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
     std::vector<Response> responses;
@@ -135,12 +140,13 @@ struct Call
 
 struct CallClass
 {
-    std::vector<Call> callOverloads;
+    std::vector<Call> calls;
 };
 
 struct Model
 {
     using imports_type = std::unordered_set<std::string>;
+    using schemas_type = std::vector<ObjectSchema>;
 
     const std::string fileDir;
     const std::string filename;
@@ -148,7 +154,7 @@ struct Model
     std::string hostAddress;
     std::string basePath;
     imports_type imports;
-    std::unordered_map<std::string, ObjectSchema> types;
+    schemas_type types;
     std::vector<CallClass> callClasses;
 
     Model(std::string fileDir, std::string fileName)
@@ -162,6 +168,7 @@ struct Model
     Call& addCall(std::string path, std::string verb, std::string operationId,
                   bool needsToken);
     void addVarDecl(VarDecls& varList, VarDecl var);
+    void addSchema(const ObjectSchema& schema);
     void addImports(const TypeUsage& type);
 };
 

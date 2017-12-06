@@ -33,10 +33,11 @@ using namespace kainjow::mustache;
 Printer::Printer(context_type&& context, const vector<string>& templateFileNames,
                  const string& inputBasePath, string outputBasePath,
                  const string& outFilesListPath)
-    : _context(context), _outputBasePath(std::move(outputBasePath))
+    : _context(context), _typeRenderer(context["_typeRenderer"].string_value())
+    , _outputBasePath(std::move(outputBasePath))
 {
     // Enriching the context with "My Mustache library"
-    _context.set("@filePartial", lambda2 {
+    _context.set("@filePartial", lambda2 { // TODO: Switch to new Mustache's {{>}}
         [inputBasePath, this](const string& s, const renderer& render) {
             ifstream ifs { inputBasePath + s };
             if (!ifs.good())
@@ -77,6 +78,7 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
             return s;
         }
     });
+    _typeRenderer.set_custom_escape([](const string& s) { return s; });
     for (const auto& templateFileName: templateFileNames)
     {
         auto templateFilePath = inputBasePath + templateFileName;
@@ -107,65 +109,84 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
     }
 }
 
+inline object wrap(object o)
+{
+    return o;
+}
+
+template <typename T>
+inline object wrap(T val)
+{
+    return object {{ "_", move(val) }};
+};
+
 template <typename ObjT, typename ContT, typename FnT>
-void setList(ObjT* object, const string& name, const ContT& source,
-             FnT convert)
+void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
 {
     if (source.empty())
         return; // Don't even bother to add the empty list
 
-    (*object)[name + '?'] = true;
+    target[name + '?'] = true;
     auto mList = list(source.size());
     auto mIt = mList.begin();
-    auto it = source.begin();
-    while (it != source.end())
+    for (auto it = source.begin(); it != source.end();)
     {
-        *mIt = convert(*it);
-        mIt->set("hasMore", ++it != source.end()); // Swagger compatibility
+        *mIt = wrap(convert(*it));
+        mIt->set("@join", ++it != source.end());
+        mIt->set("hasMore", it != source.end()); // Swagger compatibility
         ++mIt;
     }
-    mList.back().set("last?", true);
-    (*object)[name] = mList;
-
+    target[name] = mList;
 }
 
 template <typename ObjT, typename ContT>
-void setList(ObjT* object, const string& name, const ContT& source)
+void setList(ObjT& target, const string& name, const ContT& source)
 {
-    setList(object, name, source,
-            [](const typename ContT::value_type& v) { return v; });
+    setList(target, name, source,
+        [](const typename ContT::value_type& v) { return v; });
 }
 
-string renderType(const TypeUsage& tu)
+object Printer::renderType(const TypeUsage& tu) const
 {
-    if (tu.innerTypes.empty())
-        return tu.name;
+    object values { { "name", lambda {
+                        [&tu](const std::string&){ return tu.name; } } }
+                  , { "baseName", tu.baseName } };
+    auto qualifiedValues = values;
+    if (!tu.scope.empty())
+    {
+        qualifiedValues.emplace("scope", tu.scope);
+        qualifiedValues.emplace("scopeCamelCase", camelCase(tu.scope));
+    }
 
-    // Template type
-    mustache m { tu.name };
-    object mInnerTypes;
+    // Fill parameters for parameterized types
     int i = 0;
     for (const auto& t: tu.innerTypes)
-        mInnerTypes.emplace(to_string(++i), renderType(t)); // {{1}}, {{2}} and so on
+    {
+        auto mInnerType = renderType(t);
+        values.emplace(to_string(++i), mInnerType["name"]); // {{1}}, {{2}} and so on
+        qualifiedValues.emplace(to_string(i), mInnerType["qualifiedName"]);
+    }
 
-    return m.render(mInnerTypes);
+    return { { "name", _typeRenderer.render(values) }
+           , { "qualifiedName", _typeRenderer.render(qualifiedValues) }
+           , { "baseName", tu.baseName }
+    };
 }
 
-object prepareField(const VarDecl& field)
+object Printer::dumpField(const VarDecl& field) const
 {
     auto paramNameCamelCase = camelCase(field.name);
     paramNameCamelCase.front() =
         tolower(paramNameCamelCase.front(), locale::classic());
 
-    auto dataType = renderType(field.type);
-    object fieldDef { { "dataType",           dataType }
-                    , { "baseName",           field.name }
-                    , { "paramName",          paramNameCamelCase } // Swagger compat
-                    , { "paramNameCamelCase", paramNameCamelCase }
-                      // TODO: paramNameSnakeCase
-                    , { "required?",          field.required }
-                    , { "required",           field.required } // Swagger compatibility
-                    , { "defaultValue",       field.defaultValue }
+    object fieldDef { { "dataType",      renderType(field.type) }
+                    , { "baseName",      field.name }
+                    , { "paramName",     paramNameCamelCase } // Swagger compat
+                    , { "nameCamelCase", paramNameCamelCase }
+                      // TODO: nameSnakeCase
+                    , { "required?",     field.required }
+                    , { "required",      field.required } // Swagger compat
+                    , { "defaultValue",  field.defaultValue }
     };
 
     for (const auto& attr: field.type.attributes)
@@ -181,69 +202,96 @@ object prepareField(const VarDecl& field)
     return fieldDef;
 }
 
+object Printer::dumpAllTypes(const Model::schemas_type& types) const
+{
+    object mModels;
+    setList(mModels, "model", types,
+        [this](const ObjectSchema& type)
+        {
+            object mType = renderType(TypeUsage(type));
+            mType["classname"] = type.name; // Swagger compat
+            if (type.trivial())
+            {
+                mType["trivial?"] = true;
+                mType["parent"] = renderType(type.parentTypes.back());
+            }
+            setList(mType, "parents", type.parentTypes,
+                    bind(&Printer::renderType, this, placeholders::_1));
+            setList(mType, "vars", type.fields,
+                [this](const VarDecl& f) {
+                    object fieldDef = dumpField(f);
+                    fieldDef["name"] = f.name;
+                    fieldDef["datatype"] = f.type.name; // Swagger compat
+                    return fieldDef;
+                });
+            return mType;
+        });
+    return mModels;
+}
+
+object Printer::dumpTypes(const Model::schemas_type& types,
+                          const string& scope) const
+{
+    Model::schemas_type selectedTypes;
+    copy_if(types.begin(), types.end(), back_inserter(selectedTypes),
+            [&](const ObjectSchema& s) { return s.scope == scope; });
+    return dumpAllTypes(selectedTypes);
+}
+
 vector<string> Printer::print(const Model& model) const
 {
     auto context = _context;
     context.set("filenameBase", model.filename);
-    setList(&context, "imports", model.imports);
+    context.set("basePathWithoutHost", model.basePath);
+    context.set("basePath", model.hostAddress + model.basePath);
+    setList(context, "imports", model.imports);
+    auto&& mAllTypes = dumpAllTypes(model.types);
+    if (!mAllTypes.empty())
+        context.set("allModels", mAllTypes);
+    auto&& mTypes = dumpTypes(model.types, "");
+    if (!mTypes.empty())
+        context.set("models", mTypes);
+    if (!model.callClasses.empty())
     {
-        // Data definitions
-        list mTypes;
-        for (const auto& type: model.types)
-        {
-            object mType { { "classname", type.first } };
-            setList(&mType, "parents", type.second.parentTypes, renderType);
-            setList(&mType, "vars", type.second.fields,
-                [](const VarDecl& f) {
-                    object fieldDef = prepareField(f);
-                    fieldDef["name"] = f.name;
-                    fieldDef["datatype"] = renderType(f.type); // Swagger compat
-                    return fieldDef;
-                });
-            mTypes.emplace_back(object { { "model", move(mType) } });
-        }
-        if (!mTypes.empty())
-            context.set("models", mTypes);
-    }
-    {
-        // Operations
-        list mClasses;
-        for (const auto& callClass: model.callClasses)
-        {
-            for (const auto& call: callClass.callOverloads)
-            {
-                object mClass { { "operationId", call.name }
-                              , { "camelCaseOperationId", camelCase(call.name) }
-                              , { "httpMethod",  call.verb }
-                              , { "path", call.path }
-                              , { "skipAuth", !call.needsSecurity }
+        const auto& callClass = model.callClasses.back();
+        object mOperations; // Any attributes should be added after setList
+        setList(mOperations, "operation", callClass.calls,
+            [&model,this] (const Call& call) {
+                object mCall { { "operationId", call.name }
+                             , { "camelCaseOperationId", camelCase(call.name) }
+                             , { "httpMethod",  call.verb }
+                             , { "path", call.path }
+                             , { "skipAuth", !call.needsSecurity }
                 };
-                setList(&mClass, "pathParts", call.pathParts);
+                auto&& mCallTypes = dumpTypes(model.types, call.name);
+                if (!mCallTypes.empty())
+                    mCall.emplace("models", mCallTypes);
+                setList(mCall, "pathParts", call.pathParts);
 
+                using namespace placeholders;
+                setList(mCall, "allParams", call.collateParams(),
+                        bind(&Printer::dumpField, this, _1));
                 for (string blockName: Call::paramsBlockNames)
-                    setList(&mClass, blockName + "Params",
-                            call.getParamsBlock(blockName), prepareField);
+                    setList(mCall, blockName + "Params",
+                            call.getParamsBlock(blockName),
+                            bind(&Printer::dumpField, this, _1));
 
-                setList(&mClass, "allParams", call.collateParams(), prepareField);
-                setList(&mClass, "responses", call.responses,
-                    [](const Response& r) {
+                setList(mCall, "responses", call.responses,
+                    [this](const Response& r) {
                         object mResponse { { "code", r.code }
                                          , { "normalResponse?", r.code == "200" }
                         };
-                        setList(&mResponse, "properties",
-                                r.properties, prepareField);
+                        setList(mResponse, "properties", r.properties,
+                                bind(&Printer::dumpField, this, _1));
                         return mResponse;
                     });
-                mClasses.emplace_back(move(mClass));
-            }
+                return mCall;
+            });
+        if (!mOperations.empty())
+        {
+            mOperations.emplace("classname", "NOT_IMPLEMENTED");
+            context.set("operations", mOperations);
         }
-        if (!mClasses.empty())
-            context.set("operations",
-                        object { { "className", "NOT_IMPLEMENTED" }
-                               , { "operation", mClasses }
-                        });
-        context.set("basePathWithoutHost", model.basePath);
-        context.set("basePath", model.hostAddress + model.basePath);
     }
     vector<string> fileNames;
     for (auto fileTemplate: _templates)

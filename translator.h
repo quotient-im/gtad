@@ -32,8 +32,8 @@ class Translator
         std::pair<Model, std::vector<std::string>>
         processFile(std::string filePath, std::string baseDirPath) const;
         TypeUsage mapType(const std::string& swaggerType,
-                          const std::string& swaggerFormat = {}) const;
-        TypeUsage mapArrayType(const TypeUsage& innerType) const;
+                          const std::string& swaggerFormat = {},
+                          const std::string& baseName = {}) const;
 
     private:
         pair_vector_t<std::string> _substitutions;

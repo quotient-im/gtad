@@ -132,40 +132,31 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
 // FIXME: The below two functions are a source of great inefficiency. Every time
 // another type usage is resolved, a TypeUsage copy is created (with all its
 // attributes). For mapType(), the situation can be easily solved by pointing to
-// the type instead of copying. For mapArrayType() it's more complicated because
-// arrays are parameterized types; apparently, the real TypeUsage type should be
-// a handle to the actual TypeDef instance that would own all the stuff TypUsage
-// now has.
+// the type instead of copying. For parameterised types it's more complicated;
+// apparently, the real TypeUsage type should be a handle to the actual TypeDef
+// instance that would own all the stuff TypeUsage now has.
 
-TypeUsage
-Translator::mapType(const string& swaggerType, const string& swaggerFormat) const
+TypeUsage Translator::mapType(const string& swaggerType,
+                              const string& swaggerFormat,
+                              const string& baseName) const
 {
     for (const auto& swTypePair: _typesMap)
-    {
         if (swTypePair.first == swaggerType)
-        {
             for (const auto& swFormatPair: swTypePair.second)
             {
-                const auto swFormat = swFormatPair.first;
-                if (swFormat == swaggerFormat)
-                    return swFormatPair.second;
-
-                if (swFormat.front() == '/' && swFormat.back() == '/' &&
-                    regex_match(swaggerFormat,
-                                regex(++swFormat.begin(), --swFormat.end())))
-                        return swFormatPair.second;
+                const auto& swFormat = swFormatPair.first;
+                if (swFormat == swaggerFormat ||
+                    (swFormat.front() == '/' && swFormat.back() == '/' &&
+                     regex_match(swaggerFormat,
+                                 regex(++swFormat.begin(), --swFormat.end()))))
+                {
+                    auto tu = swFormatPair.second;
+                    // Fallback chain: baseName, swaggerFormat, swaggerType
+                    tu.baseName = baseName.empty() ? swaggerFormat.empty() ?
+                                swaggerType : swaggerFormat : baseName;
+                    return move(tu);
+                }
             }
-        }
-    }
-    return TypeUsage("");
-}
-
-TypeUsage Translator::mapArrayType(const TypeUsage& innerType) const
-{
-    for (const auto& swTypePair: _typesMap)
-        if (swTypePair.first == "array")
-            return swTypePair.second.back().second(innerType);
-
     return TypeUsage("");
 }
 

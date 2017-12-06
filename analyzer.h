@@ -42,10 +42,11 @@ class Analyzer
         const Translator& translator;
 
         enum InOut { In, Out };
-        TypeUsage analyzeType(const YamlMap& node, Analyzer::InOut inOut);
+        TypeUsage analyzeType(const YamlMap& node,
+                              InOut inOut, std::string scope);
 
-        ObjectSchema analyzeSchema(const YamlMap& yamlSchema);
-        TypeUsage tryResolveParentTypes(const YamlMap& yamlSchema);
+        ObjectSchema analyzeSchema(const YamlMap& yamlSchema, std::string scope);
+        ObjectSchema tryResolveRefs(const YamlMap& yamlSchema);
         void addParamsFromSchema(VarDecls& varList, std::string name,
                                  bool required, ObjectSchema bodyParamSchema);
 };
