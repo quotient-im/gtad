@@ -126,6 +126,12 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope)
     // 2. Parsing the list of body parameters (empty schema means any object)
     // 3. Parsing the list of result parts (empty schema means an empty object)
     ObjectSchema s = tryResolveRefs(yamlSchema);
+    if (s.empty() && yamlSchema["type"].as<string>("object") != "object")
+    {
+        auto parentType = analyzeType(yamlSchema, In, scope);
+        if (!parentType.empty())
+            s.parentTypes.emplace_back(move(parentType));
+    }
 
     if (const auto properties = yamlSchema["properties"].asMap())
     {
@@ -158,7 +164,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope)
 }
 
 void Analyzer::addParamsFromSchema(VarDecls& varList,
-   std::string name, bool required, ObjectSchema paramSchema)
+        std::string name, bool required, const ObjectSchema& paramSchema)
 {
     if (paramSchema.parentTypes.empty())
     {
@@ -171,6 +177,9 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
             VarDecl(paramSchema.parentTypes.front(), move(name), required));
     } else
     {
+        cerr << "Warning: found non-trivial schema for " << name
+             << "; these are not supported, expect invalid parameter set"
+             << endl;
         const auto typeName =
             paramSchema.name.empty() ? camelCase(name) : paramSchema.name;
         model.addSchema(move(paramSchema));
@@ -238,12 +247,18 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                     {
                         // Special case: an empty schema for a body parameter
                         // means a freeform object.
+                        call.inlineBody = true;
                         model.addVarDecl(call.bodyParams(),
                             VarDecl(translator.mapType("object"), name, false));
                     }
                     else
+                    {
+                        // The schema consists of a single parent type, inline that type.
+                        if (bodySchema.trivial())
+                            call.inlineBody = true;
                         addParamsFromSchema(call.getParamsBlock("body"),
                                             name, required, bodySchema);
+                    }
                 }
                 const auto yamlResponses = yamlCall.get("responses").asMap();
                 if (const auto yamlResponse = yamlResponses["200"].asMap())

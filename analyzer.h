@@ -48,5 +48,5 @@ class Analyzer
         ObjectSchema analyzeSchema(const YamlMap& yamlSchema, std::string scope);
         ObjectSchema tryResolveRefs(const YamlMap& yamlSchema);
         void addParamsFromSchema(VarDecls& varList, std::string name,
-                                 bool required, ObjectSchema bodyParamSchema);
+                     bool required, const ObjectSchema& bodyParamSchema);
 };

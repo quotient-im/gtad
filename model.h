@@ -136,6 +136,7 @@ struct Call
     const params_type& bodyParams() const { return allParams[3]; }
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
+    bool inlineBody = false;
     std::vector<Response> responses;
 };
 

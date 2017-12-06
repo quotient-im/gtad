@@ -28,6 +28,7 @@ enum {
 };
 
 using namespace std;
+using namespace std::placeholders;
 using namespace kainjow::mustache;
 
 Printer::Printer(context_type&& context, const vector<string>& templateFileNames,
@@ -216,7 +217,7 @@ object Printer::dumpAllTypes(const Model::schemas_type& types) const
                 mType["parent"] = renderType(type.parentTypes.back());
             }
             setList(mType, "parents", type.parentTypes,
-                    bind(&Printer::renderType, this, placeholders::_1));
+                    bind(&Printer::renderType, this, _1));
             setList(mType, "vars", type.fields,
                 [this](const VarDecl& f) {
                     object fieldDef = dumpField(f);
@@ -271,10 +272,13 @@ vector<string> Printer::print(const Model& model) const
                 using namespace placeholders;
                 setList(mCall, "allParams", call.collateParams(),
                         bind(&Printer::dumpField, this, _1));
-                for (string blockName: Call::paramsBlockNames)
-                    setList(mCall, blockName + "Params",
-                            call.getParamsBlock(blockName),
+                for (auto i = 0; i < Call::paramsBlockNames.size(); ++i)
+                    setList(mCall, Call::paramsBlockNames[i] + "Params",
+                            call.allParams[i],
                             bind(&Printer::dumpField, this, _1));
+                if (call.inlineBody)
+                    mCall.emplace("inlineBody",
+                                  dumpField(call.bodyParams().front()));
 
                 setList(mCall, "responses", call.responses,
                     [this](const Response& r) {
