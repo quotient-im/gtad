@@ -256,7 +256,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                         // The schema consists of a single parent type, inline that type.
                         if (bodySchema.trivial())
                             call.inlineBody = true;
-                        addParamsFromSchema(call.getParamsBlock("body"),
+                        addParamsFromSchema(call.bodyParams(),
                                             name, required, bodySchema);
                     }
                 }
