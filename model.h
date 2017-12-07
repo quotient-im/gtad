@@ -119,7 +119,7 @@ struct Call
     Call(Call&&) = default;
     Call operator=(Call&&) = delete;
 
-    static const std::array<const char*, 4> paramsBlockNames;
+    static const std::array<std::string, 4> paramsBlockNames;
     const Call::params_type& getParamsBlock(const std::string& name) const;
     Call::params_type& getParamsBlock(const std::string& name);
     params_type collateParams() const;
@@ -133,6 +133,7 @@ struct Call
     params_type& queryParams() { return allParams[1]; }
     params_type& headerParams() { return allParams[2]; }
     params_type& bodyParams() { return allParams[3]; }
+    const params_type& bodyParams() const { return allParams[3]; }
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
     std::vector<Response> responses;

@@ -123,7 +123,7 @@ vector<string> splitPath(const string& path)
 }
 
 
-const std::array<const char*, 4> Call::paramsBlockNames
+const array<string, 4> Call::paramsBlockNames
     { "path", "query", "header", "body" };
 
 size_t getParamsBlockIndex(const std::string& name)
