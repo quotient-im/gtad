@@ -113,8 +113,6 @@ vector<string> splitPath(const string& path)
         if (i2 == path.end())
             fail(UnbalancedBracesInPath, "The path has '{' without matching '}'");
 
-        cout << string {i, i1};
-        cout << string {i1+1, i2};
         parts.emplace_back('"' + string{i, i1} + '"');
         parts.emplace_back(i1 + 1, i2);
         i = i2 + 1;
@@ -181,7 +179,6 @@ void Model::addSchema(const ObjectSchema& schema)
 
 void Model::addImports(const TypeUsage& type)
 {
-    const auto oldSize = imports.size();
     const auto singleTypeImport = type.attributes.find("imports");
     if (singleTypeImport != type.attributes.end())
         imports.insert(singleTypeImport->second);
@@ -191,7 +188,4 @@ void Model::addImports(const TypeUsage& type)
         const auto& typeImports = typeImportsIt->second;
         imports.insert(typeImports.begin(), typeImports.end());
     }
-    if (imports.size() != oldSize)
-        cout << "Model '" << filename
-             << "': added " << imports.size() - oldSize << " import(s)" << endl;
 }
