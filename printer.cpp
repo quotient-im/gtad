@@ -285,7 +285,16 @@ vector<string> Printer::print(const Model& model) const
                         object mResponse { { "code", r.code }
                                          , { "normalResponse?", r.code == "200" }
                         };
+                        vector<VarDecl> allProperties;
+                        copy(r.headers.begin(), r.headers.end(),
+                             back_inserter(allProperties));
+                        copy(r.properties.begin(), r.properties.end(),
+                             back_inserter(allProperties));
+                        setList(mResponse, "allProperties", allProperties,
+                                bind(&Printer::dumpField, this, _1));
                         setList(mResponse, "properties", r.properties,
+                                bind(&Printer::dumpField, this, _1));
+                        setList(mResponse, "headers", r.headers,
                                 bind(&Printer::dumpField, this, _1));
                         return mResponse;
                     });

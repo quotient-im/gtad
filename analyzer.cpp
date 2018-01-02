@@ -50,9 +50,8 @@ ObjectSchema Analyzer::tryResolveRefs(const YamlMap& yamlSchema)
         // The referenced file's path is relative to the current file's path;
         // we have to append a path to the current file's directory in order to
         // find the file.
-        cout << "Sub-processing file: " << refPath << endl
-             << "  baseDir: " << baseDir << endl
-             << "  model dir: " << model.fileDir << endl;
+        cout << "Sub-processing schema in "
+             << model.fileDir << "./" << refPath << endl;
         const auto processResult =
             translator.processFile(model.fileDir + refPath, baseDir);
         const Model& m = processResult.first; // Looking forward to switching to C++17
@@ -152,12 +151,11 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope)
     {
         s.name = camelCase(yamlSchema["title"].as<string>(""));
         s.scope.swap(scope);
-        cout << "Parsed object schema '"
+        cout << yamlSchema.location() << ": parsed object schema "
              << (s.name.empty() ? "(nameless)" :
-                 s.scope.empty() ? s.name : s.scope + '.' + s.name)
-             << "' (parent types: " << s.parentTypes.size()
-             << ", properties: " << s.fields.size()
-             << ") at " << yamlSchema.location() << endl;
+                 (s.scope.empty() ? "'" : "'" + s.scope + '.') + s.name + "'")
+             << " (parent types: " << s.parentTypes.size()
+             << ", properties: " << s.fields.size() << ")" << endl;
     } else
         cout << "Found empty object schema at " << yamlSchema.location() << endl;
     return s;
@@ -223,8 +221,9 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
 
                 Call& call = model.addCall(path, verb, operationId, needsSecurity);
 
-                cout << "Loading " << operationId << ": "
-                     << path << " - " << verb << endl;
+                cout << yamlCall.location() << ": Found operation "
+                     << operationId
+                     << " (" << path << ", " << verb << ')' << endl;
 
                 for (const YamlMap yamlParam:
                         yamlCall["parameters"].asSequence())
@@ -267,7 +266,11 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                     if (auto yamlHeaders = yamlResponse["headers"])
                         for (const auto yamlHeader: yamlHeaders.asMap())
                         {
-                            // TODO: fill in headers
+                            auto&& name = yamlHeader.first.as<string>();
+                            model.addVarDecl(response.headers,
+                                VarDecl(analyzeType(yamlHeader.second,
+                                                    Out, call.name),
+                                        move(name), false));
                         }
                     if (auto yamlSchema = yamlResponse["schema"])
                     {

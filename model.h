@@ -98,6 +98,7 @@ using VarDecls = std::vector<VarDecl>;
 struct Response
 {
     std::string code;
+    VarDecls headers;
     VarDecls properties;
 };
 
