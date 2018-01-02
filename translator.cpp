@@ -39,12 +39,12 @@ TypeUsage parseTypeEntry(const YamlNode& yamlTypeNode)
             cerr << "List attributes in 'types:' are not implemented" << endl;
         }
     }
-    return move(typeUsage);
+    return typeUsage;
 }
 
 Translator::Translator(const QString& configFilePath, QString outputDirPath)
     : _outputDirPath(outputDirPath.endsWith('/') ?
-                     std::move(outputDirPath) : outputDirPath + '/')
+                     move(outputDirPath) : outputDirPath + '/')
 {
     const auto configY = YamlMap::loadFromFile(configFilePath.toStdString());
 
@@ -125,16 +125,9 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
         configDir += '/';
 
     _printer.reset(new Printer {
-        std::move(env), outputFiles, configDir.toStdString(),
+        move(env), outputFiles, configDir.toStdString(),
         _outputDirPath.toStdString(), configY["outFilesList"].as<string>("") });
 }
-
-// FIXME: The below two functions are a source of great inefficiency. Every time
-// another type usage is resolved, a TypeUsage copy is created (with all its
-// attributes). For mapType(), the situation can be easily solved by pointing to
-// the type instead of copying. For parameterised types it's more complicated;
-// apparently, the real TypeUsage type should be a handle to the actual TypeDef
-// instance that would own all the stuff TypeUsage now has.
 
 TypeUsage Translator::mapType(const string& swaggerType,
                               const string& swaggerFormat,
@@ -150,11 +143,15 @@ TypeUsage Translator::mapType(const string& swaggerType,
                      regex_match(swaggerFormat,
                                  regex(++swFormat.begin(), --swFormat.end()))))
                 {
+                    // FIXME (#22): The below is a source of great inefficiency.
+                    // TypeUsage should become a handle to an instance of
+                    // a newly-made TypeDefinition type that would own all
+                    // the stuff TypeUsage now has, except innerTypes
                     auto tu = swFormatPair.second;
                     // Fallback chain: baseName, swaggerFormat, swaggerType
                     tu.baseName = baseName.empty() ? swaggerFormat.empty() ?
                                 swaggerType : swaggerFormat : baseName;
-                    return move(tu);
+                    return tu;
                 }
             }
     return TypeUsage("");
@@ -165,13 +162,13 @@ pair<Model, vector<string>> Translator::processFile(string filePath,
 {
     Model m = Analyzer(filePath, baseDirPath, *this).loadModel(_substitutions);
     if (m.callClasses.empty() && m.types.empty())
-        return make_pair(std::move(m), vector<string>{});
+        return { move(m), {} };
 
     QDir d { _outputDirPath + m.fileDir.c_str() };
     if (!d.exists() && !d.mkpath("."))
         fail(CannotCreateOutputDir, "Cannot create output directory");
     auto fileNames = _printer->print(m);
 
-    return make_pair(std::move(m), std::move(fileNames));
+    return { move(m), move(fileNames) };
 }
 
