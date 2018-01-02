@@ -19,15 +19,18 @@
 #pragma once
 
 #include "model.h"
-#include "printer.h"
-#include "util.h"
 
 #include <QtCore/QString>
+
+#include <memory>
+
+class Printer;
 
 class Translator
 {
     public:
         Translator(const QString& configFilePath, QString outputDirPath);
+        ~Translator();
 
         std::pair<Model, std::vector<std::string>>
         processFile(std::string filePath, std::string baseDirPath) const;

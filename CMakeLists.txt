@@ -42,7 +42,6 @@ list(APPEND SRCS
     translator.cpp
     analyzer.cpp
     model.cpp
-    exception.cpp
     printer.cpp
     yaml.cpp
     util.cpp

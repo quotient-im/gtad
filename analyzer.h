@@ -45,8 +45,9 @@ class Analyzer
         TypeUsage analyzeType(const YamlMap& node,
                               InOut inOut, std::string scope);
 
-        ObjectSchema analyzeSchema(const YamlMap& yamlSchema, std::string scope);
+        ObjectSchema analyzeSchema(const YamlMap& yamlSchema,
+                std::string scope = {}, std::string locus = {});
         ObjectSchema tryResolveRefs(const YamlMap& yamlSchema);
         void addParamsFromSchema(VarDecls& varList, std::string name,
-                     bool required, const ObjectSchema& bodyParamSchema);
+                bool required, const ObjectSchema& bodyParamSchema);
 };

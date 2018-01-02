@@ -1,8 +1,6 @@
 #include "analyzer.h"
 
-#include "exception.h"
 #include "translator.h"
-
 #include "yaml.h"
 
 using namespace std;
@@ -10,11 +8,6 @@ using namespace std::placeholders;
 using YAML::Node;
 using YAML::NodeType;
 using NodePair = YamlMap::NodePair;
-
-enum {
-    CannotReadFromInput = AnalyzerCodes, IncompatibleSwaggerVersion,
-    UnknownParameterType, InvalidSchemaDefinition
-};
 
 Model initModel(string path)
 {
@@ -57,10 +50,8 @@ ObjectSchema Analyzer::tryResolveRefs(const YamlMap& yamlSchema)
         const Model& m = processResult.first; // Looking forward to switching to C++17
         const auto& filesList = processResult.second;
         if (m.types.empty())
-        {
-            cerr << "File " << refPath << " has no object schemas" << endl;
-            fail(InvalidSchemaDefinition);
-        }
+            throw YamlException(yamlSchema, "The target file has no schemas");
+
         schema.parentTypes.emplace_back(
             m.types.back().name,
             filesList.empty() ? string{} : "\"" + filesList.front() + "\"");
@@ -114,11 +105,11 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, Analyzer::InOut inOut, stri
     if (!tu.empty())
         return tu;
 
-    cerr << node.location() << ": unknown type: " << yamlType;
-    fail(UnknownParameterType);
+    throw YamlException(node, "Unknown type: " + yamlType);
 }
 
-ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope)
+ObjectSchema
+Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope, string locus)
 {
     // This is called at the following points:
     // 1. Parsing a JSON Schema document (empty schema means an empty object)
@@ -151,13 +142,20 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope)
     {
         s.name = camelCase(yamlSchema["title"].as<string>(""));
         s.scope.swap(scope);
-        cout << yamlSchema.location() << ": parsed object schema "
-             << (s.name.empty() ? "(nameless)" :
-                 (s.scope.empty() ? "'" : "'" + s.scope + '.') + s.name + "'")
-             << " (parent types: " << s.parentTypes.size()
-             << ", properties: " << s.fields.size() << ")" << endl;
-    } else
-        cout << "Found empty object schema at " << yamlSchema.location() << endl;
+
+        if (!s.name.empty() || !s.trivial())
+        {
+            cout << yamlSchema.location() << ": Found "
+                 << (!locus.empty() ? locus + " schema" :
+                     "schema " + qualifiedName(s));
+            if (s.trivial())
+                cout << " mapped to "
+                     << qualifiedName(s.parentTypes.front()) << endl;
+            else
+                cout << " (parent(s): " << s.parentTypes.size()
+                     << ", field(s): " << s.fields.size() << ")" << endl;
+        }
+    }
     return s;
 }
 
@@ -186,6 +184,18 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
     }
 }
 
+vector<string> loadProducedContentTypes(const YamlMap& yaml)
+{
+    if (auto yamlProduces = yaml["produces"].asSequence())
+    {
+        vector<string> defaultProduces { yamlProduces.size() };
+        transform(yamlProduces.begin(), yamlProduces.end(),
+                  defaultProduces.begin(), bind(&YamlNode::as<string>, _1));
+        return defaultProduces;
+    }
+    return {};
+}
+
 Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
 {
     cout << "Loading from " << baseDir + fileName << endl;
@@ -197,18 +207,16 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
     if (const auto paths = yaml.get("paths", true).asMap())
     {
         if (yaml.get("swagger").as<string>() != "2.0")
-            fail(IncompatibleSwaggerVersion,
-                 "This software only supports swagger version 2.0 for now");
+            throw Exception(
+                    "This software only supports swagger version 2.0 for now");
 
+        auto defaultProduced = loadProducedContentTypes(yaml);
         model.hostAddress = yaml["host"].as<string>("");
         model.basePath = yaml["basePath"].as<string>("");
 
         for (const NodePair& yaml_path: paths)
-        {
-            string path = yaml_path.first.as<string>();
-            // Working around quirks in the current CS API definition
-            while (*path.rbegin() == ' ' || *path.rbegin() == '/')
-                path.erase(path.size() - 1);
+        try {
+            Path path { yaml_path.first.as<string>() };
 
             for (const NodePair& yaml_call_pair: yaml_path.second.asMap())
             {
@@ -219,14 +227,21 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                 if (const auto security = yamlCall["security"].asSequence())
                     needsSecurity = security[0]["accessToken"].IsDefined();
 
-                Call& call = model.addCall(path, verb, operationId, needsSecurity);
-
                 cout << yamlCall.location() << ": Found operation "
                      << operationId
                      << " (" << path << ", " << verb << ')' << endl;
 
+                Call& call =
+                    model.addCall(move(path), move(verb), move(operationId),
+                                  needsSecurity);
+
+                call.producedContentTypes =
+                    loadProducedContentTypes(yamlCall);
+                if (call.producedContentTypes.empty())
+                    call.producedContentTypes = defaultProduced;
+
                 for (const YamlMap yamlParam:
-                        yamlCall["parameters"].asSequence())
+                    yamlCall["parameters"].asSequence())
                 {
                     auto&& name = yamlParam.get("name").as<string>();
                     auto&& in = yamlParam.get("in").as<string>();
@@ -240,8 +255,8 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                         continue;
                     }
 
-                    auto&& bodySchema =
-                        analyzeSchema(yamlParam.get("schema"), call.name);
+                    auto&& bodySchema = analyzeSchema(yamlParam.get("schema"),
+                                                      call.name, "request body");
                     if (bodySchema.empty())
                     {
                         // Special case: an empty schema for a body parameter
@@ -249,9 +264,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                         call.inlineBody = true;
                         model.addVarDecl(call.bodyParams(),
                             VarDecl(translator.mapType("object"), name, false));
-                    }
-                    else
-                    {
+                    } else {
                         // The schema consists of a single parent type, inline that type.
                         if (bodySchema.trivial())
                             call.inlineBody = true;
@@ -262,7 +275,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                 const auto yamlResponses = yamlCall.get("responses").asMap();
                 if (const auto yamlResponse = yamlResponses["200"].asMap())
                 {
-                    Response response { "200", {} };
+                    Response response { "200" };
                     if (auto yamlHeaders = yamlResponse["headers"])
                         for (const auto yamlHeader: yamlHeaders.asMap())
                         {
@@ -275,17 +288,21 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                     if (auto yamlSchema = yamlResponse["schema"])
                     {
                         auto&& responseSchema =
-                            analyzeSchema(yamlSchema, call.name);
+                            analyzeSchema(yamlSchema, call.name, "response");
                         if (!responseSchema.empty())
                             addParamsFromSchema(response.properties,
-                                "result", true, responseSchema);
+                                "content", true, responseSchema);
                     }
                     call.responses.emplace_back(move(response));
                 }
             }
         }
+        catch (ModelException& me)
+        {
+            throw YamlException(yaml_path.first, me.message);
+        }
     } else {
-        auto schema = analyzeSchema(yaml, "");
+        auto schema = analyzeSchema(yaml);
         if (schema.name.empty())
             schema.name = camelCase(model.filename);
         model.addSchema(schema);

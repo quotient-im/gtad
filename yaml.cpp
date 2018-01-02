@@ -18,8 +18,6 @@
 
 #include "yaml.h"
 
-#include "exception.h"
-
 #include <yaml-cpp/node/parse.h>
 
 #include <regex>
@@ -30,13 +28,9 @@ using std::cerr;
 using std::endl;
 using std::string;
 
-enum {
-    CannotReadFromInput = ParserCodes, IncorrectYamlStructure
-};
-
 // Follows the YAML::NodeType::value enum; if that enum changes, this has
 // to be changed too (but it probably would only change if YAML standard is updated).
-static const char* const typenames[] {
+static string const typenames[] {
     "Undefined", "Null", "Scalar", "Sequence", "Map"
 };
 
@@ -55,15 +49,21 @@ void YamlNode::checkType(NodeType::value checkedType) const
     if (Type() == checkedType)
         return;
 
-    cerr << location() << ": the node has a wrong type (expected "
-         << typenames[checkedType] << ", got " << typenames[Type()] << ")" << endl;
-
-    structureFail();
+    throw YamlException(*this,
+            "The node has a wrong type (expected " + typenames[checkedType] +
+            ", got " + typenames[Type()] + ")");
 }
 
-void YamlNode::structureFail() const
+YamlException::~YamlException() = default;
+
+YamlNode YamlSequence::get(size_t subnodeIdx, bool allowNonexistent) const
 {
-    fail(IncorrectYamlStructure);
+    auto subnode = (*this)[subnodeIdx];
+    if (allowNonexistent || subnode.IsDefined())
+        return subnode;
+
+    throw YamlException(*this,
+            "subnode #" + std::to_string(subnodeIdx) + " is undefined");
 }
 
 YAML::Node makeNodeFromFile(const string& fileName,
@@ -75,15 +75,15 @@ YAML::Node makeNodeFromFile(const string& fileName,
 
         string fileContents = readFile(fileName);
         if (fileContents.empty())
-            fail(CannotReadFromInput);
+            throw YAML::BadFile();
         for (const auto& subst: replacePairs)
             fileContents = std::regex_replace(fileContents,
-                         std::regex(subst.first), subst.second);
+                                 std::regex(subst.first), subst.second);
         return YAML::Load(fileContents);
     }
     catch (YAML::BadFile &)
     {
-        fail(CannotReadFromInput, "Couldn't read YAML from input");
+        throw Exception("Couldn't read YAML from input");
     }
 }
 
@@ -93,4 +93,3 @@ YamlMap YamlMap::loadFromFile(const std::string& fileName,
     return YamlNode(makeNodeFromFile(fileName, replacePairs),
                     std::make_shared<string>(fileName));
 }
-

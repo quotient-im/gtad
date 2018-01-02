@@ -1,14 +1,8 @@
 #include "model.h"
 
-#include <iostream>
+#include <algorithm>
+#include <functional>
 #include <locale>
-#include <regex>
-
-#include "exception.h"
-
-enum {
-    _Base = InternalErrors, UnknownParamBlock, UnbalancedBracesInPath
-};
 
 using namespace std;
 
@@ -78,70 +72,60 @@ void eraseSuffix(string* path, const string& suffix)
         path->erase(trimAt);
 }
 
-string dropSuffix(string path, const string& suffix)
+string withoutSuffix(const string& path, const string& suffix)
 {
-    auto trimAt = path.size() - suffix.size();
-    return path.find(suffix, trimAt) != string::npos ?
-           string(path.begin(), path.end() - suffix.size()) : std::move(path);
+    return path.substr(0, path.find(suffix, path.size() - suffix.size()));
 }
 
-Call& Model::addCall(string path, string verb, string operationId,
-                     bool needsToken)
+Path::Path(string path)
+    : string(move(path))
 {
-    transform(verb.begin(), verb.end(), verb.begin(),
-              [] (char c) { return toupper(c, locale::classic()); });
+    if (empty())
+        throw ModelException("Path cannot be empty");
 
-    if (callClasses.empty())
-        callClasses.emplace_back();
-    auto& cc = callClasses.back();
-    cc.calls.emplace_back(move(path), move(verb), move(operationId), needsToken);
-    return cc.calls.back();
-}
+    // Working around quirks in the current Matrix CS API definition
+    // (still applies to any other spec as well)
+    while (back() == ' ' || back() == '/')
+        pop_back();
 
-vector<string> splitPath(const string& path)
-{
-    vector<string> parts;
-    for (auto i = path.begin(); i != path.end();)
+    for (auto i = begin(); i != end();)
     {
-        auto i1 = find(i, path.end(), '{');
-        auto i2 = find(i1, path.end(), '}');
-        if (i1 == path.end())
+        auto i1 = std::find(i, end(), '{');
+        auto i2 = std::find(i1, end(), '}');
+        if (i1 == end())
         {
-            parts.emplace_back('"' + string{i, path.end()} + '"');
+            parts.emplace_back(i, end(), Literal);
             break;
         }
-        if (i2 == path.end())
-            fail(UnbalancedBracesInPath, "The path has '{' without matching '}'");
+        if (i2 == end())
+            throw ModelException("Unbalanced braces in the path: " + *this);
 
-        parts.emplace_back('"' + string{i, i1} + '"');
-        parts.emplace_back(i1 + 1, i2);
+        parts.emplace_back(i, i1, Literal);
+        parts.emplace_back(i1 + 1, i2, Variable);
         i = i2 + 1;
     }
-    return parts;
 }
 
-
 const array<string, 4> Call::paramsBlockNames
-    { "path", "query", "header", "body" };
+    { { "path", "query", "header", "body" } };
 
-size_t getParamsBlockIndex(const std::string& name)
+size_t getParamsBlockIndex(const string& name)
 {
     for (Call::params_type::size_type i = 0; i < 4; ++i)
         if (Call::paramsBlockNames[i] == name)
             return i;
 
-    cerr << "Unknown params block name: "<< name << endl;
-    fail(UnknownParamBlock);
+    throw ModelException("Unknown params block name: " + name);
 }
 
-const Call::params_type& Call::getParamsBlock(const std::string& name) const
+const Call::params_type& Call::getParamsBlock(const string& blockName) const
 {
-    return allParams[getParamsBlockIndex(name)];
+    return allParams[getParamsBlockIndex(blockName)];
 }
 
-Call::params_type& Call::getParamsBlock(const string& name)
+Call::params_type& Call::getParamsBlock(const string& blockName)
 {
-    return allParams[getParamsBlockIndex(name)];
+    return allParams[getParamsBlockIndex(blockName)];
 }
 
 Call::params_type Call::collateParams() const
@@ -153,6 +137,15 @@ Call::params_type Call::collateParams() const
     stable_partition(allCollated.begin(), allCollated.end(),
                      mem_fn(&VarDecl::isRequired));
     return allCollated;
+}
+
+Call& Model::addCall(Path path, string verb, string operationId, bool needsToken)
+{
+    if (callClasses.empty())
+        callClasses.emplace_back();
+    auto& cc = callClasses.back();
+    cc.calls.emplace_back(move(path), move(verb), move(operationId), needsToken);
+    return cc.calls.back();
 }
 
 void Model::addVarDecl(VarDecls& varList, VarDecl var)

@@ -30,7 +30,14 @@
 std::string capitalizedCopy(std::string s);
 std::string camelCase(std::string s);
 void eraseSuffix(std::string* path, const std::string& suffix);
-std::string dropSuffix(std::string path, const std::string& suffix);
+std::string withoutSuffix(const std::string& path, const std::string& suffix);
+
+template <typename T>
+inline std::string qualifiedName(const T& type)
+{
+    const auto _name = type.name.empty() ? "(anonymous)" : type.name;
+    return type.scope.empty() ? _name : type.scope + '.' + _name;
+}
 
 struct ObjectSchema;
 
@@ -95,24 +102,32 @@ struct ObjectSchema
 
 using VarDecls = std::vector<VarDecl>;
 
+struct Path : public std::string
+{
+    explicit Path (std::string path);
+    Path(Path&&) = default;
+    Path& operator=(Path&&) = default;
+
+    enum PartKind { Literal, Variable };
+    using part_type = std::tuple<const_iterator, const_iterator, PartKind>;
+    std::vector<part_type> parts;
+};
+
 struct Response
 {
     std::string code;
-    VarDecls headers;
-    VarDecls properties;
+    VarDecls headers = {};
+    VarDecls properties = {};
 };
-
-std::vector<std::string> splitPath(const std::string& path);
 
 struct Call
 {
     using params_type = VarDecls;
 
-    Call(std::string callPath, std::string callVerb, std::string callName,
+    Call(Path callPath, std::string callVerb, std::string callName,
          bool callNeedsSecurity)
-        : path(std::move(callPath)), pathParts(splitPath(path))
-        , verb(std::move(callVerb)), name(std::move(callName))
-        , needsSecurity(callNeedsSecurity)
+        : path(std::move(callPath)), verb(std::move(callVerb))
+        , name(std::move(callName)), needsSecurity(callNeedsSecurity)
     { }
     ~Call() = default;
     Call(Call&) = delete;
@@ -121,12 +136,11 @@ struct Call
     Call operator=(Call&&) = delete;
 
     static const std::array<std::string, 4> paramsBlockNames;
-    const Call::params_type& getParamsBlock(const std::string& name) const;
-    Call::params_type& getParamsBlock(const std::string& name);
+    const Call::params_type& getParamsBlock(const std::string& blockName) const;
+    Call::params_type& getParamsBlock(const std::string& blockName);
     params_type collateParams() const;
 
-    std::string path;
-    std::vector<std::string> pathParts;
+    Path path;
     std::string verb;
     std::string name;
     std::array<params_type, 4> allParams;
@@ -138,6 +152,8 @@ struct Call
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
     bool inlineBody = false;
+
+    std::vector<std::string> producedContentTypes;
     std::vector<Response> responses;
 };
 
@@ -168,11 +184,16 @@ struct Model
     Model operator=(const Model&) = delete;
     Model(Model&&) = default;
     Model& operator=(Model&&) = delete;
-    Call& addCall(std::string path, std::string verb, std::string operationId,
+    Call& addCall(Path path, std::string verb, std::string operationId,
                   bool needsToken);
     void addVarDecl(VarDecls& varList, VarDecl var);
     void addSchema(const ObjectSchema& schema);
     void addImports(const TypeUsage& type);
 };
 
+class ModelException : public Exception
+{
+    public:
+        using Exception::Exception;
+};
 

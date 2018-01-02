@@ -18,23 +18,22 @@
 
 #include "printer.h"
 
-#include "exception.h"
-
 #include <algorithm>
 #include <locale>
 
-enum {
-    CannotReadTemplateFile = PrinterCodes, CannotWriteToFile,
-};
-
 using namespace std;
 using namespace std::placeholders;
-using namespace kainjow::mustache;
+namespace km = kainjow::mustache;
+using km::object;
+using km::lambda;
+using km::lambda2;
+using km::renderer;
 
 Printer::Printer(context_type&& context, const vector<string>& templateFileNames,
                  const string& inputBasePath, string outputBasePath,
                  const string& outFilesListPath)
     : _context(context), _typeRenderer(context["_typeRenderer"].string_value())
+    , _quoteChar(context["_literalQuote"].string_value())
     , _outputBasePath(std::move(outputBasePath))
 {
     // Enriching the context with "My Mustache library"
@@ -83,27 +82,21 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
     for (const auto& templateFileName: templateFileNames)
     {
         auto templateFilePath = inputBasePath + templateFileName;
-        cout << "Opening " << templateFilePath << endl;
         ifstream ifs { templateFilePath };
         if (!ifs.good())
-        {
-            cerr << "Failed to open " << templateFilePath << std::endl;
-            fail(CannotReadTemplateFile);
-        }
+            throw Exception(templateFilePath + ": Failed to open");
+
         string templateContents;
         if (!getline(ifs, templateContents, '\0')) // Won't work on files with NULs
-        {
-            cerr << "Failed to read from " << templateFilePath << std::endl;
-            fail(CannotReadTemplateFile);
-        }
-        mustache fileTemplate { templateContents };
+            throw Exception(templateFilePath + ": Failed to read");
+
+        km::mustache fileTemplate { templateContents };
         fileTemplate.set_custom_escape([](const string& s) { return s; });
-        _templates.emplace_back(dropSuffix(templateFileName, ".mustache"),
+        _templates.emplace_back(withoutSuffix(templateFileName, ".mustache"),
                                 std::move(fileTemplate));
     }
     if (!outFilesListPath.empty())
     {
-        cout << "Opening " << _outputBasePath << outFilesListPath << endl;
         _outFilesList.open(_outputBasePath + outFilesListPath);
         if (!_outFilesList)
             cerr << "No out files list set or cannot write to the file" << endl;
@@ -128,7 +121,7 @@ void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
         return; // Don't even bother to add the empty list
 
     target[name + '?'] = true;
-    auto mList = list(source.size());
+    auto mList = km::list(source.size());
     auto mIt = mList.begin();
     for (auto it = source.begin(); it != source.end();)
     {
@@ -150,7 +143,7 @@ void setList(ObjT& target, const string& name, const ContT& source)
 object Printer::renderType(const TypeUsage& tu) const
 {
     object values { { "name", lambda {
-                        [&tu](const std::string&){ return tu.name; } } }
+                        [name=tu.name](const std::string&){ return name; } } }
                   , { "baseName", tu.baseName } };
     auto qualifiedValues = values;
     if (!tu.scope.empty())
@@ -195,7 +188,7 @@ object Printer::dumpField(const VarDecl& field) const
 
     for (const auto& listAttr: field.type.lists)
     {
-        list mAttrValue;
+        km::list mAttrValue;
         for (const auto& i: listAttr.second)
             mAttrValue.emplace_back(i);
         fieldDef.emplace(listAttr.first, move(mAttrValue));
@@ -255,19 +248,33 @@ vector<string> Printer::print(const Model& model) const
     if (!model.callClasses.empty())
     {
         const auto& callClass = model.callClasses.back();
+        bool globalProducesNotJson = false;
         object mOperations; // Any attributes should be added after setList
         setList(mOperations, "operation", callClass.calls,
-            [&model,this] (const Call& call) {
+            [&] (const Call& call) {
                 object mCall { { "operationId", call.name }
                              , { "camelCaseOperationId", camelCase(call.name) }
                              , { "httpMethod",  call.verb }
                              , { "path", call.path }
                              , { "skipAuth", !call.needsSecurity }
                 };
+                bool producesNotJson =
+                    find_if(
+                        call.producedContentTypes.begin(),
+                        call.producedContentTypes.end(),
+                        [] (const string& s) { return s != "application/json"; })
+                    != call.producedContentTypes.end();
+                mCall.emplace("producesNotJson?", producesNotJson);
+                globalProducesNotJson |= producesNotJson;
                 auto&& mCallTypes = dumpTypes(model.types, call.name);
                 if (!mCallTypes.empty())
                     mCall.emplace("models", mCallTypes);
-                setList(mCall, "pathParts", call.pathParts);
+                setList(mCall, "pathParts", call.path.parts,
+                    [this] (const Path::part_type& p) {
+                        const auto s = string(std::get<0>(p), std::get<1>(p));
+                        return (get<2>(p) == Path::Variable) ?
+                               s : _quoteChar + s + _quoteChar;
+                    });
 
                 using namespace placeholders;
                 setList(mCall, "allParams", call.collateParams(),
@@ -303,6 +310,7 @@ vector<string> Printer::print(const Model& model) const
         if (!mOperations.empty())
         {
             mOperations.emplace("classname", "NOT_IMPLEMENTED");
+            mOperations.emplace("producesNotJson?", globalProducesNotJson);
             context.set("operations", mOperations);
         }
     }
@@ -314,7 +322,7 @@ vector<string> Printer::print(const Model& model) const
         fileTemplate.first.render({ "base", model.filename }, fileNameStr);
         if (!fileTemplate.first.error_message().empty())
         {
-            cerr << "When rendering the filename:" << endl
+            clog << "When rendering the filename:" << endl
                  << fileTemplate.first.error_message() << endl;
             continue; // FIXME: should be fail()
         }
@@ -323,16 +331,14 @@ vector<string> Printer::print(const Model& model) const
 
         ofstream ofs { fileName };
         if (!ofs.good())
-        {
-            cerr << "Couldn't open " << fileName << " for writing" << endl;
-            fail(CannotWriteToFile);
-        }
+            throw Exception(fileName + ": Couldn't open for writing");
+
         fileTemplate.second.set_custom_escape([](const string& s) { return s; });
         fileTemplate.second.render(context, ofs);
         if (fileTemplate.second.error_message().empty())
             _outFilesList << fileName << endl;
         else
-            cerr << "When rendering the file:" << endl
+            clog << "When rendering the file:" << endl
                  << fileTemplate.second.error_message() << endl;
         fileNames.emplace_back(std::move(fileName));
     }

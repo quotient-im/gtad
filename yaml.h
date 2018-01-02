@@ -26,6 +26,7 @@
 #include <yaml-cpp/node/detail/impl.h>
 
 #include <iostream>
+#include <utility>
 
 // Mostly taken from yaml-cpp but stores and adds fileName to the returned values
 // so that it could be used with YamlNode
@@ -55,7 +56,7 @@ class iterator_base
         using reference = V;
 
         iterator_base(iter_impl_t iter, std::shared_ptr<std::string> fileName)
-            : _impl(std::move(iter)), _fileName(fileName)
+            : _impl(std::move(iter)), _fileName(std::move(fileName))
         { }
 
         operator iterator_base<const V>() const
@@ -93,24 +94,16 @@ class YamlNode : public YAML::Node
 {
     public:
         YamlNode(const YAML::Node& rhs, std::shared_ptr<std::string> fileName)
-            : Node(rhs), _fileName(fileName) { }
+            : Node(rhs), _fileName(move(fileName)) { }
 
         std::string fileName() const { return *_fileName; }
-        class Location
+
+        std::string location() const noexcept
         {
-            friend class YamlNode;
-            explicit Location(const YamlNode& yn) : _node(yn) { }
-            const YamlNode& _node;
+            return fileName() + ':' + std::to_string(Mark().line + 1);
+        }
 
-            template <typename StreamT>
-            friend StreamT& operator<<(StreamT& os, const YamlNode::Location& l)
-            {
-                return os << l._node.fileName() << ":" << l._node.Mark().line + 1;
-            }
-        };
-        Location location() const { return Location(*this); }
-
-        bool empty() const { return size() == 0; }
+        bool empty() const { return !IsDefined() || size() == 0; }
 
         template <typename T>
         T as() const
@@ -134,9 +127,16 @@ class YamlNode : public YAML::Node
     protected:
         void checkType(YAML::NodeType::value checkedType) const;
 
-        [[noreturn]] void structureFail() const;
-
         std::shared_ptr<std::string> _fileName;
+};
+
+class YamlException : public Exception
+{
+    public:
+        explicit YamlException(const YamlNode& node, std::string msg)
+            : Exception(node.location() + ": " + msg)
+        { }
+        ~YamlException() override;
 };
 
 class YamlSequence : public YamlNode
@@ -163,16 +163,7 @@ class YamlSequence : public YamlNode
             return { YAML::Node::operator[](idx), _fileName };
         }
 
-        YamlNode get(size_t subnodeIdx, bool allowNonexistent = false) const
-        {
-            auto subnode = (*this)[subnodeIdx];
-            if (allowNonexistent || subnode.IsDefined())
-                return subnode;
-
-            std::cerr << location() << ": subnode #"
-                      << subnodeIdx << " is undefined" << std::endl;
-            structureFail();
-        }
+        YamlNode get(size_t subnodeIdx, bool allowNonexistent = false) const;
 
         using iterator = iterator_base<YamlNode>;
         using const_iterator = iterator_base<const YamlNode>;
@@ -225,9 +216,7 @@ class YamlMap : public YamlNode
             if (allowNonexistent || subnode.IsDefined())
                 return subnode;
 
-            std::cerr << location() << ": "
-                      << subnodeKey << " is undefined" << std::endl;
-            structureFail();
+            throw YamlException(*this, std::string(subnodeKey) + " is undefined");
         }
 
         struct NodePair : public std::pair<YamlNode, YamlNode>

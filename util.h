@@ -25,3 +25,13 @@ template <typename T>
 using pair_vector_t = std::vector<std::pair<std::string, T>>;
 
 std::string readFile(const std::string& fileName);
+
+class Exception : public std::exception
+{
+    public:
+        explicit Exception(std::string msg) : message(move(msg)) { }
+        ~Exception() override;
+        const std::string message;
+
+        const char* what() const noexcept override { return message.c_str(); }
+};

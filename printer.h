@@ -25,6 +25,7 @@ class Printer
     private:
         context_type _context;
         mutable template_type _typeRenderer;
+        std::string _quoteChar;
         templates_type _templates;
         std::string _outputBasePath;
         mutable std::ofstream _outFilesList;

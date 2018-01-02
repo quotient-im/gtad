@@ -17,16 +17,12 @@
  */
 
 #include "translator.h"
-#include "exception.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QCommandLineParser>
 #include <QtCore/QDir>
 
-enum ErrorCode
-{
-    CannotCreateOutputDir = 1
-};
+#include <iostream>
 
 int main( int argc, char* argv[] )
 {
@@ -90,7 +86,8 @@ int main( int argc, char* argv[] )
     }
     catch (Exception& e)
     {
-        return e.code;
+        std::cerr << e.message << std::endl;
+        return 3;
     }
 
     return 0;

@@ -1,7 +1,6 @@
 #include "translator.h"
 
 #include "analyzer.h"
-#include "exception.h"
 #include "printer.h"
 
 #include "yaml.h"
@@ -11,11 +10,6 @@
 #include <regex>
 
 using namespace std;
-
-enum {
-    _Base = GeneralCodes, CannotCreateOutputDir, CannotWriteToFile,
-    IncorrectConfigurationFormat
-};
 
 TypeUsage parseTypeEntry(const YamlNode& yamlTypeNode)
 {
@@ -62,8 +56,8 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
             case YAML::NodeType::Map: // Same, with attributes for the target type
             {
                 formatsMap.emplace_back(string(), parseTypeEntry(typeValue));
-                cout << "Mapped type " << type.first.as<string>()
-                     << " to " << formatsMap.back().second.name << endl;
+//                clog << "Mapped type " << type.first.as<string>()
+//                     << " to " << formatsMap.back().second.name << endl;
                 break;
             }
             case YAML::NodeType::Sequence: // A list of formats for the type
@@ -71,25 +65,22 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
                 for (const YamlMap formatPattern: typeValue.asSequence())
                 {
                     if (formatPattern.size() != 1)
-                    {
-                        cerr << formatPattern.location() << ": malformed types map"
-                             << endl;
-                        fail(IncorrectConfigurationFormat);
-                    }
+                        throw YamlException(formatPattern,
+                                            "Malformed types map");
+
                     const auto formatPair = *formatPattern.begin();
                     auto formatName = formatPair.first.as<string>();
                     if (formatName.empty())
                         formatName = "//"; // Empty format means all formats
                     formatsMap.emplace_back(move(formatName),
                                             parseTypeEntry(formatPair.second));
-                    cout << "Mapped format " << formatsMap.back().first
-                         << " to " << formatsMap.back().second.name << endl;
+//                    clog << "Mapped format " << formatsMap.back().first
+//                         << " to " << formatsMap.back().second.name << endl;
                 }
                 break;
             }
             default:
-                cerr << type.second.location() << ": malformed types map" << endl;
-                fail(IncorrectConfigurationFormat);
+                throw YamlException(type.second, "Malformed types map");
         }
         _typesMap.emplace_back(type.first.as<string>(), move(formatsMap));
     }
@@ -129,6 +120,8 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
         _outputDirPath.toStdString(), configY["outFilesList"].as<string>("") });
 }
 
+Translator::~Translator() = default;
+
 TypeUsage Translator::mapType(const string& swaggerType,
                               const string& swaggerFormat,
                               const string& baseName) const
@@ -166,7 +159,7 @@ pair<Model, vector<string>> Translator::processFile(string filePath,
 
     QDir d { _outputDirPath + m.fileDir.c_str() };
     if (!d.exists() && !d.mkpath("."))
-        fail(CannotCreateOutputDir, "Cannot create output directory");
+        throw Exception { "Cannot create output directory" };
     auto fileNames = _printer->print(m);
 
     return { move(m), move(fileNames) };
