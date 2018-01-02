@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.11) # Maybe works with even older versions
+cmake_minimum_required(VERSION 3.1) # Maybe works with even older versions
 
 project(gtad CXX)
 
@@ -13,14 +13,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "MinSizeRel" "RelWithDebInfo")
 endif()
 
-if ( CMAKE_VERSION VERSION_LESS "3.1" )
-    CHECK_CXX_COMPILER_FLAG("-std=c++11" STD_FLAG_SUPPORTED)
-    if ( STD_FLAG_SUPPORTED )
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-    endif ( STD_FLAG_SUPPORTED )
-else ( CMAKE_VERSION VERSION_LESS "3.1" )
-    set(CMAKE_CXX_STANDARD 11)
-endif ( CMAKE_VERSION VERSION_LESS "3.1" )
+set(CMAKE_CXX_STANDARD 14)
 
 find_package(Qt5 5.2.1 REQUIRED Core)
 get_filename_component(Qt5_Prefix "${Qt5_DIR}/../../../.." ABSOLUTE)
@@ -38,7 +31,8 @@ message( STATUS "Using Qt ${Qt5_VERSION} at ${Qt5_Prefix}" )
 message( STATUS "=============================================================================" )
 message( STATUS )
 
-option(YAML_CPP_BUILD_TOOLS "Enable testing and parse tools" OFF)
+option(YAML_CPP_BUILD_TESTS "Enable yaml-cpp tests" OFF)
+option(YAML_CPP_BUILD_TOOLS "Enable yaml-cpp tools" OFF)
 option(YAML_CPP_BUILD_CONTRIB "Enable contrib stuff in library" OFF)
 add_subdirectory(yaml-cpp)
 add_subdirectory(mustache)
