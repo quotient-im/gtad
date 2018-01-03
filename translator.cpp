@@ -155,13 +155,13 @@ pair<Model, vector<string>> Translator::processFile(string filePath,
 {
     Model m = Analyzer(filePath, baseDirPath, *this).loadModel(_substitutions);
     if (m.callClasses.empty() && m.types.empty())
-        return { move(m), {} };
+        return make_pair(move(m), vector<string>());
 
     QDir d { _outputDirPath + m.fileDir.c_str() };
     if (!d.exists() && !d.mkpath("."))
         throw Exception { "Cannot create output directory" };
     auto fileNames = _printer->print(m);
 
-    return { move(m), move(fileNames) };
+    return make_pair(move(m), move(fileNames));
 }
 

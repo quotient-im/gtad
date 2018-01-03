@@ -112,7 +112,7 @@ template <typename T>
 inline object wrap(T val)
 {
     return object {{ "_", move(val) }};
-};
+}
 
 template <typename ObjT, typename ContT, typename FnT>
 void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
