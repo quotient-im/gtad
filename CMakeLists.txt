@@ -15,6 +15,15 @@ endif()
 
 set(CMAKE_CXX_STANDARD 14)
 
+# Setup command line parameters for the compiler and linker
+foreach (FLAG "" all pedantic extra no-unused-parameter
+        no-unused-lambda-capture no-shadow-field-in-constructor)
+    CHECK_CXX_COMPILER_FLAG("-W${FLAG}" WARN_${FLAG}_SUPPORTED)
+    if ( WARN_${FLAG}_SUPPORTED AND NOT CMAKE_CXX_FLAGS MATCHES "(^| )-W?${FLAG}($| )")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W${FLAG}")
+    endif ()
+endforeach ()
+
 find_package(Qt5 5.2.1 REQUIRED Core)
 get_filename_component(Qt5_Prefix "${Qt5_DIR}/../../../.." ABSOLUTE)
 set(CMAKE_AUTOMOC OFF)
