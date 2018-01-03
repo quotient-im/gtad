@@ -279,7 +279,7 @@ vector<string> Printer::print(const Model& model) const
                 using namespace placeholders;
                 setList(mCall, "allParams", call.collateParams(),
                         bind(&Printer::dumpField, this, _1));
-                for (auto i = 0; i < Call::paramsBlockNames.size(); ++i)
+                for (size_t i = 0; i < Call::paramsBlockNames.size(); ++i)
                     setList(mCall, Call::paramsBlockNames[i] + "Params",
                             call.allParams[i],
                             bind(&Printer::dumpField, this, _1));
