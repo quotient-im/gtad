@@ -6,6 +6,7 @@ addons:
     - ubuntu-toolchain-r-test
     packages:
     - g++-5
+    - gdb # For debugging
     - qt5-default
 
 matrix:
