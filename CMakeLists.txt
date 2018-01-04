@@ -44,7 +44,7 @@ option(YAML_CPP_BUILD_TESTS "Enable yaml-cpp tests" OFF)
 option(YAML_CPP_BUILD_TOOLS "Enable yaml-cpp tools" OFF)
 option(YAML_CPP_BUILD_CONTRIB "Enable contrib stuff in library" OFF)
 add_subdirectory(yaml-cpp)
-#add_subdirectory(mustache)
+add_subdirectory(mustache)
 
 list(APPEND SRCS
     main.cpp
