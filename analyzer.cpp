@@ -94,6 +94,8 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, Analyzer::InOut inOut, stri
             tu.name = tu.baseName = schema.name;
             return tu;
         }
+        if (schema.trivial()) // An alias for another type
+            return schema.parentTypes.front();
         // An In empty object is schemaless but existing, mapType("object")
         // Also, a nameless non-empty schema is now treated as a generic
         // mapType("object"). TODO, low priority: ad-hoc typing (via tuples?)
@@ -137,14 +139,19 @@ Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope, string locus)
     }
     if (!s.empty())
     {
-        s.name = camelCase(yamlSchema["title"].as<string>(""));
-        s.scope.swap(scope);
+        // Make sure the schema doesn't alias a global type with the same name
+        auto name = camelCase(yamlSchema["title"].as<string>(""));
+        if (!s.trivial() || name != qualifiedName(s.parentTypes.front()))
+        {
+            s.name = move(name);
+            s.scope.swap(scope);
+        }
 
         if (!s.name.empty() || !s.trivial())
         {
             cout << yamlSchema.location() << ": Found "
-                 << (!locus.empty() ? locus + " schema" :
-                     "schema " + qualifiedName(s));
+                 << (!locus.empty() ? locus + " schema"
+                     : "schema " + qualifiedName(s));
             if (s.trivial())
                 cout << " mapped to "
                      << qualifiedName(s.parentTypes.front()) << endl;
@@ -175,7 +182,7 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
              << endl;
         const auto typeName =
             paramSchema.name.empty() ? camelCase(name) : paramSchema.name;
-        model.addSchema(move(paramSchema));
+        model.addSchema(paramSchema);
         model.addVarDecl(varList,
                          VarDecl(TypeUsage(typeName), move(name), required));
     }
@@ -217,9 +224,9 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
 
             for (const YamlNodePair& yaml_call_pair: yaml_path.second.asMap())
             {
-                const string verb = yaml_call_pair.first.as<string>();
+                auto verb = yaml_call_pair.first.as<string>();
                 const YamlMap yamlCall { yaml_call_pair.second };
-                const auto operationId = yamlCall.get("operationId").as<string>();
+                auto operationId = yamlCall.get("operationId").as<string>();
                 bool needsSecurity = false;
                 if (const auto security = yamlCall["security"].asSequence())
                     needsSecurity = security[0]["accessToken"].IsDefined();
