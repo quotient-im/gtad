@@ -25,15 +25,32 @@ using namespace std;
 using namespace std::placeholders;
 namespace km = kainjow::mustache;
 using km::object;
-using km::lambda;
+using km::partial;
 using km::lambda2;
 using km::renderer;
+
+inline string safeString(const Printer::context_type& data, string key,
+                         string defaultValue = {})
+{
+    auto value = data.get(move(key));
+    return value && value->is_string() ? value->string_value() : defaultValue;
+}
+
+inline auto make_mustache(const std::string& tmpl)
+{
+    km::mustache mstch { tmpl };
+    mstch.set_custom_escape([](string s) { return s; });
+    return mstch;
+}
 
 Printer::Printer(context_type&& context, const vector<string>& templateFileNames,
                  const string& inputBasePath, string outputBasePath,
                  const string& outFilesListPath)
-    : _context(context), _typeRenderer(context["_typeRenderer"].string_value())
-    , _quoteChar(context["_literalQuote"].string_value())
+    : _context(context)
+    , _typeRenderer(make_mustache("{{#scope}}" +
+                                      safeString(context, "_scopeRenderer") +
+                                  "{{/scope}}{{>name}}"))
+    , _quoteChar(safeString(context, "_literalQuote", "\""))
     , _outputBasePath(std::move(outputBasePath))
 {
     // Enriching the context with "My Mustache library"
@@ -78,7 +95,6 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
             return s;
         }
     });
-    _typeRenderer.set_custom_escape([](const string& s) { return s; });
     for (const auto& templateFileName: templateFileNames)
     {
         auto templateFilePath = inputBasePath + templateFileName;
@@ -90,10 +106,8 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
         if (!getline(ifs, templateContents, '\0')) // Won't work on files with NULs
             throw Exception(templateFilePath + ": Failed to read");
 
-        km::mustache fileTemplate { templateContents };
-        fileTemplate.set_custom_escape([](const string& s) { return s; });
         _templates.emplace_back(withoutSuffix(templateFileName, ".mustache"),
-                                std::move(fileTemplate));
+                                make_mustache(templateContents));
     }
     if (!outFilesListPath.empty())
     {
@@ -142,9 +156,9 @@ void setList(ObjT& target, const string& name, const ContT& source)
 
 object Printer::renderType(const TypeUsage& tu) const
 {
-    object values { { "name", lambda {
-                        [name=tu.name](const std::string&){ return name; } } }
-                  , { "baseName", tu.baseName } };
+    object values { { "name", partial {[name=tu.name] { return name; }} }
+//                  , { "baseName", tu.baseName }
+    };
     auto qualifiedValues = values;
     if (!tu.scope.empty())
     {
@@ -156,14 +170,15 @@ object Printer::renderType(const TypeUsage& tu) const
     int i = 0;
     for (const auto& t: tu.innerTypes)
     {
+        // Substituting {{1}}, {{2}} and so on with actual inner type names
         auto mInnerType = renderType(t);
-        values.emplace(to_string(++i), mInnerType["name"]); // {{1}}, {{2}} and so on
+        values.emplace(to_string(++i), mInnerType["name"]);
         qualifiedValues.emplace(to_string(i), mInnerType["qualifiedName"]);
     }
 
     return { { "name", _typeRenderer.render(values) }
            , { "qualifiedName", _typeRenderer.render(qualifiedValues) }
-           , { "baseName", tu.baseName }
+//           , { "baseName", tu.baseName }
     };
 }
 
@@ -333,7 +348,6 @@ vector<string> Printer::print(const Model& model) const
         if (!ofs.good())
             throw Exception(fileName + ": Couldn't open for writing");
 
-        fileTemplate.second.set_custom_escape([](const string& s) { return s; });
         fileTemplate.second.render(context, ofs);
         if (fileTemplate.second.error_message().empty())
             _outFilesList << fileName << endl;
