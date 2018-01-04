@@ -29,11 +29,17 @@ using km::partial;
 using km::lambda2;
 using km::renderer;
 
-inline string safeString(const Printer::context_type& data, string key,
+inline string safeString(const Printer::context_type& data, const string& key,
                          string defaultValue = {})
 {
-    auto value = data.get(move(key));
-    return value && value->is_string() ? value->string_value() : defaultValue;
+    if (auto value = data.get(key))
+    {
+        if (value->is_string())
+            return value->string_value();
+        if (value->is_partial())
+            return value->partial_value()();
+    }
+    return defaultValue;
 }
 
 inline auto make_mustache(const std::string& tmpl)

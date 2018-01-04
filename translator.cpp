@@ -92,10 +92,10 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
 
         const auto pName = p.first.as<string>();
         if (p.second.IsScalar())
-            env.set(pName, p.second.as<string>());
+            env.set(pName, partial {[s=p.second.as<string>()] { return s; }});
         else
         {
-            const auto pDefinition = *p.second.asMap().begin();
+            const auto pDefinition = p.second.asMap().front();
             const auto pType = pDefinition.first.as<string>();
             const YamlNode defaultVal = pDefinition.second;
             if (pType == "set")
