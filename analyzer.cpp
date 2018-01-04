@@ -133,8 +133,9 @@ Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope, string locus)
             auto requiredIt =
                 find_if(requiredList.begin(), requiredList.end(),
                     [&name](const YamlNode& n) { return name == n.as<string>(); });
-            s.fields.emplace_back(analyzeType(property.second, In, scope),
-                                  name, requiredIt != requiredList.end());
+            model.addVarDecl(s.fields,
+                VarDecl(analyzeType(property.second, In, scope),
+                        name, requiredIt != requiredList.end()));
         }
     }
     if (!s.empty())
