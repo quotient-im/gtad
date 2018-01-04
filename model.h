@@ -105,11 +105,13 @@ using VarDecls = std::vector<VarDecl>;
 struct Path : public std::string
 {
     explicit Path (std::string path);
+    Path(const Path& other) = default;
+    Path& operator=(const Path& other) = default;
     Path(Path&&) = default;
     Path& operator=(Path&&) = default;
 
     enum PartKind { Literal, Variable };
-    using part_type = std::tuple<const_iterator, const_iterator, PartKind>;
+    using part_type = std::tuple<size_type, size_type, PartKind>;
     std::vector<part_type> parts;
 };
 

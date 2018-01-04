@@ -285,10 +285,10 @@ vector<string> Printer::print(const Model& model) const
                 if (!mCallTypes.empty())
                     mCall.emplace("models", mCallTypes);
                 setList(mCall, "pathParts", call.path.parts,
-                    [this] (const Path::part_type& p) {
-                        const auto s = string(std::get<0>(p), std::get<1>(p));
-                        return (get<2>(p) == Path::Variable) ?
-                               s : _quoteChar + s + _quoteChar;
+                    [this, &call] (const Path::part_type& p) {
+                        const string s { call.path, get<0>(p), get<1>(p) };
+                        return get<2>(p) == Path::Variable ? s
+                               : _quoteChar + s + _quoteChar;
                     });
 
                 using namespace placeholders;

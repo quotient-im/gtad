@@ -88,20 +88,20 @@ Path::Path(string path)
     while (back() == ' ' || back() == '/')
         pop_back();
 
-    for (auto i = begin(); i != end();)
+    for (size_type i = 0; i < size();)
     {
-        auto i1 = std::find(i, end(), '{');
-        auto i2 = std::find(i1, end(), '}');
-        if (i1 == end())
+        const auto i1 = find('{', i);
+        if (i1 == npos)
         {
-            parts.emplace_back(i, end(), Literal);
+            parts.emplace_back(i, npos, Literal);
             break;
         }
-        if (i2 == end())
+        const auto i2 = find('}', i1);
+        if (i2 == npos)
             throw ModelException("Unbalanced braces in the path: " + *this);
 
-        parts.emplace_back(i, i1, Literal);
-        parts.emplace_back(i1 + 1, i2, Variable);
+        parts.emplace_back(i, i1 - i, Literal);
+        parts.emplace_back(i1 + 1, i2 - i1 - 1, Variable);
         i = i2 + 1;
     }
 }

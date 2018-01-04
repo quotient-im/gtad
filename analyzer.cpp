@@ -216,7 +216,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
 
         for (const NodePair& yaml_path: paths)
         try {
-            Path path { yaml_path.first.as<string>() };
+            const Path path { yaml_path.first.as<string>() };
 
             for (const NodePair& yaml_call_pair: yaml_path.second.asMap())
             {
@@ -232,7 +232,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                      << " (" << path << ", " << verb << ')' << endl;
 
                 Call& call =
-                    model.addCall(move(path), move(verb), move(operationId),
+                    model.addCall(path, move(verb), move(operationId),
                                   needsSecurity);
 
                 call.producedContentTypes =
