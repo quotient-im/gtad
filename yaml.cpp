@@ -54,8 +54,6 @@ void YamlNode::checkType(NodeType::value checkedType) const
             ", got " + typenames[Type()] + ")");
 }
 
-YamlException::~YamlException() noexcept = default;
-
 YamlNode YamlSequence::get(size_t subnodeIdx, bool allowNonexistent) const
 {
     auto subnode = (*this)[subnodeIdx];

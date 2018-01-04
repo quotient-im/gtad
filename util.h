@@ -26,12 +26,10 @@ using pair_vector_t = std::vector<std::pair<std::string, T>>;
 
 std::string readFile(const std::string& fileName);
 
-class Exception : public std::exception
+struct Exception
 {
-    public:
-        explicit Exception(std::string msg) noexcept : message(move(msg)) { }
-        ~Exception() noexcept override;
-        const std::string message;
-
-        const char* what() const noexcept override { return message.c_str(); }
+    explicit Exception(std::string msg) noexcept : message(move(msg)) { }
+    Exception(Exception&& e) noexcept : message(std::move(e.message)) { }
+    Exception& operator=(Exception&&) = delete;
+    std::string message;
 };

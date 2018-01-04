@@ -130,13 +130,11 @@ class YamlNode : public YAML::Node
         std::shared_ptr<std::string> _fileName;
 };
 
-class YamlException : public Exception
+struct YamlException : Exception
 {
-    public:
-        explicit YamlException(const YamlNode& node, std::string msg) noexcept
-            : Exception(node.location() + ": " + move(msg))
-        { }
-       ~YamlException() noexcept override;
+    explicit YamlException(const YamlNode& node, std::string msg) noexcept
+        : Exception(node.location() + ": " + move(msg))
+    { }
 };
 
 template <typename ValueT, YAML::NodeType::value NodeTypeV>

@@ -193,9 +193,8 @@ struct Model
     void addImports(const TypeUsage& type);
 };
 
-class ModelException : public Exception
+struct ModelException : Exception
 {
-    public:
-        using Exception::Exception;
+    using Exception::Exception;
 };
 

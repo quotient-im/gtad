@@ -35,5 +35,3 @@ std::string readFile(const std::string& fileName)
     getline(ifs, result, '\0'); // Won't work on files with NULs
     return result;
 }
-
-Exception::~Exception() noexcept = default;
