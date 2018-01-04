@@ -151,7 +151,7 @@ class YamlNodeTemplate : public YamlNode
         using const_iterator = iterator_base<const value_type>;
 
         YamlNodeTemplate(const my_type&) = default;
-        YamlNodeTemplate(my_type&&) noexcept = default;
+        YamlNodeTemplate(my_type&&) = default;
         YamlNodeTemplate(const YamlNode& yn)
             : YamlNode(yn)
         {
