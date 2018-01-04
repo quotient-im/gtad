@@ -29,8 +29,8 @@ std::string readFile(const std::string& fileName);
 class Exception : public std::exception
 {
     public:
-        explicit Exception(std::string msg) : message(move(msg)) { }
-        ~Exception() override;
+        explicit Exception(std::string msg) noexcept : message(move(msg)) { }
+        ~Exception() noexcept override;
         const std::string message;
 
         const char* what() const noexcept override { return message.c_str(); }

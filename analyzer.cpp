@@ -5,9 +5,6 @@
 
 using namespace std;
 using namespace std::placeholders;
-using YAML::Node;
-using YAML::NodeType;
-using NodePair = YamlMap::NodePair;
 
 Model initModel(string path)
 {
@@ -126,14 +123,14 @@ Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope, string locus)
     if (const auto properties = yamlSchema["properties"].asMap())
     {
         const auto requiredList = yamlSchema["required"].asSequence();
-        for (const NodePair property: properties)
+        for (const YamlNodePair property: properties)
         {
             const auto name = property.first.as<string>();
             // The below is actually const but iterator_base<>::operator!=()
             // is declared non-const in yaml-cpp :-|
             auto requiredIt =
                 find_if(requiredList.begin(), requiredList.end(),
-                        [=](const Node& n) { return name == n.as<string>(); });
+                    [&name](const YamlNode& n) { return name == n.as<string>(); });
             s.fields.emplace_back(analyzeType(property.second, In, scope),
                                   name, requiredIt != requiredList.end());
         }
@@ -214,11 +211,11 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
         model.hostAddress = yaml["host"].as<string>("");
         model.basePath = yaml["basePath"].as<string>("");
 
-        for (const NodePair& yaml_path: paths)
+        for (const YamlNodePair& yaml_path: paths)
         try {
             const Path path { yaml_path.first.as<string>() };
 
-            for (const NodePair& yaml_call_pair: yaml_path.second.asMap())
+            for (const YamlNodePair& yaml_call_pair: yaml_path.second.asMap())
             {
                 const string verb = yaml_call_pair.first.as<string>();
                 const YamlMap yamlCall { yaml_call_pair.second };

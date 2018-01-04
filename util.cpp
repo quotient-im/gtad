@@ -36,4 +36,4 @@ std::string readFile(const std::string& fileName)
     return result;
 }
 
-Exception::~Exception() = default;
+Exception::~Exception() noexcept = default;
