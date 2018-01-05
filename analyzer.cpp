@@ -128,14 +128,11 @@ Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope, string locus)
         for (const YamlNodePair property: properties)
         {
             const auto name = property.first.as<string>();
-            // The below is actually const but iterator_base<>::operator!=()
-            // is declared non-const in yaml-cpp :-|
-            auto requiredIt =
-                find_if(requiredList.begin(), requiredList.end(),
+            auto required =
+                any_of(requiredList.begin(), requiredList.end(),
                     [&name](const YamlNode& n) { return name == n.as<string>(); });
-            model.addVarDecl(s.fields,
-                VarDecl(analyzeType(property.second, In, scope),
-                        name, requiredIt != requiredList.end()));
+            model.addVarDecl(s.fields, analyzeType(property.second, In, scope),
+                             name, required);
         }
     }
     if (!s.empty())
@@ -175,7 +172,7 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
     {
         // The schema consists of a single parent type, use that type instead.
         model.addVarDecl(varList,
-            VarDecl(paramSchema.parentTypes.front(), move(name), required));
+            paramSchema.parentTypes.front(), move(name), required);
     } else
     {
         cerr << "Warning: found non-trivial schema for " << name
@@ -184,8 +181,7 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
         const auto typeName =
             paramSchema.name.empty() ? camelCase(name) : paramSchema.name;
         model.addSchema(paramSchema);
-        model.addVarDecl(varList,
-                         VarDecl(TypeUsage(typeName), move(name), required));
+        model.addVarDecl(varList, TypeUsage(typeName), move(name), required);
     }
 }
 
@@ -268,7 +264,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                         // means a freeform object.
                         call.inlineBody = true;
                         model.addVarDecl(call.bodyParams(),
-                            VarDecl(translator.mapType("object"), name, false));
+                            translator.mapType("object"), name, false);
                     } else {
                         // The schema consists of a single parent type, inline that type.
                         if (bodySchema.trivial())
@@ -284,11 +280,9 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                     if (auto yamlHeaders = yamlResponse["headers"])
                         for (const auto yamlHeader: yamlHeaders.asMap())
                         {
-                            auto&& name = yamlHeader.first.as<string>();
                             model.addVarDecl(response.headers,
-                                VarDecl(analyzeType(yamlHeader.second,
-                                                    Out, call.name),
-                                        move(name), false));
+                                analyzeType(yamlHeader.second, Out, call.name),
+                                yamlHeader.first.as<string>(), false);
                         }
                     if (auto yamlSchema = yamlResponse["schema"])
                     {

@@ -27,14 +27,6 @@ TypeUsage TypeUsage::instantiate(TypeUsage&& innerType) const
     return tu;
 }
 
-string VarDecl::setupDefault(const TypeUsage& type, string defaultValue)
-{
-    return !defaultValue.empty() ? defaultValue :
-        type.name == "bool" ? "false" :
-        type.name == "int" ? "0" :
-        "{}";
-}
-
 void capitalize(string& s, string::size_type pos = 0)
 {
     if (pos < s.size())
@@ -75,6 +67,14 @@ void eraseSuffix(string* path, const string& suffix)
 string withoutSuffix(const string& path, const string& suffix)
 {
     return path.substr(0, path.find(suffix, path.size() - suffix.size()));
+}
+
+string VarDecl::toString(bool withDefault) const
+{
+    auto result = type.name + " " + name;
+    if (withDefault && !required)
+        result += " = " + (defaultValue.empty() ? "(empty)" : defaultValue);
+    return result;
 }
 
 Path::Path(string path)

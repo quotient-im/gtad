@@ -71,23 +71,18 @@ struct VarDecl
     bool required;
     std::string defaultValue;
 
-    static std::string setupDefault(const TypeUsage& type,
-                                    std::string defaultValue);
-
     VarDecl(TypeUsage type, std::string name,
             bool required = true, std::string defaultValue = {})
         : type(std::move(type)), name(std::move(name)), required(required)
-        , defaultValue(setupDefault(type, std::move(defaultValue)))
+        , defaultValue(std::move(defaultValue))
     { }
 
     bool isRequired() const { return required; }
 
-    std::string toString(bool withDefault = false) const
-    {
-        return type.name + " " +
-                (withDefault && !required ? name + " = " + defaultValue : name);
-    }
+    std::string toString(bool withDefault = false) const;
 };
+
+using VarDecls = std::vector<VarDecl>;
 
 struct ObjectSchema
 {
@@ -99,8 +94,6 @@ struct ObjectSchema
     bool empty() const { return parentTypes.empty() && fields.empty(); }
     bool trivial() const { return parentTypes.size() == 1 && fields.empty(); }
 };
-
-using VarDecls = std::vector<VarDecl>;
 
 struct Path : public std::string
 {
@@ -188,6 +181,12 @@ struct Model
     Model& operator=(Model&&) = delete;
     Call& addCall(Path path, std::string verb, std::string operationId,
                   bool needsToken);
+    template <typename... ArgTs>
+    void addVarDecl(VarDecls& varList, TypeUsage type, ArgTs&&... args)
+    {
+        addImports(type);
+        varList.emplace_back(std::move(type), std::forward<ArgTs>(args)...);
+    }
     void addVarDecl(VarDecls& varList, VarDecl var);
     void addSchema(const ObjectSchema& schema);
     void addImports(const TypeUsage& type);
