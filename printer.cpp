@@ -253,6 +253,19 @@ object Printer::dumpTypes(const Model::schemas_type& types,
     return dumpAllTypes(selectedTypes);
 }
 
+// While C++20 is not around
+
+inline bool startsWith(const string& s, const string::value_type* ss)
+{
+    for (auto ps = s.begin(); ps != s.end() && ss; ++ps, ++ss);
+    return !ss;
+}
+
+inline bool endsWith(const string& s, const string& ss)
+{
+    return equal(ss.rbegin(), ss.rend(), s.rbegin());
+}
+
 vector<string> Printer::print(const Model& model) const
 {
     auto context = _context;
@@ -279,14 +292,17 @@ vector<string> Printer::print(const Model& model) const
                              , { "path", call.path }
                              , { "skipAuth", !call.needsSecurity }
                 };
-                bool producesNotJson =
-                    find_if(
-                        call.producedContentTypes.begin(),
-                        call.producedContentTypes.end(),
-                        [] (const string& s) { return s != "application/json"; })
-                    != call.producedContentTypes.end();
-                mCall.emplace("producesNotJson?", producesNotJson);
-                globalProducesNotJson |= producesNotJson;
+                {
+                    const auto& cTypes = call.producedContentTypes;
+                    setList(mCall, "produces", cTypes);
+                    bool producesNotJson = !all_of(cTypes.begin(), cTypes.end(),
+                                                   bind(endsWith, _1, "/json"));
+                    mCall.emplace("producesNotJson?", producesNotJson);
+                    globalProducesNotJson |= producesNotJson;
+                    mCall.emplace("producesImage?",
+                            all_of(cTypes.begin(), cTypes.end(),
+                                   bind(startsWith, _1, "image/")));
+                }
                 auto&& mCallTypes = dumpTypes(model.types, call.name);
                 if (!mCallTypes.empty())
                     mCall.emplace("models", mCallTypes);
@@ -343,9 +359,8 @@ vector<string> Printer::print(const Model& model) const
         fileTemplate.first.render({ "base", model.filename }, fileNameStr);
         if (!fileTemplate.first.error_message().empty())
         {
-            clog << "When rendering the filename:" << endl
-                 << fileTemplate.first.error_message() << endl;
-            continue; // FIXME: should be fail()
+            throw Exception("Incorrect filename template: " +
+                            fileTemplate.first.error_message());
         }
         auto fileName = fileNameStr.str();
         cout << "Printing " << fileName << endl;
@@ -358,7 +373,7 @@ vector<string> Printer::print(const Model& model) const
         if (fileTemplate.second.error_message().empty())
             _outFilesList << fileName << endl;
         else
-            clog << "When rendering the file:" << endl
+            clog << fileName << ": "
                  << fileTemplate.second.error_message() << endl;
         fileNames.emplace_back(std::move(fileName));
     }
