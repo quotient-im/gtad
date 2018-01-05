@@ -201,11 +201,12 @@ object Printer::dumpField(const VarDecl& field) const
                       // TODO: nameSnakeCase
                     , { "required?",     field.required }
                     , { "required",      field.required } // Swagger compat
-                    , { "defaultValue",  field.defaultValue }
     };
+    if (!field.defaultValue.empty())
+        fieldDef.emplace("defaultValue", field.defaultValue);
 
     for (const auto& attr: field.type.attributes)
-        fieldDef.emplace(attr);
+        fieldDef.emplace(attr.first, partial {[v=attr.second] { return v; }});
 
     for (const auto& listAttr: field.type.lists)
     {

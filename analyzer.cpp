@@ -246,13 +246,24 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                 {
                     auto&& name = yamlParam.get("name").as<string>();
                     auto&& in = yamlParam.get("in").as<string>();
-                    auto required =
-                        in == "path" || yamlParam["required"].as<bool>(false);
+                    auto required = yamlParam["required"].as<bool>(false);
+                    if (!required && in == "path")
+                    {
+                        clog << yamlParam.location() << ": warning: '" << name
+                             << "' is in path but has no 'required' attribute"
+                             << " - treating as required anyway" << endl;
+                        required = true;
+                    }
+//                    clog << "Parameter: " << name << endl;
+//                    for (const YamlNodePair p: yamlParam)
+//                    {
+//                        clog << "  At " << p.first.location() << ": " << p.first.as<string>() << endl;
+//                    }
                     if (in != "body")
                     {
                         model.addVarDecl(call.getParamsBlock(in),
-                            VarDecl(analyzeType(yamlParam, In, call.name),
-                                    name, required));
+                            analyzeType(yamlParam, In, call.name), name,
+                            required, yamlParam["default"].as<string>(""));
                         continue;
                     }
 
