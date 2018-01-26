@@ -54,6 +54,10 @@ string camelCase(string s)
         else
             ++pos;
     }
+    // Remove all remaining non-identifier characters
+    s.erase(remove_if(s.begin(), s.end(),
+                      [] (auto c) { return !isalnum(c) && c != '_'; }),
+            s.end());
     return s;
 }
 
