@@ -185,14 +185,14 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
     }
 }
 
-vector<string> loadProducedContentTypes(const YamlMap& yaml)
+vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
 {
-    if (auto yamlProduces = yaml["produces"].asSequence())
+    if (auto yamlTypes = yaml[keyName].asSequence())
     {
-        vector<string> defaultProduces { yamlProduces.size() };
-        transform(yamlProduces.begin(), yamlProduces.end(),
-                  defaultProduces.begin(), bind(&YamlNode::as<string>, _1));
-        return defaultProduces;
+        vector<string> result { yamlTypes.size() };
+        transform(yamlTypes.begin(), yamlTypes.end(),
+                  result.begin(), mem_fn(&YamlNode::as<string>));
+        return result;
     }
     return {};
 }
@@ -211,7 +211,8 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
             throw Exception(
                     "This software only supports swagger version 2.0 for now");
 
-        auto defaultProduced = loadProducedContentTypes(yaml);
+        auto defaultConsumed = loadContentTypes(yaml, "consumes");
+        auto defaultProduced = loadContentTypes(yaml, "produces");
         model.hostAddress = yaml["host"].as<string>("");
         model.basePath = yaml["basePath"].as<string>("");
 
@@ -236,13 +237,17 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                     model.addCall(path, move(verb), move(operationId),
                                   needsSecurity);
 
+                call.consumedContentTypes =
+                        loadContentTypes(yamlCall, "consumes");
+                if (call.consumedContentTypes.empty())
+                    call.consumedContentTypes = defaultConsumed;
                 call.producedContentTypes =
-                    loadProducedContentTypes(yamlCall);
+                        loadContentTypes(yamlCall, "produces");
                 if (call.producedContentTypes.empty())
                     call.producedContentTypes = defaultProduced;
 
-                for (const YamlMap yamlParam:
-                    yamlCall["parameters"].asSequence())
+                const auto yamlParams = yamlCall["parameters"].asSequence();
+                for (const YamlMap yamlParam: yamlParams)
                 {
                     auto&& name = yamlParam.get("name").as<string>();
                     auto&& in = yamlParam.get("in").as<string>();

@@ -42,6 +42,19 @@ inline string safeString(const Printer::context_type& data, const string& key,
     return defaultValue;
 }
 
+// While C++20 is not around
+
+inline bool startsWith(const string& s, const string::value_type* ss)
+{
+    for (auto ps = s.begin(); ps != s.end() && ss; ++ps, ++ss);
+    return !ss;
+}
+
+inline bool endsWith(const string& s, const string& ss)
+{
+    return equal(ss.rbegin(), ss.rend(), s.rbegin());
+}
+
 inline auto make_mustache(const std::string& tmpl)
 {
     km::mustache mstch { tmpl };
@@ -254,17 +267,14 @@ object Printer::dumpTypes(const Model::schemas_type& types,
     return dumpAllTypes(selectedTypes);
 }
 
-// While C++20 is not around
-
-inline bool startsWith(const string& s, const string::value_type* ss)
+bool dumpContentTypes(object& target, const string& keyName, vector<string> types)
 {
-    for (auto ps = s.begin(); ps != s.end() && ss; ++ps, ++ss);
-    return !ss;
-}
-
-inline bool endsWith(const string& s, const string& ss)
-{
-    return equal(ss.rbegin(), ss.rend(), s.rbegin());
+    const auto& cTypes = types;
+    setList(target, keyName, cTypes);
+    const bool hasNonJson =
+            !all_of(cTypes.begin(), cTypes.end(), bind(endsWith, _1, "/json"));
+    target.emplace(keyName + "NonJson?", hasNonJson);
+    return hasNonJson;
 }
 
 vector<string> Printer::print(const Model& model) const
@@ -283,7 +293,7 @@ vector<string> Printer::print(const Model& model) const
     if (!model.callClasses.empty())
     {
         const auto& callClass = model.callClasses.back();
-        bool globalProducesNotJson = false;
+        bool globalConsumesNonJson = false, globalProducesNonJson = false;
         object mOperations; // Any attributes should be added after setList
         setList(mOperations, "operation", callClass.calls,
             [&] (const Call& call) {
@@ -294,14 +304,15 @@ vector<string> Printer::print(const Model& model) const
                              , { "skipAuth", !call.needsSecurity }
                 };
                 {
-                    const auto& cTypes = call.producedContentTypes;
-                    setList(mCall, "produces", cTypes);
-                    bool producesNotJson = !all_of(cTypes.begin(), cTypes.end(),
-                                                   bind(endsWith, _1, "/json"));
-                    mCall.emplace("producesNotJson?", producesNotJson);
-                    globalProducesNotJson |= producesNotJson;
+                    globalConsumesNonJson |=
+                        dumpContentTypes(mCall, "consumes",
+                                         call.consumedContentTypes);
+                    globalProducesNonJson |=
+                        dumpContentTypes(mCall, "produces",
+                                         call.producedContentTypes);
                     mCall.emplace("producesImage?",
-                            all_of(cTypes.begin(), cTypes.end(),
+                            all_of(call.producedContentTypes.begin(),
+                                   call.producedContentTypes.end(),
                                    bind(startsWith, _1, "image/")));
                 }
                 auto&& mCallTypes = dumpTypes(model.types, call.name);
@@ -348,7 +359,8 @@ vector<string> Printer::print(const Model& model) const
         if (!mOperations.empty())
         {
             mOperations.emplace("classname", "NOT_IMPLEMENTED");
-            mOperations.emplace("producesNotJson?", globalProducesNotJson);
+            mOperations.emplace("consumesNonJson?", globalConsumesNonJson);
+            mOperations.emplace("producesNonJson?", globalProducesNonJson);
             context.set("operations", mOperations);
         }
     }

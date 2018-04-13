@@ -149,6 +149,7 @@ struct Call
     bool inlineBody = false;
 
     std::vector<std::string> producedContentTypes;
+    std::vector<std::string> consumedContentTypes;
     std::vector<Response> responses;
 };
 
