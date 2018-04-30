@@ -208,7 +208,7 @@ object Printer::dumpField(const VarDecl& field) const
         tolower(paramNameCamelCase.front(), locale::classic());
 
     object fieldDef { { "dataType",      renderType(field.type) }
-                    , { "baseName",      field.name }
+                    , { "baseName",      field.baseName }
                     , { "paramName",     paramNameCamelCase } // Swagger compat
                     , { "nameCamelCase", paramNameCamelCase }
                       // TODO: nameSnakeCase

@@ -37,9 +37,11 @@ class Translator
         TypeUsage mapType(const std::string& swaggerType,
                           const std::string& swaggerFormat = {},
                           const std::string& baseName = {}) const;
+        std::string mapIdentifier(const std::string& baseName) const;
 
     private:
         pair_vector_t<std::string> _substitutions;
+        pair_vector_t<std::string> _identifiers;
         // In JSON/YAML, the below looks like:
         // <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
         pair_vector_t<pair_vector_t<TypeUsage>> _typesMap;

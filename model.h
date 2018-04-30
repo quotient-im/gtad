@@ -67,13 +67,15 @@ struct TypeUsage
 struct VarDecl
 {
     TypeUsage type;
-    std::string name;
+    std::string name; //< Identifier in the generated code
+    std::string baseName; //< As used in the API
     bool required;
     std::string defaultValue;
 
-    VarDecl(TypeUsage type, std::string name,
+    VarDecl(TypeUsage type, std::string name, std::string baseName,
             bool required = true, std::string defaultValue = {})
-        : type(std::move(type)), name(std::move(name)), required(required)
+        : type(std::move(type)), name(std::move(name))
+        , baseName(std::move(baseName)), required(required)
         , defaultValue(std::move(defaultValue))
     { }
 
@@ -182,12 +184,6 @@ struct Model
     Model& operator=(Model&&) = delete;
     Call& addCall(Path path, std::string verb, std::string operationId,
                   bool needsToken);
-    template <typename... ArgTs>
-    void addVarDecl(VarDecls& varList, TypeUsage type, ArgTs&&... args)
-    {
-        addImports(type);
-        varList.emplace_back(std::move(type), std::forward<ArgTs>(args)...);
-    }
     void addVarDecl(VarDecls& varList, VarDecl var);
     void addSchema(const ObjectSchema& schema);
     void addImports(const TypeUsage& type);

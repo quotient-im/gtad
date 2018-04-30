@@ -145,12 +145,12 @@ Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope, string locus)
         const auto requiredList = yamlSchema["required"].asSequence();
         for (const YamlNodePair property: properties)
         {
-            const auto name = property.first.as<string>();
-            auto required =
-                any_of(requiredList.begin(), requiredList.end(),
-                    [&name](const YamlNode& n) { return name == n.as<string>(); });
-            model.addVarDecl(s.fields, analyzeType(property.second, In, scope),
-                             name, required);
+            const auto baseName = property.first.as<string>();
+            auto required = any_of(requiredList.begin(), requiredList.end(),
+                                [&baseName](const YamlNode& n)
+                                    { return baseName == n.as<string>(); } );
+            addVarDecl(s.fields, analyzeType(property.second, In, scope),
+                       baseName, required);
         }
     }
     if (!s.empty())
@@ -180,7 +180,7 @@ Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope, string locus)
 }
 
 void Analyzer::addParamsFromSchema(VarDecls& varList,
-        std::string name, bool required, const ObjectSchema& paramSchema)
+        const string& baseName, bool required, const ObjectSchema& paramSchema)
 {
     if (paramSchema.parentTypes.empty())
     {
@@ -189,17 +189,16 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
     } else if (paramSchema.trivial())
     {
         // The schema consists of a single parent type, use that type instead.
-        model.addVarDecl(varList,
-            paramSchema.parentTypes.front(), move(name), required);
+        addVarDecl(varList, paramSchema.parentTypes.front(), baseName, required);
     } else
     {
-        cerr << "Warning: found non-trivial schema for " << name
+        cerr << "Warning: found non-trivial schema for " << baseName
              << "; these are not supported, expect invalid parameter set"
              << endl;
         const auto typeName =
-            paramSchema.name.empty() ? camelCase(name) : paramSchema.name;
+            paramSchema.name.empty() ? camelCase(baseName) : paramSchema.name;
         model.addSchema(paramSchema);
-        model.addVarDecl(varList, TypeUsage(typeName), move(name), required);
+        addVarDecl(varList, TypeUsage(typeName), baseName, required);
     }
 }
 
@@ -284,7 +283,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
 //                    }
                     if (in != "body")
                     {
-                        model.addVarDecl(call.getParamsBlock(in),
+                        addVarDecl(call.getParamsBlock(in),
                             analyzeType(yamlParam, In, call.name), name,
                             required, yamlParam["default"].as<string>(""));
                         continue;
@@ -297,7 +296,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                         // Special case: an empty schema for a body parameter
                         // means a freeform object.
                         call.inlineBody = true;
-                        model.addVarDecl(call.bodyParams(),
+                        addVarDecl(call.bodyParams(),
                             translator.mapType("object"), name, false);
                     } else {
                         // The schema consists of a single parent type, inline that type.
@@ -312,9 +311,9 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                 {
                     Response response { "200" };
                     if (auto yamlHeaders = yamlResponse["headers"])
-                        for (const auto yamlHeader: yamlHeaders.asMap())
+                        for (const auto& yamlHeader: yamlHeaders.asMap())
                         {
-                            model.addVarDecl(response.headers,
+                            addVarDecl(response.headers,
                                 analyzeType(yamlHeader.second, Out, call.name),
                                 yamlHeader.first.as<string>(), false);
                         }

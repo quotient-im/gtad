@@ -18,12 +18,12 @@
 
 #pragma once
 
+#include "translator.h"
 #include "model.h"
 #include "util.h"
 
 #include <string>
 
-class Translator;
 class YamlNode;
 class YamlMap;
 
@@ -48,6 +48,15 @@ class Analyzer
         ObjectSchema analyzeSchema(const YamlMap& yamlSchema,
                 std::string scope = {}, std::string locus = {});
         ObjectSchema tryResolveRefs(const YamlMap& yamlSchema);
-        void addParamsFromSchema(VarDecls& varList, std::string name,
+        void addParamsFromSchema(VarDecls& varList, const std::string& baseName,
                 bool required, const ObjectSchema& bodyParamSchema);
+        template <typename... ArgTs>
+        void addVarDecl(VarDecls& varList, TypeUsage type,
+                        const std::string& baseName, ArgTs&&... args)
+        {
+            model.addImports(type);
+            varList.emplace_back(std::move(type),
+                translator.mapIdentifier(baseName), baseName,
+                std::forward<ArgTs>(args)...);
+        }
 };
