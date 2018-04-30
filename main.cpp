@@ -28,8 +28,8 @@ int main( int argc, char* argv[] )
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setOrganizationName("QMatrixClient");
-    QCoreApplication::setApplicationName("apigen");
-    QCoreApplication::setApplicationVersion("0.0");
+    QCoreApplication::setApplicationName("GTAD");
+    QCoreApplication::setApplicationVersion("0.5");
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QCoreApplication::translate("main",
@@ -58,17 +58,14 @@ int main( int argc, char* argv[] )
         Translator t(parser.value(configPathOption), parser.value(outputDirOption));
 
         QStringList paths, exclusions;
-        for (auto path: parser.positionalArguments())
+        for (const auto& path: parser.positionalArguments())
         {
             if (path.endsWith('-'))
-            {
-                path.chop(1);
-                exclusions.append(path);
-            }
+                exclusions.append(path.left(path.size() - 1));
             else
                 paths.append(path);
         }
-        for(auto path: paths)
+        for(auto& path: paths)
         {
             if (!QFileInfo(path).isDir())
             {

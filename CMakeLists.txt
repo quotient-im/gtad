@@ -24,7 +24,7 @@ foreach (FLAG "" all pedantic extra no-unused-parameter
     endif ()
 endforeach ()
 
-find_package(Qt5 5.2.1 REQUIRED Core)
+find_package(Qt5 5.7 REQUIRED Core)
 get_filename_component(Qt5_Prefix "${Qt5_DIR}/../../../.." ABSOLUTE)
 set(CMAKE_AUTOMOC OFF)
 
