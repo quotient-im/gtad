@@ -46,11 +46,11 @@ struct TypeUsage
     using imports_type = std::vector<std::string>;
 
     std::string scope;
-    std::string name;
-    std::string baseName;
+    std::string name; //< As transformed for the generated code
+    std::string baseName; //< As used in the API definition
     std::unordered_map<std::string, std::string> attributes;
     std::unordered_map<std::string, std::vector<std::string>> lists;
-    std::vector<TypeUsage> innerTypes;
+    std::vector<TypeUsage> innerTypes; //< Parameter types for type templates
 
     explicit TypeUsage(std::string typeName) : name(std::move(typeName)) { }
     explicit TypeUsage(const ObjectSchema& schema);

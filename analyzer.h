@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (C) 2016 Kitsune Ral <kitsune-ral@users.sf.net>
+ * Copyright (C) 2018 Kitsune Ral <kitsune-ral@users.sf.net>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -30,7 +30,7 @@ class YamlMap;
 class Analyzer
 {
     public:
-        Analyzer(const std::string& filePath, const std::string& basePath,
+        Analyzer(std::string filePath, std::string basePath,
                  const Translator& translator);
 
         Model loadModel(const pair_vector_t<std::string>& substitutions);

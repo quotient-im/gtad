@@ -1,3 +1,21 @@
+/******************************************************************************
+ * Copyright (C) 2018 Kitsune Ral <kitsune-ral@users.sf.net>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+
 #include "analyzer.h"
 
 #include "translator.h"
@@ -14,10 +32,10 @@ Model initModel(string path)
     return Model(path.substr(0, dirPos + 1), path.substr(dirPos + 1));
 }
 
-Analyzer::Analyzer(const std::string& filePath, const std::string& basePath,
+Analyzer::Analyzer(string filePath, string basePath,
                    const Translator& translator)
-        : fileName(filePath), baseDir(basePath)
-        , model(initModel(filePath)), translator(translator)
+        : fileName(filePath), baseDir(move(basePath))
+        , model(initModel(move(filePath))), translator(translator)
 { }
 
 ObjectSchema Analyzer::tryResolveRefs(const YamlMap& yamlSchema)
@@ -249,7 +267,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions)
                 const auto yamlParams = yamlCall["parameters"].asSequence();
                 for (const YamlMap yamlParam: yamlParams)
                 {
-                    auto&& name = yamlParam.get("name").as<string>();
+                    const auto& name = yamlParam.get("name").as<string>();
                     auto&& in = yamlParam.get("in").as<string>();
                     auto required = yamlParam["required"].as<bool>(false);
                     if (!required && in == "path")

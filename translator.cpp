@@ -1,3 +1,21 @@
+/******************************************************************************
+ * Copyright (C) 2016 Kitsune Ral <kitsune-ral@users.sf.net>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+
 #include "translator.h"
 
 #include "analyzer.h"
@@ -132,7 +150,8 @@ TypeUsage Translator::mapType(const string& swaggerType,
             {
                 const auto& swFormat = swFormatPair.first;
                 if (swFormat == swaggerFormat ||
-                    (swFormat.front() == '/' && swFormat.back() == '/' &&
+                    (swFormat.size() > 1 &&
+                     swFormat.front() == '/' && swFormat.back() == '/' &&
                      regex_match(swaggerFormat,
                                  regex(++swFormat.begin(), --swFormat.end()))))
                 {
@@ -153,7 +172,8 @@ TypeUsage Translator::mapType(const string& swaggerType,
 pair<Model, vector<string>> Translator::processFile(string filePath,
                                                     string baseDirPath) const
 {
-    Model m = Analyzer(filePath, baseDirPath, *this).loadModel(_substitutions);
+    Model m = Analyzer(move(filePath), move(baseDirPath), *this)
+                .loadModel(_substitutions);
     if (m.callClasses.empty() && m.types.empty())
         return make_pair(move(m), vector<string>());
 
