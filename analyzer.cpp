@@ -55,6 +55,15 @@ ObjectSchema Analyzer::tryResolveRefs(const YamlMap& yamlSchema)
     ObjectSchema schema;
     for (const auto& refPath: refPaths)
     {
+        // First try to resolve refPath in types map; if there's no match, load
+        // the schema from the reference path.
+        auto tu = translator.mapType("object", refPath);
+        if (!tu.empty())
+        {
+            cout << "Using type " << tu.name << " for " << refPath << endl;
+            schema.parentTypes.emplace_back(move(tu));
+            continue;
+        }
         // The referenced file's path is relative to the current file's path;
         // we have to append a path to the current file's directory in order to
         // find the file.
@@ -107,7 +116,7 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, Analyzer::InOut inOut, stri
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
         {
             model.addSchema(schema);
-            TypeUsage tu = translator.mapType("schema");
+            auto tu = translator.mapType("schema");
             tu.scope = schema.scope;
             tu.name = tu.baseName = schema.name;
             return tu;
@@ -132,7 +141,7 @@ Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope, string locus)
     // 1. Parsing a JSON Schema document (empty schema means an empty object)
     // 2. Parsing the list of body parameters (empty schema means any object)
     // 3. Parsing the list of result parts (empty schema means an empty object)
-    ObjectSchema s = tryResolveRefs(yamlSchema);
+    auto s = tryResolveRefs(yamlSchema);
     if (s.empty() && yamlSchema["type"].as<string>("object") != "object")
     {
         auto parentType = analyzeType(yamlSchema, In, scope);
