@@ -22,7 +22,7 @@ matrix:
 
 install:
 - eval "${ENV_EVAL}"
-- if [ "$TRAVIS_OS_NAME" = "linux" ]; then . /opt/qt56/bin/qt57-env.sh; fi
+- if [ "$TRAVIS_OS_NAME" = "linux" ]; then . /opt/qt57/bin/qt57-env.sh; fi
 
 script:
 - mkdir build && cd build
