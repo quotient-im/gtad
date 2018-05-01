@@ -164,10 +164,10 @@ Analyzer::analyzeSchema(const YamlMap& yamlSchema, string scope, string locus)
     }
     if (!s.empty())
     {
-        // Make sure the schema doesn't alias a global type with the same name
         auto name = camelCase(yamlSchema["title"].as<string>(""));
-        if (!s.trivial() || name != qualifiedName(s.parentTypes.front()))
+        if (!s.trivial()/* || name != qualifiedName(s.parentTypes.front()) */)
         {
+            // If the schema is not just an alias for another type, name it.
             s.name = move(name);
             s.scope.swap(scope);
         }
