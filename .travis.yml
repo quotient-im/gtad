@@ -4,7 +4,7 @@ addons:
   apt:
     sources:
     - ubuntu-toolchain-r-test
-    - sourceline: 'ppa:beineri/opt-qt563-trusty'
+    - sourceline: 'ppa:beineri/opt-qt571-trusty'
     packages:
     - g++-5
     - gdb # For debugging
