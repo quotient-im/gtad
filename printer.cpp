@@ -282,7 +282,7 @@ bool dumpContentTypes(object& target, const string& keyName, vector<string> type
 vector<string> Printer::print(const Model& model) const
 {
     auto context = _context;
-    context.set("filenameBase", model.filename);
+    context.set("filenameBase", model.srcFilename);
     context.set("basePathWithoutHost", model.basePath);
     context.set("basePath", model.hostAddress + model.basePath);
     setList(context, "imports", model.imports);
@@ -371,7 +371,7 @@ vector<string> Printer::print(const Model& model) const
     {
         ostringstream fileNameStr;
         fileNameStr << _outputBasePath << model.fileDir;
-        fileTemplate.first.render({ "base", model.filename }, fileNameStr);
+        fileTemplate.first.render({ "base", model.srcFilename }, fileNameStr);
         if (!fileTemplate.first.error_message().empty())
         {
             throw Exception("Incorrect filename template: " +

@@ -171,7 +171,8 @@ struct Model
     using schemas_type = std::vector<ObjectSchema>;
 
     const std::string fileDir;
-    const std::string filename;
+    const std::string srcFilename;
+    std::vector<std::string> dstFiles;
 
     std::string hostAddress;
     std::string basePath;
@@ -180,7 +181,7 @@ struct Model
     std::vector<CallClass> callClasses;
 
     Model(std::string fileDir, std::string fileName)
-        : fileDir(std::move(fileDir)), filename(std::move(fileName))
+        : fileDir(std::move(fileDir)), srcFilename(std::move(fileName))
     { }
     ~Model() = default;
     Model(const Model&) = delete;

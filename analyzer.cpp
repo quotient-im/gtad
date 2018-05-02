@@ -119,16 +119,14 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         // find the file.
         cout << "Sub-processing schema in "
              << model.fileDir << "./" << refPath << endl;
-        const auto processResult =
-            translator.processFile(model.fileDir + refPath, baseDir);
-        const Model& m = processResult.first; // Looking forward to switching to C++17
-        const auto& filesList = processResult.second;
+        const Model& m =
+                translator.processFile(model.fileDir + refPath, baseDir);
         if (m.types.empty())
             throw YamlException(yamlSchema, "The target file has no schemas");
 
         schema.parentTypes.emplace_back(
             m.types.back().name,
-            filesList.empty() ? string{} : "\"" + filesList.front() + "\"");
+            m.dstFiles.empty() ? string{} : "\"" + m.dstFiles.front() + "\"");
         // TODO: distinguish between interface files (that should be imported,
         // headers in C/C+) and implementation files (that should not).
         // filesList.front() assumes that there's only one interface file, and
@@ -346,7 +344,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
     } else {
         auto schema = analyzeSchema(yaml, inOut);
         if (schema.name.empty())
-            schema.name = camelCase(model.filename);
+            schema.name = camelCase(model.srcFilename);
         model.addSchema(schema);
     }
     return std::move(model);

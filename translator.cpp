@@ -212,19 +212,19 @@ string Translator::mapIdentifier(const string& baseName) const
     return baseName;
 }
 
-pair<Model, vector<string>>
-Translator::processFile(string filePath, string baseDirPath, InOut inOut) const
+Model Translator::processFile(string filePath, string baseDirPath,
+                              InOut inOut) const
 {
     Model m = Analyzer(move(filePath), move(baseDirPath), *this)
                 .loadModel(_substitutions, inOut);
     if (m.callClasses.empty() && m.types.empty())
-        return make_pair(move(m), vector<string>());
+        return m;
 
     QDir d { _outputDirPath + m.fileDir.c_str() };
     if (!d.exists() && !d.mkpath("."))
         throw Exception { "Cannot create output directory" };
-    auto fileNames = _printer->print(m);
+    m.dstFiles = _printer->print(m);
 
-    return make_pair(move(m), move(fileNames));
+    return m;
 }
 
