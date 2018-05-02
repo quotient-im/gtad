@@ -79,7 +79,9 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
     : _outputDirPath(outputDirPath.endsWith('/') ?
                      move(outputDirPath) : outputDirPath + '/')
 {
-    const auto configY = YamlMap::loadFromFile(configFilePath.toStdString());
+    auto cfp = configFilePath.toStdString();
+    cout << "Using config file at " << cfp << endl;
+    const auto configY = YamlMap::loadFromFile(cfp);
 
     const auto& analyzerYaml = configY["analyzer"].asMap();
     _substitutions = loadStringMap(analyzerYaml["subst"].asMap());
@@ -210,11 +212,11 @@ string Translator::mapIdentifier(const string& baseName) const
     return baseName;
 }
 
-pair<Model, vector<string>> Translator::processFile(string filePath,
-                                                    string baseDirPath) const
+pair<Model, vector<string>>
+Translator::processFile(string filePath, string baseDirPath, InOut inOut) const
 {
     Model m = Analyzer(move(filePath), move(baseDirPath), *this)
-                .loadModel(_substitutions);
+                .loadModel(_substitutions, inOut);
     if (m.callClasses.empty() && m.types.empty())
         return make_pair(move(m), vector<string>());
 

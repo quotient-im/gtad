@@ -86,12 +86,17 @@ struct VarDecl
 
 using VarDecls = std::vector<VarDecl>;
 
+using InOut = unsigned short;
+static constexpr InOut In = 0x1;
+static constexpr InOut Out = 0x2;
+
 struct ObjectSchema
 {
     std::string scope; // Either empty (top-level) or a Call name
     std::string name;
     std::vector<TypeUsage> parentTypes;
     std::vector<VarDecl> fields;
+    InOut inOut = 0;
 
     bool empty() const { return parentTypes.empty() && fields.empty(); }
     bool trivial() const { return parentTypes.size() == 1 && fields.empty(); }

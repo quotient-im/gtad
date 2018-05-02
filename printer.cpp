@@ -237,8 +237,10 @@ object Printer::dumpAllTypes(const Model::schemas_type& types) const
     setList(mModels, "model", types,
         [this](const ObjectSchema& type)
         {
-            object mType = renderType(TypeUsage(type));
+            auto mType = renderType(TypeUsage(type));
             mType["classname"] = type.name; // Swagger compat
+            mType["in?"] = !!(type.inOut&In);
+            mType["out?"] = !!(type.inOut&Out);
             if (type.trivial())
             {
                 mType["trivial?"] = true;

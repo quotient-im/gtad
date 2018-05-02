@@ -33,7 +33,8 @@ class Analyzer
         Analyzer(std::string filePath, std::string basePath,
                  const Translator& translator);
 
-        Model loadModel(const pair_vector_t<std::string>& substitutions);
+        Model loadModel(const pair_vector_t<std::string>& substitutions,
+                        InOut inOut);
 
     private:
         std::string fileName;
@@ -41,13 +42,12 @@ class Analyzer
         Model model;
         const Translator& translator;
 
-        enum InOut { In, Out };
-        TypeUsage analyzeType(const YamlMap& node,
-                              InOut inOut, std::string scope);
-
-        ObjectSchema analyzeSchema(const YamlMap& yamlSchema,
+        enum IsTopLevel : bool { Inner = false, TopLevel = true };
+        TypeUsage analyzeType(const YamlMap& node, InOut inOut,
+                              std::string scope, IsTopLevel isTopLevel = Inner);
+        ObjectSchema analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                 std::string scope = {}, std::string locus = {});
-        ObjectSchema tryResolveRefs(const YamlMap& yamlSchema);
+
         void addParamsFromSchema(VarDecls& varList, const std::string& baseName,
                 bool required, const ObjectSchema& bodyParamSchema);
         template <typename... ArgTs>
