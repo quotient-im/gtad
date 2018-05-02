@@ -47,6 +47,13 @@ int main( int argc, char* argv[] )
         "outputdir");
     parser.addOption(outputDirOption);
 
+    QCommandLineOption schemaRoleOption("role",
+        QCoreApplication::translate("main",
+            "For JSON Schema, generate code assuming <role>, one of: "
+            "i (input), o (output); all other values mean both directions"),
+        "role", "io");
+    parser.addOption(schemaRoleOption);
+
     parser.addPositionalArgument("files",
         QCoreApplication::translate("main", "Files or directories with API definition in Swagger format. Append a hyphen to exclude a file/directory."),
         "files...");
@@ -65,11 +72,14 @@ int main( int argc, char* argv[] )
             else
                 paths.append(path);
         }
+        const auto& roleValue = parser.value(schemaRoleOption);
+        const InOut role =
+                roleValue == "i" ? In : roleValue == "o" ? Out : In|Out;
         for(auto& path: paths)
         {
             if (!QFileInfo(path).isDir())
             {
-                t.processFile(path.toStdString(), "");
+                t.processFile(path.toStdString(), "", role);
                 continue;
             }
 
@@ -78,7 +88,7 @@ int main( int argc, char* argv[] )
             QStringList filesList = QDir(path).entryList(QDir::Readable|QDir::Files);
             for (const auto& fn: filesList)
                 if (!exclusions.contains(fn))
-                    t.processFile(fn.toStdString(), path.toStdString());
+                    t.processFile(fn.toStdString(), path.toStdString(), role);
         }
     }
     catch (Exception& e)
