@@ -179,8 +179,8 @@ TypeUsage Translator::mapType(const string& swaggerType,
                 if (swFormat == swaggerFormat ||
                     (swFormat.size() > 1 &&
                      swFormat.front() == '/' && swFormat.back() == '/' &&
-                     regex_match(swaggerFormat,
-                                 regex(++swFormat.begin(), --swFormat.end()))))
+                     regex_search(swaggerFormat,
+                                  regex(++swFormat.begin(), --swFormat.end()))))
                 {
                     // FIXME (#22): The below is a source of great inefficiency.
                     // TypeUsage should become a handle to an instance of
