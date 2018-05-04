@@ -32,6 +32,8 @@ using namespace std;
 TypeUsage parseTypeEntry(const YamlNode& yamlTypeNode)
 {
     using YAML::NodeType;
+    if (yamlTypeNode.Type() == NodeType::Null)
+        return TypeUsage("");
     if (yamlTypeNode.Type() == NodeType::Scalar)
         return TypeUsage(yamlTypeNode.as<string>());
 
@@ -45,11 +47,8 @@ TypeUsage parseTypeEntry(const YamlNode& yamlTypeNode)
         if (attr.second.Type() == NodeType::Scalar)
             typeUsage.attributes.emplace(move(attrName),
                                          attr.second.as<string>());
-        else if (attr.second.Type() == NodeType::Sequence)
-        {
-            // TODO
-            cerr << "List attributes in 'types:' are not implemented" << endl;
-        }
+        else if (const auto& seq = attr.second.asSequence())
+            typeUsage.lists.emplace(move(attrName), seq.asStrings());
     }
     return typeUsage;
 }

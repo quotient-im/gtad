@@ -64,6 +64,14 @@ YamlNode YamlSequence::get(size_t subnodeIdx, bool allowNonexistent) const
             "subnode #" + std::to_string(subnodeIdx) + " is undefined");
 }
 
+std::vector<string> YamlSequence::asStrings() const
+{
+    std::vector<string> listVals { size() };
+    transform(begin(), end(), listVals.begin(),
+              std::mem_fn(&YamlNode::as<string>));
+    return listVals;
+}
+
 YAML::Node makeNodeFromFile(const string& fileName,
                             const pair_vector_t<string>& replacePairs)
 {

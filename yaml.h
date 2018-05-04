@@ -202,6 +202,8 @@ class YamlSequence : public YamlNodeTemplate<YamlNode, YAML::NodeType::Sequence>
                         "Trying to get an element from an empty sequence");
             return operator[](size() - 1);
         }
+
+        std::vector<std::string> asStrings() const;
 };
 
 struct YamlNodePair : public std::pair<YamlNode, YamlNode>

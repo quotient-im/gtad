@@ -235,12 +235,7 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
 vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
 {
     if (auto yamlTypes = yaml[keyName].asSequence())
-    {
-        vector<string> result { yamlTypes.size() };
-        transform(yamlTypes.begin(), yamlTypes.end(),
-                  result.begin(), mem_fn(&YamlNode::as<string>));
-        return result;
-    }
+        return yamlTypes.asStrings();
     return {};
 }
 
