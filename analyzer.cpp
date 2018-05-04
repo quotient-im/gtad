@@ -55,7 +55,9 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
                 auto elemType =
                     analyzeType(yamlElemType, inOut, move(scope));
                 const auto& protoType =
-                    translator.mapType("array", elemType.baseName, "array");
+                    translator.mapType("array", elemType.baseName,
+                        camelCase(node["title"].as<string>(
+                                           '[' + elemType.baseName + ']')));
                 return protoType.instantiate(move(elemType));
             }
 
@@ -75,7 +77,8 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
                                 analyzeType(propertyMap.asMap(), inOut, scope);
                         const auto& protoType =
                                 translator.mapType("map", elemType.baseName,
-                                                   "additionalProperties");
+                                    camelCase(node["title"].as<string>(
+                                        "{string:" + elemType.baseName + '}')));
                         return protoType.instantiate(move(elemType));
                     }
                     case YAML::NodeType::Scalar:
