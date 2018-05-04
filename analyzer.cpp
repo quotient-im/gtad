@@ -63,9 +63,34 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
     }
     if (yamlType == "object")
     {
-        auto schema = analyzeSchema(node, inOut, move(scope));
-        if (isTopLevel && inOut&Out && schema.empty())
-            return TypeUsage(""); // Non-existent object, void
+        auto schema = analyzeSchema(node, inOut, scope);
+        if (schema.empty())
+        {
+            if (const auto propertyMap = node["additionalProperties"])
+                switch (propertyMap.Type())
+                {
+                    case YAML::NodeType::Map:
+                    {
+                        auto elemType =
+                                analyzeType(propertyMap.asMap(), inOut, scope);
+                        const auto& protoType =
+                                translator.mapType("map", elemType.baseName,
+                                                   "additionalProperties");
+                        return protoType.instantiate(move(elemType));
+                    }
+                    case YAML::NodeType::Scalar:
+                        if (propertyMap.as<bool>()) // Generic map
+                            return translator.mapType("map");
+                        else // Additional properties forbidden - no special treatment
+                            break;
+                    default:
+                        throw YamlException(propertyMap,
+                            "additionalProperties should be either a boolean or a map");
+                }
+
+            if (isTopLevel && inOut&Out)
+                return TypeUsage(""); // The type returned by this API is void
+        }
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
         {
             model.addSchema(schema);
