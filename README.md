@@ -55,13 +55,66 @@ GTAD uses 3 inputs to generate "things":
 2. A configuration file in YAML. One GTAD invocation always uses one configuration file (but you can invoke GTAD separately for different OpenAPI files). The format of this file is described in detail below.
 3. Source code template files. As of now, GTAD uses [Kainjow's Mustache implementation](https://github.com/kainjow/Mustache) for templating. This may change in the future (Lua looks as a very promising candidate to replace Mustache). GTAD exports the model for the API as a Mustache structure; this is covered in the respective section below.
 
-A good introduction to GTAD usage can be found in [libQMatrixClient](https://github.com/QMatrixClient/libqmatrixclient/) that has its network request classes generated from OpenAPI definitions of [Matrix CS API](https://matrix.org/docs/spec/client_server/unstable.html). The CMakeLists.txt has a typical GTAD invocation line, using [gtad.yaml](https://github.com/QMatrixClient/libqmatrixclient/blob/master/lib/csapi/gtad.yaml) for the configuration file and [{{base}}.h.mustache](https://github.com/QMatrixClient/libqmatrixclient/blob/master/lib/csapi/%7B%7Bbase%7D%7D.h.mustache)/[{{base}}.cpp.mustache](https://github.com/QMatrixClient/libqmatrixclient/blob/master/lib/csapi/%7B%7Bbase%7D%7D.cpp.mustache) as templates for code generation. See also notes in that project's [CONTRIBUTING.md](https://github.com/QMatrixClient/libqmatrixclient/blob/master/CONTRIBUTING.md) and [CMakeLists.txt](https://github.com/QMatrixClient/libqmatrixclient/blob/master/CMakeLists.txt) for an idea how to integrate GTAD in your project.
+A good example of GTAD usage can be found in [libQMatrixClient](https://github.com/QMatrixClient/libqmatrixclient/) that has its network request classes generated from OpenAPI definitions of [Matrix CS API](https://matrix.org/docs/spec/client_server/unstable.html). The CMakeLists.txt has a GTAD invocation line, using [gtad.yaml](https://github.com/QMatrixClient/libqmatrixclient/blob/master/lib/csapi/gtad.yaml) for the configuration file and [{{base}}.h.mustache](https://github.com/QMatrixClient/libqmatrixclient/blob/master/lib/csapi/%7B%7Bbase%7D%7D.h.mustache)/[{{base}}.cpp.mustache](https://github.com/QMatrixClient/libqmatrixclient/blob/master/lib/csapi/%7B%7Bbase%7D%7D.cpp.mustache) as templates for code generation. See also notes in that project's [CONTRIBUTING.md](https://github.com/QMatrixClient/libqmatrixclient/blob/master/CONTRIBUTING.md) and [CMakeLists.txt](https://github.com/QMatrixClient/libqmatrixclient/blob/master/CMakeLists.txt) for an idea how to integrate GTAD in your project.
 
 ### Invocation
 
-TODO
+GTAD is a command-line application; assuming that the `gtad` binary is in your PATH, the invocation line looks as follows:
+```
+gtad --config <configfile> --out <outdir> <files/dirs...>
+
+```
+The options are:
+- `<configfile>` - the path to GTAD configuration file (see the next section)
+- `<outdir>` - the (top-level) directory where the generated files (possibly a tree of them) will be put. Must exist before runnning GTAD.
+- `<files/dirs...>` - a list of OpenAPI files or directories with those files to process. A hyphen appended to the filename means that the file must be skipped (allows to select a directory with files and then explicitly disable some files in it).
+
+#### Dealing with referenced files
+
+If a processed OpenAPI file has a `$ref` value referring to relative paths, the referred file will be added to the processing list (even if they were disabled in the command line as described above). The respective relative path will be created in the output directory, so if an OpenAPI file has `"$ref": "definitions/events.yml"`, the `<outdir>/definitions` directory will be created and the file(s) generated from `definitions/events.yml` will be put in there. Note that if `definitions/events.yml` has `"$ref": events/base.yml`, the `events` directory will be searched under input `definitions` directory, and a respective `<outdir>/definitions/events` directory will be made for output files from `base.yml` processing.
 
 ### GTAD configuration file
+
+GTAD uses its configuration file to customise specific type mapping and file generating details. The file is made in YAML and consists, as of GTAD 0.5, of 2 main nodes: `analyzer` and `mustache`. As mentioned above, libQMatrixClient has the (working in production) example of a configuration file.
+
+#### Analyzer configuration
+
+Analyzer configuration, as of GTAD 0.5, includes the following parts.
+
+##### `subst`
+A regex-to-pattern map of substitutions that should be applied before any processing takes place - the effect is the same as if a `s/old/new/` regex were applied to the input file (assuming `old: new` entry in YAML). Be careful with such substitutions, as they ignore YAML/JSON structure of the input file; a careless regex can easily render the input invalid.
+##### `identifiers`
+This is a similar (in format) map of more fine-tuned substitutions, only applied to _identifiers_ encountered in OpenAPI. As of GTAD 0.5, it's only applied to call parameters and structure fields but not, e.g., call names.
+
+One of the main cases for this is escaping parameter names that clash with language reserved words (`unsigned` in the example below) or otherwise undesirable as field/parameter names. The way this works is that you add, e.g., an `unsigned: unsignedData` line into `identifiers` section, and GTAD will transform all target parameter Mustache entries (such as `{{nameCamelCase}}`, see below in Data model exposed to Mustache) with the name `unsigned` to `unsignedData` while `{{baseName}}` of those parameters will remain intact so that you can still use it for JSON key names in actual API payloads in your template files.
+##### `types`
+This is the most important part of the analyzer configuration, defining which OpenAPI types and data structures turn to which target language types and structures in generated files. The format of this section is as follows:
+```yaml
+<swaggerType>: <targetTypeSpec>
+```
+or
+```yaml
+<swaggerType>:
+  - <swaggerFormat>: <targetTypeSpec>
+  - /<swaggerFormatRegEx>/: <targetTypeSpec>
+  - //: <targetTypeSpec> # default, if the format doesn't mach anything above
+```
+where `targetTypeSpec` is either the target type literal (such as `double`) or, in turn,
+```yaml
+type: <target type literal>
+imports: <filename> or [ <filenames...> ]
+<custom key-value pairs>
+```
+`swaggerType` and `swaggerFormat`/`swaggerFormatRegEx` are matched against the OpenAPI _type_ and _format_ respectively (the [OpenAPI 2 specification](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md#TODO:find_a_good_anchor) defines standard _types_ and _formats_). On top of these GTAD understands additional "types" and "formats" necessary for good types mapping:
+- Under type `object`: while the specification doesn't use _format_ with `object` type, GTAD uses the next level under object to further distinguish objects by their actual base type, which is contents either of `title` or, if any, `$ref`. This, in particular, allows you to override specific types that you don't want to generate automatically (in libQMatrixClient, e.g., these are `Event` and derived classes).
+- Under type `array`: the next level is used to designate the element type; this way you can, e.g., special case an array of strings as `QStringList` while use `QVector<>` for arrays of all other types (including objects and other arrays). To enable passing the parameter type GTAD assumes that the contents of `type` key are themselves a template (in Mustache parlance - partials) and that parameter types stand for `{{1}}`, `{{2}}` etc. (actually, only case with `{{1}}` is actually applicable at the moment; there's nothing to fill even `{{2}}` with). Therefore, to use `QVector<>` to store arrays one has to use `QVector<{{1}}>` in the types map.
+- A non-standard type `map`: this is what OpenAPI clumsily calls `additionalProperties` and the rest of the world knows as `property map` or `property list`. The trick here is that _names_ of properties are not defined by the API description file; only the mapped type is defined. Similar to arrays, GTAD considers "formats" under this "type" to be the types defined inside `additionalProperties`, in other words, mapped types. A typical translation of that into static-typed languages normally involves a map from strings to structures defined in the API description file; e.g. the current libQMatrixClient uses (mostly but not always) `QHash<QString, {{1}}>` for the purpose (other options include `QVariantHash` for a generic map with no specific type) and `std::unordered_map<QString, {{1}}>` when contained objects are uncopyable.
+- A non-standard type `variant` is not (yet) supported by GTAD 0.5 and reserved for future use. It basically means: whatever type the value has, it can be covered by `QVariant`. This is a case of variant types and multitypes (and also the case where `{{2}}` etc. will be applicable).
+- A non-standard "type" `schema`: this must not normally include the translated `type` inside - rather, it's a collection (map) of additional type attributes (see below) that should be passed along with types defined in-place in the API description file (rather than in a separate file and a `$ref` for it). This type may potentially be merged with _type_ `object`/_format_ `//` but stays for the time being.
+
+Each `targetTypeSpec` (except the one for `schema`, see above) must unambiguously define the target type to be used - either inline or in its `type` property, as described above. However it may be needed to pass more attributes with type (e.g., whether the type is copyable); also, usage of most types requires importing those types; the import name should be passed along with the type. To address that, GTAD has a concept of "type attributes": every type can have an arbitrary number of arbitrary (except `type`) "attributes", which are modeled as string-to-string or string-to-list maps. At the moment GTAD special-cases the `imports` attribute, making a consolidated set of strings out of all imports (besides storing them with every type). This will be made more generic in the future.
+
+#### Printer configuration
 
 TODO
 
