@@ -70,7 +70,9 @@ class iterator_base
         template <typename IterT>
         bool operator==(const IterT& rhs)
         {
-            return _impl == rhs._impl && *_fileName == *rhs._fileName;
+            return _impl == rhs._impl &&
+                ((_fileName && rhs._fileName && *_fileName == *rhs._fileName) ||
+                    (!_fileName && !rhs._fileName));
         }
         template <typename IterT>
         bool operator!=(const IterT& rhs)
@@ -93,6 +95,7 @@ class YamlSequence;
 class YamlNode : public YAML::Node
 {
     public:
+        YamlNode() = default;
         YamlNode(const YAML::Node& rhs, std::shared_ptr<std::string> fileName)
             : Node(rhs), _fileName(move(fileName)) { }
 
@@ -148,6 +151,7 @@ class YamlNodeTemplate : public YamlNode
         using iterator = iterator_base<value_type>;
         using const_iterator = iterator_base<const value_type>;
 
+        YamlNodeTemplate() = default;
         YamlNodeTemplate(const my_type&) = default;
         YamlNodeTemplate(my_type&&) = default;
         YamlNodeTemplate(const YamlNode& yn)
