@@ -38,7 +38,7 @@ TypeUsage parseTypeEntry(const YamlNode& yamlTypeNode)
         return TypeUsage(yamlTypeNode.as<string>());
 
     const auto yamlTypeMap = yamlTypeNode.asMap();
-    TypeUsage typeUsage { yamlTypeMap["type"].as<string>("UNNAMED") };
+    TypeUsage typeUsage { yamlTypeMap["type"].as<string>("") };
     for (const auto& attr: yamlTypeMap)
     {
         auto attrName = attr.first.as<string>();

@@ -211,7 +211,7 @@ imports: <filename> or [ <filenames...> ]
 the OpenAPI _type_ and _format_ respectively (the
 [OpenAPI 2 specification](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md#user-content-data-types)
 defines standard _types_ and _formats_). On top of these GTAD understands
-additional non-standard _types_ and _formats_:
+additional non-standard _formats_:
 - Under _type_ `object`: while the specification doesn't use _format_ with
   the `object` type, GTAD uses the next level under `object` type to further 
   distinguish objects by their actual "base type", which is defined as the value
@@ -236,7 +236,8 @@ additional non-standard _types_ and _formats_:
       `{string:double}` means `additionalProperties` (see below) with
       an element type `double`, which can be translated to a hashmap of
       strings to doubles)
-- `map` _type_: this is what OpenAPI clumsily calls `additionalProperties` and
+Several non-standard _types_ are also introduced:
+- `map`: this is what OpenAPI clumsily calls `additionalProperties` and
   the rest of the world knows as `property map` or `property list`. 
   `additionalProperties` corresponds to a data structure mapping strings 
   (property names) to structures defined in the API description (property 
@@ -250,17 +251,22 @@ additional non-standard _types_ and _formats_:
   for a generic map with no specific type, and, as a special-case,
   `std::unordered_map<QString, {{1}}>` when the contained schema's title is 
   `RoomState` because that type is uncopyable.
-- `variant` _type_ is not (yet) supported by GTAD 0.5 and reserved for future
+- `variant`: not (yet) supported by GTAD 0.5 and reserved for future
   use. In the current libQMatrixClient it basically means: whichever of 
   several types the value has, it will be stored in a `QVariant`. This is a case
   of variant types or multitypes.
-- `schema` _type_: this stands for all types defined directly in the API 
+- `schema`: this stands for all types defined directly in the API 
   definition as _schema_ structures. As of now GTAD doesn't consider the 
   property `type` inside this node and only loads additional type attributes
   (see below) that should be passed along with such types defined in-place
-  (rather than in a separate file with a corresponding `$ref`). In the 
-  future this _type_ may be obsoleted in favor of using _type_ `object` and
-  _format_ `//`.
+  (rather than in a separate file with a corresponding `$ref`).
+- `$ref`: introduced in GTAD 0.6, this stands for types defined in a file 
+  referenced by `$ref` and is used to override some of those types with another
+  type. Same rules as for object are applied. Beware: supplying a catch-all
+  (`//`) node in this section will lead to _all_ referenced types not mentioned
+  before being coerced to the type specified in this node (in GTAD 0.5 you 
+  had to use `object` for the same purpose as `$ref`, and such coercion was 
+  very hard to avoid).
 
 Each `targetTypeSpec` (except the one for `schema`, see above) must
 unambiguously define the target type to be used - either inline

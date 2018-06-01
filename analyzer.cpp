@@ -135,7 +135,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     {
         // First try to resolve refPath in types map; if there's no match, load
         // the schema from the reference path.
-        auto tu = translator.mapType("object", refPath);
+        auto tu = translator.mapType("$ref", refPath);
         if (!tu.empty())
         {
             cout << "Using type " << tu.name << " for " << refPath << endl;
@@ -152,13 +152,14 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         if (m.types.empty())
             throw YamlException(yamlSchema, "The target file has no schemas");
 
-        schema.parentTypes.emplace_back(
-            m.types.back().name,
-            m.dstFiles.empty() ? string{} : "\"" + m.dstFiles.front() + "\"");
+        tu.name = m.types.back().name;
         // TODO: distinguish between interface files (that should be imported,
         // headers in C/C+) and implementation files (that should not).
         // filesList.front() assumes that there's only one interface file, and
         // it's at the front of the list, which is very naive.
+        tu.addImport(m.dstFiles.empty() ? string{}
+                                        : "\"" + m.dstFiles.front() + "\"");
+        schema.parentTypes.emplace_back(move(tu));
     }
 
     if (schema.empty() && yamlSchema["type"].as<string>("object") != "object")
