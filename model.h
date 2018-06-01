@@ -57,11 +57,17 @@ struct TypeUsage
     TypeUsage(std::string typeName, std::string import)
         : TypeUsage(move(typeName))
     {
-        lists.emplace("imports", imports_type { move(import) });
+        addImport(move(import));
     }
 
     TypeUsage instantiate(TypeUsage&& innerType) const;
+
     bool empty() const { return name.empty(); }
+
+    void addImport(imports_type::value_type import_text)
+    {
+        lists["imports"].emplace_back(move(import_text));
+    }
 };
 
 struct VarDecl
