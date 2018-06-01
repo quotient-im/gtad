@@ -29,7 +29,33 @@
 
 using namespace std;
 
-TypeUsage parseTypeEntry(const YamlNode& yamlTypeNode)
+void addTypeAttributes(TypeUsage& typeUsage, const YamlMap& attributesMap)
+{
+    for (const auto& attr: attributesMap)
+    {
+        auto attrName = attr.first.as<string>();
+        if (attrName == "type")
+            continue;
+        switch (attr.second.Type())
+        {
+            case YAML::NodeType::Null:
+                typeUsage.attributes.emplace(move(attrName), string{});
+                break;
+            case YAML::NodeType::Scalar:
+                typeUsage.attributes.emplace(move(attrName),
+                                             attr.second.as<string>());
+                break;
+            case YAML::NodeType::Sequence:
+                if (const auto& seq = attr.second.asSequence())
+                    typeUsage.lists.emplace(move(attrName), seq.asStrings());
+                break;
+            default:
+                throw YamlException(attr.second, "Malformed attribute");
+        }
+    }
+}
+
+TypeUsage parseTargetType(const YamlNode& yamlTypeNode)
 {
     using YAML::NodeType;
     if (yamlTypeNode.Type() == NodeType::Null)
@@ -39,18 +65,79 @@ TypeUsage parseTypeEntry(const YamlNode& yamlTypeNode)
 
     const auto yamlTypeMap = yamlTypeNode.asMap();
     TypeUsage typeUsage { yamlTypeMap["type"].as<string>("") };
-    for (const auto& attr: yamlTypeMap)
-    {
-        auto attrName = attr.first.as<string>();
-        if (attrName == "type")
-            continue;
-        if (attr.second.Type() == NodeType::Scalar)
-            typeUsage.attributes.emplace(move(attrName),
-                                         attr.second.as<string>());
-        else if (const auto& seq = attr.second.asSequence())
-            typeUsage.lists.emplace(move(attrName), seq.asStrings());
-    }
+    addTypeAttributes(typeUsage, yamlTypeMap);
     return typeUsage;
+}
+
+TypeUsage parseTargetType(const YamlNode& yamlTypeNode,
+                          const YamlMap& commonAttributesYaml)
+{
+    auto tu = parseTargetType(yamlTypeNode);
+    addTypeAttributes(tu, commonAttributesYaml);
+    return tu;
+}
+
+template <typename FnT>
+void parseEntries(const YamlSequence& entriesYaml, FnT inserter,
+                  const YamlMap& commonAttributesYaml = {})
+{
+    for (const YamlMap typesBlockYaml: entriesYaml)
+    {
+        switch (typesBlockYaml.size())
+        {
+            case 0:
+                throw YamlException(typesBlockYaml, "Empty type entry");
+            case 1:
+            {
+                const auto& typeYaml = typesBlockYaml.front();
+                inserter(typeYaml.first.as<string>(),
+                         typeYaml.second, commonAttributesYaml);
+                break;
+            }
+            case 2:
+                if (typesBlockYaml["+on"] && typesBlockYaml["+set"])
+                {
+                    parseEntries(typesBlockYaml.get("+on").asSequence(),
+                                 inserter, typesBlockYaml.get("+set").asMap());
+                    break;
+                }
+                [[clang::fallthrough]]
+            default:
+                throw YamlException(typesBlockYaml,
+                        "Too many entries in the map, check indentation");
+        }
+    }
+}
+
+pair_vector_t<TypeUsage> parseTypeEntry(const YamlNode& targetTypeYaml,
+                                        const YamlMap& commonAttributesYaml = {})
+{
+    switch (targetTypeYaml.Type())
+    {
+        case YAML::NodeType::Scalar: // Use a type with no regard to format
+        case YAML::NodeType::Map: // Same, with attributes for the target type
+        {
+            return { { string(),
+                         parseTargetType(targetTypeYaml,
+                                         commonAttributesYaml) } };
+        }
+        case YAML::NodeType::Sequence: // A list of formats for the type
+        {
+            pair_vector_t<TypeUsage> targetTypes;
+            parseEntries(targetTypeYaml.asSequence(),
+                [&targetTypes](string formatName,
+                    const YamlNode& formatYaml, const YamlMap& commonAttrsYaml)
+                {
+                    if (formatName.empty())
+                        formatName = "//"; // Empty format means all formats
+                    targetTypes.emplace_back(move(formatName),
+                        parseTargetType(formatYaml, commonAttrsYaml));
+                }, commonAttributesYaml);
+            return targetTypes;
+        }
+        default:
+            throw YamlException(targetTypeYaml, "Malformed type entry");
+    }
 }
 
 pair_vector_t<string> loadStringMap(const YamlMap& yaml)
@@ -61,7 +148,8 @@ pair_vector_t<string> loadStringMap(const YamlMap& yaml)
         const auto& pattern = subst.first.as<string>();
         if (Q_UNLIKELY(pattern.empty()))
             clog << subst.first.location()
-                 << ": warning: empty pattern in substitutions, skipping" << endl;
+                 << ": warning: empty pattern in substitutions, skipping"
+                 << endl;
         else if (Q_UNLIKELY(pattern.size() > 1 &&
                             pattern.front() != '/' && pattern.back() == '/'))
             clog << subst.first.location()
@@ -69,7 +157,7 @@ pair_vector_t<string> loadStringMap(const YamlMap& yaml)
                  << "(use a regex with \\/ to match strings beginning with /)";
         else
             stringMap.emplace_back(subst.first.as<string>(),
-                                       subst.second.as<string>());
+                                   subst.second.as<string>());
     }
     return stringMap;
 }
@@ -86,45 +174,13 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
     _substitutions = loadStringMap(analyzerYaml["subst"].asMap());
     _identifiers = loadStringMap(analyzerYaml["identifiers"].asMap());
 
-    const auto& typesYaml = analyzerYaml["types"].asMap();
-    for (const auto& type: typesYaml)
-    {
-        const auto typeValue = type.second;
-        pair_vector_t<TypeUsage> formatsMap;
-        switch (typeValue.Type())
+    parseEntries(analyzerYaml["types"].asSequence(),
+        [this](const string& name, const YamlNode& typeYaml,
+               const YamlMap& commonAttrsYaml)
         {
-            case YAML::NodeType::Scalar: // Use a type with no regard to format
-            case YAML::NodeType::Map: // Same, with attributes for the target type
-            {
-                formatsMap.emplace_back(string(), parseTypeEntry(typeValue));
-//                clog << "Mapped type " << type.first.as<string>()
-//                     << " to " << formatsMap.back().second.name << endl;
-                break;
-            }
-            case YAML::NodeType::Sequence: // A list of formats for the type
-            {
-                for (const YamlMap formatPattern: typeValue.asSequence())
-                {
-                    if (formatPattern.size() != 1)
-                        throw YamlException(formatPattern,
-                                            "Malformed types map");
-
-                    const auto formatPair = *formatPattern.begin();
-                    auto formatName = formatPair.first.as<string>();
-                    if (formatName.empty())
-                        formatName = "//"; // Empty format means all formats
-                    formatsMap.emplace_back(move(formatName),
-                                            parseTypeEntry(formatPair.second));
-//                    clog << "Mapped format " << formatsMap.back().first
-//                         << " to " << formatsMap.back().second.name << endl;
-                }
-                break;
-            }
-            default:
-                throw YamlException(type.second, "Malformed types map");
-        }
-        _typesMap.emplace_back(type.first.as<string>(), move(formatsMap));
-    }
+            _typesMap.emplace_back(name,
+                parseTypeEntry(typeYaml, commonAttrsYaml));
+        });
 
     Printer::context_type env;
     const auto& mustacheYaml = configY["mustache"].asMap();
@@ -135,7 +191,8 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
 
         const auto pName = p.first.as<string>();
         if (p.second.IsScalar())
-            env.set(pName, partial {[s=p.second.as<string>()] { return s; }});
+            env.set(pName,
+                    partial { [s = p.second.as<string>()] { return s; } });
         else
         {
             const auto pDefinition = p.second.asMap().front();
@@ -161,7 +218,8 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
 
     _printer = std::make_unique<Printer>(
         move(env), outputFiles, configDir.toStdString(),
-        _outputDirPath.toStdString(), mustacheYaml["outFilesList"].as<string>("") );
+        _outputDirPath.toStdString(),
+        mustacheYaml["outFilesList"].as<string>(""));
 }
 
 Translator::~Translator() = default;
@@ -188,7 +246,8 @@ TypeUsage Translator::mapType(const string& swaggerType,
                     auto tu = swFormatPair.second;
                     // Fallback chain: baseName, swaggerFormat, swaggerType
                     tu.baseName = baseName.empty() ? swaggerFormat.empty() ?
-                                swaggerType : swaggerFormat : baseName;
+                                                     swaggerType : swaggerFormat
+                                                   : baseName;
                     return tu;
                 }
             }
@@ -215,7 +274,7 @@ Model Translator::processFile(string filePath, string baseDirPath,
                               InOut inOut) const
 {
     Model m = Analyzer(move(filePath), move(baseDirPath), *this)
-                .loadModel(_substitutions, inOut);
+        .loadModel(_substitutions, inOut);
     if (m.callClasses.empty() && m.types.empty())
         return m;
 
