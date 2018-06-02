@@ -101,7 +101,7 @@ void parseEntries(const YamlSequence& entriesYaml, FnT inserter,
                                  inserter, typesBlockYaml.get("+set").asMap());
                     break;
                 }
-                [[clang::fallthrough]]
+                [[clang::fallthrough]];
             default:
                 throw YamlException(typesBlockYaml,
                         "Too many entries in the map, check indentation");
