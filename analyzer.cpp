@@ -113,7 +113,7 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
         {
             model.addSchema(schema);
-            auto tu = translator.mapType("schema");
+            auto tu = translator.mapType("schema", schema.name);
             tu.scope = schema.scope;
             tu.name = tu.baseName = schema.name;
             return tu;
@@ -179,6 +179,19 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         schema.parentTypes.emplace_back(move(tu));
     }
 
+    auto name = yamlSchema["title"].as<string>(
+                    schema.trivial() ? schema.parentTypes.back().name : "");
+    if (!name.empty())
+    {
+        auto tu = translator.mapType("schema", name);
+        if (!tu.empty())
+        {
+            cout << "Using type " << tu.name << " for schema " << name << endl;
+            schema.parentTypes = { move(tu) }; // Override the type entirely
+            return schema;
+        }
+    }
+
     if (schema.empty() && yamlSchema["type"].as<string>("object") != "object")
     {
         auto parentType = analyzeType(yamlSchema, inOut, scope);
@@ -199,33 +212,25 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                        baseName, required);
         }
     }
-    if (!schema.empty())
+    if (!schema.empty() && !schema.trivial())
     {
-        auto name = camelCase(yamlSchema["title"].as<string>(""));
-        // Checking for name difference commented out due to #28
-        if (!schema.trivial()/* || name != qualifiedName(s.parentTypes.front()) */)
-        {
-            // If the schema is not just an alias for another type, name it.
-            schema.name = move(name);
-            schema.scope.swap(scope);
-        }
+        // If the schema is not just an alias for another type, name it.
+        schema.name = camelCase(name);
+        schema.scope.swap(scope);
 
-        if (!schema.name.empty() || !schema.trivial())
-        {
-            cout << yamlSchema.location() << ": Found "
-                 << (!locus.empty() ? locus + " schema"
-                     : "schema " + qualifiedName(schema))
-                 << " for "
-                 << (schema.inOut == In ? "input" :
-                     schema.inOut == Out ? "output" :
-                     schema.inOut == (In|Out) ? "in/out" : "undefined use");
-            if (schema.trivial())
-                cout << " mapped to "
-                     << qualifiedName(schema.parentTypes.front()) << endl;
-            else
-                cout << " (parent(s): " << schema.parentTypes.size()
-                     << ", field(s): " << schema.fields.size() << ")" << endl;
-        }
+        cout << yamlSchema.location() << ": Found "
+             << (!locus.empty() ? locus + " schema"
+                 : "schema " + qualifiedName(schema))
+             << " for "
+             << (schema.inOut == In ? "input" :
+                 schema.inOut == Out ? "output" :
+                 schema.inOut == (In|Out) ? "in/out" : "undefined use");
+        if (schema.trivial())
+            cout << " mapped to "
+                 << qualifiedName(schema.parentTypes.front()) << endl;
+        else
+            cout << " (parent(s): " << schema.parentTypes.size()
+                 << ", field(s): " << schema.fields.size() << ")" << endl;
     }
     return schema;
 }
