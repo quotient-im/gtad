@@ -54,7 +54,7 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
             baseTypes += t;
         }
         const auto& protoType =
-            translator.mapType("variant", "", baseTypes);
+            translator.mapType("variant", baseTypes, baseTypes);
 
         vector<TypeUsage> tus;
         for (const auto& t: typeNames)
