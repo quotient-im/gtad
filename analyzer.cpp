@@ -54,6 +54,8 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
             {
                 auto elemType =
                     analyzeType(yamlElemType, inOut, move(scope));
+                cout << "Array element type is " << elemType.name
+                     << " (" << elemType.baseName << ')' << endl;
                 const auto& protoType =
                     translator.mapType("array", elemType.baseName,
                         camelCase(node["title"].as<string>(
@@ -153,6 +155,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
             throw YamlException(yamlSchema, "The target file has no schemas");
 
         tu.name = m.types.back().name;
+        tu.baseName = tu.name.empty() ? refPath : tu.name;
         // TODO: distinguish between interface files (that should be imported,
         // headers in C/C+) and implementation files (that should not).
         // filesList.front() assumes that there's only one interface file, and
@@ -330,7 +333,8 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                         addVarDecl(call.bodyParams(),
                             translator.mapType("object"), name, false);
                     } else {
-                        // The schema consists of a single parent type, inline that type.
+                        // If the schema consists of a single parent type,
+                        // inline that type.
                         if (bodySchema.trivial())
                             call.inlineBody = true;
                         addParamsFromSchema(call.bodyParams(),
