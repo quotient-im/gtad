@@ -378,7 +378,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                             analyzeSchema(yamlSchema, Out, call.name, "response");
                         if (!responseSchema.empty())
                             addParamsFromSchema(response.properties,
-                                "content", true, responseSchema);
+                                "data", true, responseSchema);
                     }
                     call.responses.emplace_back(move(response));
                 }
