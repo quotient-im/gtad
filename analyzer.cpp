@@ -43,8 +43,24 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
 {
     auto yamlTypeNode = node["type"];
 
-    if (yamlTypeNode && yamlTypeNode.IsSequence())
-        return translator.mapType("object"); // TODO: Multitype/variant support
+    if (yamlTypeNode && yamlTypeNode.IsSequence()) // Multitype/variant
+    {
+        const auto& typeNames = yamlTypeNode.asSequence().asStrings();
+        string baseTypes;
+        for (const auto& t: typeNames)
+        {
+            if (!baseTypes.empty())
+                baseTypes.push_back('|');
+            baseTypes += t;
+        }
+        const auto& protoType =
+            translator.mapType("variant", "", baseTypes);
+
+        vector<TypeUsage> tus;
+        for (const auto& t: typeNames)
+            tus.emplace_back(translator.mapType(t));
+        return protoType.instantiate(move(tus));
+    }
 
     auto yamlType = yamlTypeNode.as<string>("object");
     if (yamlType == "array")
@@ -54,13 +70,11 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
             {
                 auto elemType =
                     analyzeType(yamlElemType, inOut, move(scope));
-                cout << "Array element type is " << elemType.name
-                     << " (" << elemType.baseName << ')' << endl;
                 const auto& protoType =
                     translator.mapType("array", elemType.baseName,
                         camelCase(node["title"].as<string>(
                                            '[' + elemType.baseName + ']')));
-                return protoType.instantiate(move(elemType));
+                return protoType.instantiate({move(elemType)});
             }
 
         return translator.mapType("array");
@@ -81,7 +95,7 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
                                 translator.mapType("map", elemType.baseName,
                                     camelCase(node["title"].as<string>(
                                         "{string:" + elemType.baseName + '}')));
-                        return protoType.instantiate(move(elemType));
+                        return protoType.instantiate({move(elemType)});
                     }
                     case YAML::NodeType::Scalar:
                         if (propertyMap.as<bool>()) // Generic map

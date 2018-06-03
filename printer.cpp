@@ -186,6 +186,10 @@ object Printer::renderType(const TypeUsage& tu) const
     }
 
     // Fill parameters for parameterized types
+    setList(values, "types", tu.innerTypes,
+            bind(&Printer::renderType, this, _1));
+    setList(qualifiedValues, "types", tu.innerTypes,
+            bind(&Printer::renderType, this, _1));
     int i = 0;
     for (const auto& t: tu.innerTypes)
     {

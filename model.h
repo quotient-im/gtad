@@ -60,7 +60,7 @@ struct TypeUsage
         addImport(move(import));
     }
 
-    TypeUsage instantiate(TypeUsage&& innerType) const;
+    TypeUsage instantiate(std::vector<TypeUsage>&& innerTypes) const;
 
     bool empty() const { return name.empty(); }
 

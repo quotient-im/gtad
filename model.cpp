@@ -10,19 +10,23 @@ TypeUsage::TypeUsage(const ObjectSchema& schema)
     : scope(schema.scope), name(schema.name), baseName(schema.name)
 { }
 
-TypeUsage TypeUsage::instantiate(TypeUsage&& innerType) const
+TypeUsage TypeUsage::instantiate(vector<TypeUsage>&& innerTypes) const
 {
     TypeUsage tu = *this;
-    tu.innerTypes.emplace_back(innerType);
+    for (auto&& innerType: innerTypes)
+    {
+        tu.innerTypes.emplace_back(innerType);
 
-    auto& tuImports = tu.lists["imports"];
-    const auto singleInnerImport = innerType.attributes.find("imports");
-    if (singleInnerImport != innerType.attributes.end())
-        tuImports.push_back(singleInnerImport->second);
-    const auto innerImports = innerType.lists.find("imports");
-    if (innerImports != innerType.lists.end())
-        tuImports.insert(tuImports.end(),
-             innerImports->second.begin(), innerImports->second.end());
+        auto& tuImports = tu.lists["imports"];
+        const auto singleInnerImport = innerType.attributes.find("imports");
+        if (singleInnerImport != innerType.attributes.end())
+            tuImports.push_back(singleInnerImport->second);
+        const auto innerImports = innerType.lists.find("imports");
+        if (innerImports != innerType.lists.end())
+            tuImports.insert(tuImports.end(),
+                             innerImports->second.begin(),
+                             innerImports->second.end());
+    }
 
     return tu;
 }
