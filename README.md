@@ -26,6 +26,9 @@ You can also file issues at
 ## Setting up and building
 The source code is hosted at [GitHub](https://github.com/KitsuneRal/gtad/). Tags
 starting with `v` represent released versions; `rc` mark release candidates.
+Do remember to use `--recursive` or update submodules after checking out -
+the project has external dependencies taken in as submodules (this may change
+in the future).
 
 ### Pre-requisites
 - a Linux, OSX or Windows system (desktop versions tried; Ubuntu Touch is known
