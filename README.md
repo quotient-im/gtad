@@ -17,8 +17,7 @@ found in [the talk at Qt World Summit 2017](https://youtu.be/W5TmRozH-rg) that
 also briefly announces the GTAD project.
 
 ## Contacts
- You can find Kitsune Ral (the author) in Matrix room
- [#QMatrixClient:matrix.org](https://matrix.to/#/#qmatrixclient:matrix.org).
+ Matrix room: [#gtad:matrix.org](https://matrix.to/#/#gtad:matrix.org).
 
 You can also file issues at
 [the project's issue tracker](https://github.com/KitsuneRal/gtad/issues).
