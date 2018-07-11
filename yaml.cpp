@@ -21,6 +21,7 @@
 #include <yaml-cpp/node/parse.h>
 
 #include <regex>
+#include <functional>
 
 using Node = YAML::Node;
 using NodeType = YAML::NodeType;
