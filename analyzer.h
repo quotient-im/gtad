@@ -22,8 +22,6 @@
 #include "model.h"
 #include "util.h"
 
-#include <string>
-
 class YamlNode;
 class YamlMap;
 

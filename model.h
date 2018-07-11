@@ -20,7 +20,6 @@
 
 #include "util.h"
 
-#include <string>
 #include <utility>
 #include <vector>
 #include <array>

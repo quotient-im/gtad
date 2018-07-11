@@ -22,7 +22,6 @@
 #include "yaml.h"
 
 using namespace std;
-using namespace std::placeholders;
 
 Model initModel(string path)
 {
