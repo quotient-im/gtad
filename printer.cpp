@@ -74,7 +74,7 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
 {
     // Enriching the context with "My Mustache library"
     _context.set("@filePartial", lambda2 { // TODO: Switch to new Mustache's {{>}}
-        [inputBasePath, this](const string& s, const renderer& render) {
+        [inputBasePath](const string& s, const renderer& render) {
             ifstream ifs { inputBasePath + s };
             if (!ifs.good())
             {
