@@ -74,14 +74,16 @@ struct VarDecl
     TypeUsage type;
     std::string name; //< Identifier in the generated code
     std::string baseName; //< As used in the API
+    std::string description;
     bool required;
     std::string defaultValue;
 
     VarDecl(TypeUsage type, std::string name, std::string baseName,
-            bool required = true, std::string defaultValue = {})
+            std::string description = {}, bool required = true,
+            std::string defaultValue = {})
         : type(std::move(type)), name(std::move(name))
-        , baseName(std::move(baseName)), required(required)
-        , defaultValue(std::move(defaultValue))
+        , baseName(std::move(baseName)), description(std::move(description))
+        , required(required), defaultValue(std::move(defaultValue))
     { }
 
     bool isRequired() const { return required; }
@@ -99,6 +101,7 @@ struct ObjectSchema
 {
     std::string scope; // Either empty (top-level) or a Call name
     std::string name;
+    std::string description;
     std::vector<TypeUsage> parentTypes;
     std::vector<VarDecl> fields;
     InOut inOut = 0;
@@ -123,8 +126,15 @@ struct Path : public std::string
 struct Response
 {
     std::string code;
+    std::string description;
     VarDecls headers = {};
     VarDecls properties = {};
+};
+
+struct ExternalDocs
+{
+    std::string description;
+    std::string url;
 };
 
 struct Call
@@ -150,6 +160,9 @@ struct Call
     Path path;
     std::string verb;
     std::string name;
+    std::string summary;
+    std::string description;
+    ExternalDocs externalDocs;
     std::array<params_type, 4> allParams;
     params_type& pathParams() { return allParams[0]; }
     params_type& queryParams() { return allParams[1]; }

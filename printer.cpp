@@ -173,6 +173,12 @@ void setList(ObjT& target, const string& name, const ContT& source)
         [](const typename ContT::value_type& v) { return v; });
 }
 
+template <typename ModelT>
+void dumpDescription(object& target, const ModelT& model)
+{
+    setList(target, "description", km::split(model.description, '\n'));
+}
+
 object Printer::renderType(const TypeUsage& tu) const
 {
     object values { { "name", partial {[name=tu.name] { return name; }} }
@@ -219,6 +225,7 @@ object Printer::dumpField(const VarDecl& field) const
                     , { "required?",     field.required }
                     , { "required",      field.required } // Swagger compat
     };
+    dumpDescription(fieldDef, field);
     if (!field.defaultValue.empty())
         fieldDef.emplace("defaultValue", field.defaultValue);
 
@@ -243,6 +250,7 @@ object Printer::dumpAllTypes(const Model::schemas_type& types) const
         {
             auto mType = renderType(TypeUsage(type));
             mType["classname"] = type.name; // Swagger compat
+            dumpDescription(mType, type);
             mType["in?"] = (type.inOut & In) != 0;
             mType["out?"] = (type.inOut & Out) != 0;
             if (type.trivial())
@@ -307,20 +315,22 @@ vector<string> Printer::print(const Model& model) const
                              , { "camelCaseOperationId", camelCase(call.name) }
                              , { "httpMethod",  call.verb }
                              , { "path", call.path }
+                             , { "summary",  call.summary }
                              , { "skipAuth", !call.needsSecurity }
                 };
-                {
-                    globalConsumesNonJson |=
-                        dumpContentTypes(mCall, "consumes",
-                                         call.consumedContentTypes);
-                    globalProducesNonJson |=
-                        dumpContentTypes(mCall, "produces",
-                                         call.producedContentTypes);
-                    mCall.emplace("producesImage?",
-                            all_of(call.producedContentTypes.begin(),
-                                   call.producedContentTypes.end(),
-                                   bind(startsWith, _1, "image/")));
-                }
+                dumpDescription(mCall, call);
+
+                globalConsumesNonJson |=
+                    dumpContentTypes(mCall, "consumes",
+                                     call.consumedContentTypes);
+                globalProducesNonJson |=
+                    dumpContentTypes(mCall, "produces",
+                                     call.producedContentTypes);
+                mCall.emplace("producesImage?",
+                        all_of(call.producedContentTypes.begin(),
+                               call.producedContentTypes.end(),
+                               bind(startsWith, _1, "image/")));
+
                 auto&& mCallTypes = dumpTypes(model.types, call.name);
                 if (!mCallTypes.empty())
                     mCall.emplace("models", mCallTypes);

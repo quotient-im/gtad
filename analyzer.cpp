@@ -191,6 +191,9 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         }
     }
 
+    if (auto&& yamlDescription = yamlSchema["description"])
+        schema.description = yamlDescription.as<string>();
+
     if (schema.empty() && yamlSchema["type"].as<string>("object") != "object")
     {
         auto parentType = analyzeType(yamlSchema, inOut, scope);
@@ -208,7 +211,8 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                                 [&baseName](const YamlNode& n)
                                     { return baseName == n.as<string>(); } );
             addVarDecl(schema.fields, analyzeType(property.second, inOut, scope),
-                       baseName, required);
+                       baseName, property.second["description"].as<string>(""),
+                       required);
         }
     }
     if (!schema.empty() && !schema.trivial())
@@ -244,7 +248,8 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
     } else if (paramSchema.trivial())
     {
         // The schema consists of a single parent type, use that type instead.
-        addVarDecl(varList, paramSchema.parentTypes.front(), baseName, required);
+        addVarDecl(varList, paramSchema.parentTypes.front(), baseName,
+                   paramSchema.description, required);
     } else
     {
         cerr << "Warning: found non-trivial schema for " << baseName
@@ -253,7 +258,7 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
         const auto typeName =
             paramSchema.name.empty() ? camelCase(baseName) : paramSchema.name;
         model.addSchema(paramSchema);
-        addVarDecl(varList, TypeUsage(typeName), baseName, required);
+        addVarDecl(varList, TypeUsage(typeName), baseName, "", required);
     }
 }
 
@@ -305,6 +310,15 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                     model.addCall(path, move(verb), move(operationId),
                                   needsSecurity);
 
+                if (auto&& yamlSummary = yamlCall["summary"])
+                    call.summary = yamlSummary.as<string>();
+                if (auto&& yamlDescription = yamlCall["description"])
+                    call.description = yamlDescription.as<string>();
+                if (YamlMap yamlExternalDocs = yamlCall["externalDocs"])
+                    call.externalDocs = {
+                        yamlExternalDocs["description"].as<string>(""),
+                        yamlExternalDocs.get("url").as<string>("")
+                    };
                 call.consumedContentTypes =
                         loadContentTypes(yamlCall, "consumes");
                 if (call.consumedContentTypes.empty())
@@ -336,7 +350,8 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                     {
                         addVarDecl(call.getParamsBlock(in),
                             analyzeType(yamlParam, In, call.name, TopLevel),
-                            name, required, yamlParam["default"].as<string>(""));
+                            name, yamlParam["description"].as<string>(""),
+                            required, yamlParam["default"].as<string>(""));
                         continue;
                     }
 
@@ -349,7 +364,9 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                         // means a freeform object.
                         call.inlineBody = true;
                         addVarDecl(call.bodyParams(),
-                            translator.mapType("object"), name, false);
+                                   translator.mapType("object"), name,
+                                   yamlParam["description"].as<string>(""),
+                                   false);
                     } else {
                         // If the schema consists of a single parent type,
                         // inline that type.
@@ -362,19 +379,27 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                 const auto yamlResponses = yamlCall.get("responses").asMap();
                 if (const auto yamlResponse = yamlResponses["200"].asMap())
                 {
-                    Response response { "200" };
+                    Response response {
+                        "200",
+                        yamlResponse.get("description").as<string>()
+                    };
                     if (auto yamlHeaders = yamlResponse["headers"])
                         for (const auto& yamlHeader: yamlHeaders.asMap())
                         {
                             addVarDecl(response.headers,
                                 analyzeType(yamlHeader.second, Out, call.name,
                                             TopLevel),
-                                yamlHeader.first.as<string>(), false);
+                                yamlHeader.first.as<string>(),
+                                yamlHeader.second["description"].as<string>(""),
+                                false);
                         }
                     if (auto yamlSchema = yamlResponse["schema"])
                     {
                         auto&& responseSchema =
                             analyzeSchema(yamlSchema, Out, call.name, "response");
+                        if (responseSchema.trivial() &&
+                                responseSchema.description.empty())
+                            responseSchema.description = response.description;
                         if (!responseSchema.empty())
                             addParamsFromSchema(response.properties,
                                 "data", true, responseSchema);
