@@ -183,6 +183,11 @@ struct CallClass
     std::vector<Call> calls;
 };
 
+inline std::string Swagger() { return "swagger"; }
+inline std::string OpenAPI3() { return "openapi"; }
+inline std::string RAML() { return "raml"; }
+inline std::string JSONSchema() { return "json-schema"; }
+
 struct Model
 {
     using imports_type = std::unordered_set<std::string>;
@@ -191,6 +196,9 @@ struct Model
     const std::string fileDir;
     const std::string srcFilename;
     std::vector<std::string> dstFiles;
+
+    std::string apiSpec;
+    int apiSpecVersion; // Encoded as xyy, x - major, yy - minor component
 
     std::string hostAddress;
     std::string basePath;

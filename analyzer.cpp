@@ -280,9 +280,13 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
     // allow loading an API description file referenced from another API description.
     if (const auto paths = yaml.get("paths", true).asMap())
     {
-        if (yaml["swagger"].as<string>("") != "2.0")
-            throw Exception(
-                    "This software only supports swagger version 2.0 for now");
+        {
+            if (yaml["swagger"].as<string>("") != "2.0")
+                throw Exception(
+                        "This software only supports swagger version 2.0 for now");
+            model.apiSpec = Swagger();
+            model.apiSpecVersion = 200; // 2.0
+        }
 
         auto defaultConsumed = loadContentTypes(yaml, "consumes");
         auto defaultProduced = loadContentTypes(yaml, "produces");
