@@ -37,8 +37,8 @@ Analyzer::Analyzer(string filePath, string basePath,
         , model(initModel(move(filePath))), translator(translator)
 { }
 
-TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
-                                IsTopLevel isTopLevel)
+TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
+                                     string scope, IsTopLevel isTopLevel)
 {
     auto yamlTypeNode = node["type"];
 
@@ -68,7 +68,7 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
             if (!yamlElemType.empty())
             {
                 auto elemType =
-                    analyzeType(yamlElemType, inOut, move(scope));
+                    analyzeTypeUsage(yamlElemType, inOut, move(scope));
                 const auto& protoType =
                     translator.mapType("array", elemType.baseName,
                         camelCase(node["title"].as<string>(
@@ -89,7 +89,7 @@ TypeUsage Analyzer::analyzeType(const YamlMap& node, InOut inOut, string scope,
                     case YAML::NodeType::Map:
                     {
                         auto elemType =
-                                analyzeType(propertyMap.asMap(), inOut, scope);
+                                analyzeTypeUsage(propertyMap.asMap(), inOut, scope);
                         const auto& protoType =
                                 translator.mapType("map", elemType.baseName,
                                     camelCase(node["title"].as<string>(
@@ -196,7 +196,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
 
     if (schema.empty() && yamlSchema["type"].as<string>("object") != "object")
     {
-        auto parentType = analyzeType(yamlSchema, inOut, scope);
+        auto parentType = analyzeTypeUsage(yamlSchema, inOut, scope);
         if (!parentType.empty())
             schema.parentTypes.emplace_back(move(parentType));
     }
@@ -210,7 +210,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
             auto required = any_of(requiredList.begin(), requiredList.end(),
                                 [&baseName](const YamlNode& n)
                                     { return baseName == n.as<string>(); } );
-            addVarDecl(schema.fields, analyzeType(property.second, inOut, scope),
+            addVarDecl(schema.fields, analyzeTypeUsage(property.second, inOut, scope),
                        baseName, property.second["description"].as<string>(""),
                        required);
         }
@@ -353,7 +353,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                     if (in != "body")
                     {
                         addVarDecl(call.getParamsBlock(in),
-                            analyzeType(yamlParam, In, call.name, TopLevel),
+                            analyzeTypeUsage(yamlParam, In, call.name, TopLevel),
                             name, yamlParam["description"].as<string>(""),
                             required, yamlParam["default"].as<string>(""));
                         continue;
@@ -391,7 +391,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                         for (const auto& yamlHeader: yamlHeaders.asMap())
                         {
                             addVarDecl(response.headers,
-                                analyzeType(yamlHeader.second, Out, call.name,
+                                analyzeTypeUsage(yamlHeader.second, Out, call.name,
                                             TopLevel),
                                 yamlHeader.first.as<string>(),
                                 yamlHeader.second["description"].as<string>(""),

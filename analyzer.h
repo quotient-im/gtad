@@ -41,7 +41,7 @@ class Analyzer
         const Translator& translator;
 
         enum IsTopLevel : bool { Inner = false, TopLevel = true };
-        TypeUsage analyzeType(const YamlMap& node, InOut inOut,
+        TypeUsage analyzeTypeUsage(const YamlMap& node, InOut inOut,
                               std::string scope, IsTopLevel isTopLevel = Inner);
         ObjectSchema analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                 std::string scope = {}, std::string locus = {});
