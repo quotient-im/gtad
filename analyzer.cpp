@@ -81,34 +81,9 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
     if (yamlType == "object")
     {
         auto schema = analyzeSchema(node, inOut, scope);
-        if (schema.empty())
-        {
-            if (const auto propertyMap = node["additionalProperties"])
-                switch (propertyMap.Type())
-                {
-                    case YAML::NodeType::Map:
-                    {
-                        auto elemType =
-                                analyzeTypeUsage(propertyMap.asMap(), inOut, scope);
-                        const auto& protoType =
-                                translator.mapType("map", elemType.baseName,
-                                    camelCase(node["title"].as<string>(
-                                        "string->" + elemType.baseName)));
-                        return protoType.instantiate({move(elemType)});
-                    }
-                    case YAML::NodeType::Scalar:
-                        if (propertyMap.as<bool>()) // Generic map
-                            return translator.mapType("map");
-                        else // Additional properties forbidden - no special treatment
-                            break;
-                    default:
-                        throw YamlException(propertyMap,
-                            "additionalProperties should be either a boolean or a map");
-                }
+        if (isTopLevel && schema.empty() && inOut&Out)
+            return TypeUsage(""); // The type returned by this API is void
 
-            if (isTopLevel && inOut&Out)
-                return TypeUsage(""); // The type returned by this API is void
-        }
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
         {
             model.addSchema(schema);
@@ -191,17 +166,24 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         }
     }
 
-    if (auto&& yamlDescription = yamlSchema["description"])
-        schema.description = yamlDescription.as<string>();
+    const auto properties = yamlSchema["properties"].asMap();
+    const auto additionalProperties = yamlSchema["additionalProperties"];
+    if (properties || additionalProperties)
+    {
+        // If the schema is not just an alias for another type, name it.
+        schema.name = camelCase(name);
+    }
+    schema.scope.swap(scope); // Use schema.scope, not scope after this line
+    schema.description = yamlSchema["description"].as<string>("");
 
     if (schema.empty() && yamlSchema["type"].as<string>("object") != "object")
     {
-        auto parentType = analyzeTypeUsage(yamlSchema, inOut, scope);
+        auto parentType = analyzeTypeUsage(yamlSchema, inOut, schema.scope);
         if (!parentType.empty())
             schema.parentTypes.emplace_back(move(parentType));
     }
 
-    if (const auto properties = yamlSchema["properties"].asMap())
+    if (properties)
     {
         const auto requiredList = yamlSchema["required"].asSequence();
         for (const YamlNodePair property: properties)
@@ -210,17 +192,48 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
             auto required = any_of(requiredList.begin(), requiredList.end(),
                                 [&baseName](const YamlNode& n)
                                     { return baseName == n.as<string>(); } );
-            addVarDecl(schema.fields, analyzeTypeUsage(property.second, inOut, scope),
-                       baseName, property.second["description"].as<string>(""),
-                       required);
+            addVarDecl(schema.fields,
+                       analyzeTypeUsage(property.second, inOut, schema.scope),
+                       baseName,
+                       property.second["description"].as<string>(""), required);
         }
     }
-    if (!schema.empty() && !schema.trivial())
+    if (additionalProperties)
     {
-        // If the schema is not just an alias for another type, name it.
-        schema.name = camelCase(name);
-        schema.scope.swap(scope);
+        TypeUsage tu {};
+        switch (additionalProperties.Type())
+        {
+            case YAML::NodeType::Map:
+            {
+                auto elemType = analyzeTypeUsage(additionalProperties.asMap(),
+                                                 inOut, schema.scope);
+                const auto& protoType =
+                        translator.mapType("map", elemType.baseName,
+                                           "string->" + elemType.baseName);
+                tu = protoType.instantiate({move(elemType)});
+                break;
+            }
+            case YAML::NodeType::Scalar: // Generic map
+                if (additionalProperties.as<bool>())
+                    tu = translator.mapType("map");
+                break;
+            default:
+                throw YamlException(additionalProperties,
+                    "additionalProperties should be either a boolean or a map");
+        }
 
+        if (!tu.empty())
+        {
+            if (schema.empty())
+                schema.parentTypes = { std::move(tu) };
+            else
+                addVarDecl(schema.fields, std::move(tu), "additionalProperties",
+                           additionalProperties["description"].as<string>());
+        }
+    }
+
+    if (!schema.empty())
+    {
         cout << yamlSchema.location() << ": Found "
              << (!locus.empty() ? locus + " schema"
                  : "schema " + qualifiedName(schema))
