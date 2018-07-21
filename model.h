@@ -86,8 +86,6 @@ struct VarDecl
         , required(required), defaultValue(std::move(defaultValue))
     { }
 
-    bool isRequired() const { return required; }
-
     std::string toString(bool withDefault = false) const;
 };
 

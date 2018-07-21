@@ -143,7 +143,7 @@ Call::params_type Call::collateParams() const
         allCollated.insert(allCollated.end(), c.begin(), c.end());
 
     stable_partition(allCollated.begin(), allCollated.end(),
-                     mem_fn(&VarDecl::isRequired));
+                     [] (const VarDecl& v) { return v.required; });
     return allCollated;
 }
 
