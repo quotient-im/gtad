@@ -59,7 +59,7 @@ TypeUsage parseTargetType(const YamlNode& yamlTypeNode)
 {
     using YAML::NodeType;
     if (yamlTypeNode.Type() == NodeType::Null)
-        return TypeUsage("");
+        return {};
     if (yamlTypeNode.Type() == NodeType::Scalar)
         return TypeUsage(yamlTypeNode.as<string>());
 
@@ -259,7 +259,7 @@ TypeUsage Translator::mapType(const string& swaggerType,
                     return tu;
                 }
             }
-    return TypeUsage("");
+    return {};
 }
 
 string Translator::mapIdentifier(const string& baseName,

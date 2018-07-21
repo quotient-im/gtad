@@ -82,7 +82,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
     {
         auto schema = analyzeSchema(node, inOut, scope);
         if (isTopLevel && schema.empty() && inOut&Out)
-            return TypeUsage(""); // The type returned by this API is void
+            return {}; // The type returned by this API is void
 
         if (schema.trivial()) // An alias for another type
             return schema.parentTypes.front();

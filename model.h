@@ -51,14 +51,9 @@ struct TypeUsage
     std::unordered_map<std::string, std::vector<std::string>> lists;
     std::vector<TypeUsage> innerTypes; //< Parameter types for type templates
 
-    explicit TypeUsage() = default;
+    TypeUsage() = default;
     explicit TypeUsage(std::string typeName) : name(std::move(typeName)) { }
     explicit TypeUsage(const ObjectSchema& schema);
-    TypeUsage(std::string typeName, std::string import)
-        : TypeUsage(move(typeName))
-    {
-        addImport(move(import));
-    }
 
     TypeUsage instantiate(std::vector<TypeUsage>&& innerTypes) const;
 
