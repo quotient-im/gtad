@@ -33,7 +33,7 @@ class Translator
         ~Translator();
 
         Model processFile(std::string filePath, std::string baseDirPath,
-                          InOut inOut = In|Out) const;
+                          InOut inOut = In|Out, bool skipTrivial = true) const;
         TypeUsage mapType(const std::string& swaggerType,
                           const std::string& swaggerFormat = {},
                           const std::string& baseName = {}) const;

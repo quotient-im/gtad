@@ -221,6 +221,13 @@ struct Model
     void addVarDecl(VarDecls& varList, VarDecl var);
     void addSchema(const ObjectSchema& schema);
     void addImports(const TypeUsage& type);
+
+    bool empty() const { return callClasses.empty() && types.empty(); }
+    bool trivial() const
+    {
+        return callClasses.empty() &&
+                types.size() == 1 && types.front().trivial();
+    }
 };
 
 struct ModelException : Exception

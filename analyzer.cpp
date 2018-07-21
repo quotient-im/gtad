@@ -138,19 +138,26 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         // find the file.
         cout << "Sub-processing schema in "
              << model.fileDir << "./" << refPath << endl;
-        const Model& m =
+        const auto& refModel =
                 translator.processFile(model.fileDir + refPath, baseDir);
-        if (m.types.empty())
+        if (refModel.types.empty())
             throw YamlException(yamlSchema, "The target file has no schemas");
 
-        tu.name = m.types.back().name;
+        if (refModel.trivial())
+        {
+            schema.parentTypes.emplace_back(
+                refModel.types.front().parentTypes.front());
+            continue;
+        }
+
+        tu.name = refModel.types.back().name;
         tu.baseName = tu.name.empty() ? refPath : tu.name;
         // TODO: distinguish between interface files (that should be imported,
         // headers in C/C+) and implementation files (that should not).
         // filesList.front() assumes that there's only one interface file, and
         // it's at the front of the list, which is very naive.
-        tu.addImport(m.dstFiles.empty() ? string{}
-                                        : "\"" + m.dstFiles.front() + "\"");
+        tu.addImport(refModel.dstFiles.empty() ? string{}
+                                        : "\"" + refModel.dstFiles.front() + "\"");
         schema.parentTypes.emplace_back(move(tu));
     }
 

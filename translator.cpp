@@ -282,11 +282,11 @@ string Translator::mapIdentifier(const string& baseName,
 }
 
 Model Translator::processFile(string filePath, string baseDirPath,
-                              InOut inOut) const
+                              InOut inOut, bool skipTrivial) const
 {
-    Model m = Analyzer(move(filePath), move(baseDirPath), *this)
-        .loadModel(_substitutions, inOut);
-    if (m.callClasses.empty() && m.types.empty())
+    auto m = Analyzer(move(filePath), move(baseDirPath), *this)
+                .loadModel(_substitutions, inOut);
+    if (m.empty() || (m.trivial() && skipTrivial))
         return m;
 
     QDir d { _outputDirPath + m.fileDir.c_str() };

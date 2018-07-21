@@ -79,16 +79,17 @@ int main( int argc, char* argv[] )
         {
             if (!QFileInfo(path).isDir())
             {
-                t.processFile(path.toStdString(), "", role);
+                t.processFile(path.toStdString(), "", role, false);
                 continue;
             }
 
             if (!path.isEmpty() && !path.endsWith('/'))
                 path.push_back('/');
-            QStringList filesList = QDir(path).entryList(QDir::Readable|QDir::Files);
+            auto filesList = QDir(path).entryList(QDir::Readable|QDir::Files);
             for (const auto& fn: filesList)
                 if (!exclusions.contains(fn))
-                    t.processFile(fn.toStdString(), path.toStdString(), role);
+                    t.processFile(fn.toStdString(), path.toStdString(),
+                                  role, false);
         }
     }
     catch (Exception& e)
