@@ -79,6 +79,7 @@ struct VarDecl
     bool required;
     std::string defaultValue;
 
+    VarDecl() : required(false) { }
     VarDecl(TypeUsage type, std::string name, std::string baseName,
             std::string description = {}, bool required = true,
             std::string defaultValue = {})
@@ -103,6 +104,7 @@ struct ObjectSchema
     std::string description;
     std::vector<TypeUsage> parentTypes;
     std::vector<VarDecl> fields;
+    VarDecl propertyMap;
     InOut inOut = 0;
 
     bool empty() const { return parentTypes.empty() && fields.empty(); }
@@ -203,7 +205,7 @@ struct Model
     std::vector<std::string> dstFiles;
 
     std::string apiSpec;
-    int apiSpecVersion; // Encoded as xyy, x - major, yy - minor component
+    int apiSpecVersion = 0; // Encoded as xyy, x - major, yy - minor component
 
     std::string hostAddress;
     std::string basePath;

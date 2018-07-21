@@ -267,6 +267,8 @@ object Printer::dumpAllTypes(const Model::schemas_type& types) const
                     fieldDef["datatype"] = f.type.name; // Swagger compat
                     return fieldDef;
                 });
+            if (!type.propertyMap.type.empty())
+                mType["propertyMap"] = dumpField(type.propertyMap);
             return mType;
         });
     return mModels;

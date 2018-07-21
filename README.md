@@ -342,8 +342,8 @@ the following non-standard _types_/_formats_ in the GTAD configuration file
   C++17 or `void*` in C) or a generic JSON object (as long as the API is based
   on JSON structures) such as Qt's `QJsonObject` can be used for this purpose.
 
-- `map`: this is what OpenAPI clumsily calls `additionalProperties` and
-  the rest of the world knows as a property map or a property list. 
+- `map`: this is what OpenAPI clumsily calls `additionalProperties` but 
+  a better name would probably be "property map" or "property list". 
   `additionalProperties` corresponds to a data structure mapping strings 
   (property names) to structures defined in the API description (property 
   values); the API description file does not define property names, only the 

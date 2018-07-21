@@ -50,13 +50,18 @@ class Analyzer
                 const std::string& baseName, bool required,
                 const ObjectSchema& bodyParamSchema);
         template <typename ScopeT, typename... ArgTs>
-        void addVarDecl(VarDecls& varList, TypeUsage type,
-                        const std::string& baseName, const ScopeT& scope,
-                        ArgTs&&... args)
+        VarDecl makeVarDecl(TypeUsage type, const std::string& baseName,
+                         const ScopeT& scope, ArgTs&&... args)
         {
-            model.addImports(type);
-            varList.emplace_back(std::move(type),
+            return { std::move(type),
                 translator.mapIdentifier(baseName, qualifiedName(scope)),
-                baseName, std::forward<ArgTs>(args)...);
+                baseName, std::forward<ArgTs>(args)... };
+        }
+
+        template <typename... ArgTs>
+        void addVarDecl(VarDecls& varList, ArgTs&&... varDeclArgs)
+        {
+            model.addVarDecl(varList,
+                makeVarDecl(std::forward<ArgTs>(varDeclArgs)...));
         }
 };

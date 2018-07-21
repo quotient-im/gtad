@@ -84,6 +84,9 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
         if (isTopLevel && schema.empty() && inOut&Out)
             return TypeUsage(""); // The type returned by this API is void
 
+        if (schema.trivial()) // An alias for another type
+            return schema.parentTypes.front();
+
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
         {
             model.addSchema(schema);
@@ -92,8 +95,6 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
             tu.name = tu.baseName = schema.name;
             return tu;
         }
-        if (schema.trivial()) // An alias for another type
-            return schema.parentTypes.front();
         // An In empty object is schemaless but existing, mapType("object")
         // Also, a nameless non-empty schema is now treated as a generic
         // mapType("object"). TODO, low priority: ad-hoc typing (via tuples?)
@@ -227,9 +228,9 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
             if (schema.empty())
                 schema.parentTypes = { std::move(tu) };
             else
-                addVarDecl(schema.fields, std::move(tu), "additionalProperties",
-                           schema,
-                           additionalProperties["description"].as<string>());
+                schema.propertyMap = makeVarDecl(std::move(tu),
+                    "additionalProperties", schema,
+                    additionalProperties["description"].as<string>(""));
         }
     }
 
