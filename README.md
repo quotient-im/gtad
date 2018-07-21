@@ -215,7 +215,8 @@ In the above,
   against _type_ and _format_ in the API description (see below on extensions
   to OpenAPI _types_ and _formats_). If the _format_ key starts with a `/`
   (forward slash) it is treated as a regular expression (the trailing slash is
-  optional and is not processed), otherwise it's used as a literal
+  optional and is not processed - if you need it to be the last character of
+  the regex, just add one more `/`), otherwise it's used as a literal
   case-sensitive string.
   
 - `<targetTypeSpec>` is either the target type literal string (such as
