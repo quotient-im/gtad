@@ -182,7 +182,7 @@ void dumpDescription(object& target, const ModelT& model)
 object Printer::renderType(const TypeUsage& tu) const
 {
     object values { { "name", partial {[name=tu.name] { return name; }} }
-//                  , { "baseName", tu.baseName }
+                  , { "baseName", tu.baseName }
     };
     auto qualifiedValues = values;
     if (!tu.scope.empty())
@@ -207,7 +207,7 @@ object Printer::renderType(const TypeUsage& tu) const
 
     return { { "name", _typeRenderer.render(values) }
            , { "qualifiedName", _typeRenderer.render(qualifiedValues) }
-//           , { "baseName", tu.baseName }
+           , { "baseName", tu.baseName }
     };
 }
 
