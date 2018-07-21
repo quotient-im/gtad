@@ -194,7 +194,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                                     { return baseName == n.as<string>(); } );
             addVarDecl(schema.fields,
                        analyzeTypeUsage(property.second, inOut, schema.scope),
-                       baseName,
+                       baseName, schema,
                        property.second["description"].as<string>(""), required);
         }
     }
@@ -228,6 +228,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                 schema.parentTypes = { std::move(tu) };
             else
                 addVarDecl(schema.fields, std::move(tu), "additionalProperties",
+                           schema,
                            additionalProperties["description"].as<string>());
         }
     }
@@ -251,7 +252,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     return schema;
 }
 
-void Analyzer::addParamsFromSchema(VarDecls& varList,
+void Analyzer::addParamsFromSchema(VarDecls& varList, const Call& call,
         const string& baseName, bool required, const ObjectSchema& paramSchema)
 {
     if (paramSchema.parentTypes.empty())
@@ -261,7 +262,7 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
     } else if (paramSchema.trivial())
     {
         // The schema consists of a single parent type, use that type instead.
-        addVarDecl(varList, paramSchema.parentTypes.front(), baseName,
+        addVarDecl(varList, paramSchema.parentTypes.front(), baseName, call,
                    paramSchema.description, required);
     } else
     {
@@ -271,7 +272,7 @@ void Analyzer::addParamsFromSchema(VarDecls& varList,
         const auto typeName =
             paramSchema.name.empty() ? camelCase(baseName) : paramSchema.name;
         model.addSchema(paramSchema);
-        addVarDecl(varList, TypeUsage(typeName), baseName, "", required);
+        addVarDecl(varList, TypeUsage(typeName), baseName, call, "", required);
     }
 }
 
@@ -367,7 +368,8 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                     {
                         addVarDecl(call.getParamsBlock(in),
                             analyzeTypeUsage(yamlParam, In, call.name, TopLevel),
-                            name, yamlParam["description"].as<string>(""),
+                            name, call,
+                            yamlParam["description"].as<string>(""),
                             required, yamlParam["default"].as<string>(""));
                         continue;
                     }
@@ -381,15 +383,14 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                         // means a freeform object.
                         call.inlineBody = true;
                         addVarDecl(call.bodyParams(),
-                                   translator.mapType("object"), name,
-                                   yamlParam["description"].as<string>(""),
-                                   false);
+                            translator.mapType("object"), name, call,
+                            yamlParam["description"].as<string>(""), false);
                     } else {
                         // If the schema consists of a single parent type,
                         // inline that type.
                         if (bodySchema.trivial())
                             call.inlineBody = true;
-                        addParamsFromSchema(call.bodyParams(),
+                        addParamsFromSchema(call.bodyParams(), call,
                                             name, required, bodySchema);
                     }
                 }
@@ -404,9 +405,9 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                         for (const auto& yamlHeader: yamlHeaders.asMap())
                         {
                             addVarDecl(response.headers,
-                                analyzeTypeUsage(yamlHeader.second, Out, call.name,
-                                            TopLevel),
-                                yamlHeader.first.as<string>(),
+                                analyzeTypeUsage(yamlHeader.second, Out,
+                                                 call.name, TopLevel),
+                                yamlHeader.first.as<string>(), call,
                                 yamlHeader.second["description"].as<string>(""),
                                 false);
                         }
@@ -418,7 +419,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                                 responseSchema.description.empty())
                             responseSchema.description = response.description;
                         if (!responseSchema.empty())
-                            addParamsFromSchema(response.properties,
+                            addParamsFromSchema(response.properties, call,
                                 "data", true, responseSchema);
                     }
                     call.responses.emplace_back(move(response));

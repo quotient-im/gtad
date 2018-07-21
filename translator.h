@@ -37,7 +37,8 @@ class Translator
         TypeUsage mapType(const std::string& swaggerType,
                           const std::string& swaggerFormat = {},
                           const std::string& baseName = {}) const;
-        std::string mapIdentifier(const std::string& baseName) const;
+        std::string mapIdentifier(const std::string& baseName,
+                                  const std::string& scope = {}) const;
 
     private:
         pair_vector_t<std::string> _substitutions;

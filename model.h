@@ -177,6 +177,12 @@ struct Call
     std::vector<Response> responses;
 };
 
+template <>
+inline std::string qualifiedName(const Call& call)
+{
+    return call.name;
+}
+
 struct CallClass
 {
     std::vector<Call> calls;

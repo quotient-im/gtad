@@ -101,7 +101,7 @@ void parseEntries(const YamlSequence& entriesYaml, FnT inserter,
                                  inserter, typesBlockYaml.get("+set").asMap());
                     break;
                 }
-                [[clang::fallthrough]];
+                // FALLTHROUGH
             default:
                 throw YamlException(typesBlockYaml,
                         "Too many entries in the map, check indentation");
@@ -262,17 +262,20 @@ TypeUsage Translator::mapType(const string& swaggerType,
     return TypeUsage("");
 }
 
-string Translator::mapIdentifier(const string& baseName) const
+string Translator::mapIdentifier(const string& baseName,
+                                 const string& scope) const
 {
+    auto scopedName = scope;
+    scopedName.append(1, '/').append(baseName);
     for (const auto& entry: _identifiers)
     {
         const auto& pattn = entry.first;
         if (!pattn.empty() && pattn.front() == '/')
-            return regex_replace(baseName,
+            return regex_replace(scopedName,
                                  regex(++pattn.begin(), pattn.end()),
                                  entry.second);
 
-        if (pattn == baseName)
+        if (pattn == baseName || pattn == scopedName)
             return entry.second;
     }
     return baseName;

@@ -170,9 +170,10 @@ Be careful with such substitutions, as they ignore YAML/JSON structure of
 the API description; a careless regex can easily render the input invalid.
 
 ##### `identifiers`
-This is a similar (in format) map of more fine-tuned substitutions, only applied
-to _identifiers_ encountered in OpenAPI. As of GTAD 0.6, it's only applied
-to call parameters and structure fields but not, e.g., call names.
+(Since GTAD 0.6) This is a similar (in format) map of more fine-tuned
+substitutions, only applied to _identifiers_ encountered in OpenAPI. For now
+it's only applied to call parameters and structure fields but not, e.g., call
+names (operationIds).
 
 One of the main cases for this is escaping parameter names that clash with
 language reserved words (`unsigned` in the example below) or otherwise
@@ -183,6 +184,17 @@ configuration will have both the original (`{{baseName}}`) and the transformed
 (`{{paramName}}` or `{{nameCamelCase}}`) names of those parameters so that you
 can still use it for JSON key names in actual API payloads in your template
 files.
+
+Since GTAD 0.7 you can prepend the scope (schema or call name) as they appear
+in the API definition file to limit the substitution to a specific occurence
+of the identifier. The separating character is `/` (works without escaping even
+inside regexes). This is especially useful to adjust the parameter name for
+`additionalProperties` (see further in this document) in different schemas.
+E.g., the line `AuthenticationData/additionalProperties: authInfo` will
+rename the `additionalProperties` field of a schema with the name
+`AuthenticationData` to `authInfo`; at the same time, you can have a line
+`getWhoIs/additionalProperties: devices` that will rename. You must NOT provide the scope name in
+the substitution string.
 
 ##### `types`
 This is the biggest and the most important part of the analyzer configuration,

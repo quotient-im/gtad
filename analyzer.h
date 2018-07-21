@@ -46,15 +46,17 @@ class Analyzer
         ObjectSchema analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                 std::string scope = {}, std::string locus = {});
 
-        void addParamsFromSchema(VarDecls& varList, const std::string& baseName,
-                bool required, const ObjectSchema& bodyParamSchema);
-        template <typename... ArgTs>
+        void addParamsFromSchema(VarDecls& varList, const Call& call,
+                const std::string& baseName, bool required,
+                const ObjectSchema& bodyParamSchema);
+        template <typename ScopeT, typename... ArgTs>
         void addVarDecl(VarDecls& varList, TypeUsage type,
-                        const std::string& baseName, ArgTs&&... args)
+                        const std::string& baseName, const ScopeT& scope,
+                        ArgTs&&... args)
         {
             model.addImports(type);
             varList.emplace_back(std::move(type),
-                translator.mapIdentifier(baseName), baseName,
-                std::forward<ArgTs>(args)...);
+                translator.mapIdentifier(baseName, qualifiedName(scope)),
+                baseName, std::forward<ArgTs>(args)...);
         }
 };
