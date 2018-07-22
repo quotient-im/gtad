@@ -63,50 +63,77 @@ Printer::template_type Printer::makeMustache(const string& tmpl,
     return mstch;
 }
 
-Printer::Printer(context_type&& context, const vector<string>& templateFileNames,
-                 const string& inputBasePath, string outputBasePath,
+class GtadContext : public km::context<string>
+{
+    public:
+        using data = km::data;
+
+        GtadContext(string inputBasePath, const data* d)
+            : context(d), inputBasePath(std::move(inputBasePath))
+        { }
+
+        const data* get_partial(const string& name) const override
+        {
+            if (auto result = context::get_partial(name))
+                return result;
+
+            auto it = filePartialsCache.find(name);
+            if (it != filePartialsCache.end())
+                return &it->second;
+
+            ifstream ifs { inputBasePath + name };
+            if (!ifs.good())
+            {
+                ifs.open(inputBasePath + name + ".mustache");
+                if (!ifs.good())
+                    cerr << "Failed to open file for a partial: "
+                         << inputBasePath + name << endl;
+            }
+
+            string fileContents;
+            if (ifs.good())
+                getline(ifs, fileContents, '\0'); // Won't work on files with NULs
+            else
+                fileContents =
+                    "{{_comment}} Failed to open " + inputBasePath + name + "\n";
+            return &filePartialsCache.insert(
+                        make_pair(name,
+                            partial([fileContents] { return fileContents; })))
+                    .first->second;
+        }
+
+    private:
+        string inputBasePath;
+        mutable unordered_map<string, data> filePartialsCache;
+};
+
+Printer::Printer(context_type&& contextData,
+                 const vector<string>& templateFileNames,
+                 string inputBasePath, string outputBasePath,
                  const string& outFilesListPath)
-    : _context(std::move(context))
-    , _delimiter(safeString(_context, "_delimiter"))
+    : _contextData(std::move(contextData))
+    , _delimiter(safeString(_contextData, "_delimiter"))
     , _typeRenderer(makeMustache(
-                        safeString(_context, "_typeRenderer", "{{>name}}"),
+                        safeString(_contextData, "_typeRenderer", "{{>name}}"),
                         _delimiter))
-    , _leftQuote(safeString(_context, "_leftQuote",
-                            safeString(_context, "_quote", "\"")))
-    , _rightQuote(safeString(_context, "_rightQuote",
-                             safeString(_context, "_quote", "\"")))
+    , _leftQuote(safeString(_contextData, "_leftQuote",
+                            safeString(_contextData, "_quote", "\"")))
+    , _rightQuote(safeString(_contextData, "_rightQuote",
+                             safeString(_contextData, "_quote", "\"")))
+    , _inputBasePath(std::move(inputBasePath))
     , _outputBasePath(std::move(outputBasePath))
     // _outFilesList is initialised further below
 {
     using km::lambda2;
     using km::renderer;
     // Enriching the context with "My Mustache library"
-    _context.set("_filePartial", lambda2 { // TODO: Switch to new Mustache's {{>}}
-        [inputBasePath](const string& s, const renderer& render) {
-            ifstream ifs { inputBasePath + s };
-            if (!ifs.good())
-            {
-                ifs.open(inputBasePath + s + ".mustache");
-                if (!ifs.good())
-                    cerr << "Failed to open file for a partial: "
-                         << inputBasePath + s << endl;
-            }
-            string embeddedTemplate;
-            if (ifs.good())
-                getline(ifs, embeddedTemplate, '\0'); // Won't work on files with NULs
-            else
-                embeddedTemplate =
-                    "{{_comment}} Failed to open " + inputBasePath + s + "\n";
-            return render(embeddedTemplate, false);
-        }
-    });
-    _context.set("_cap", lambda2 {
+    _contextData.set("_cap", lambda2 {
         [](const string& s, const renderer& render)
         {
             return capitalizedCopy(render(s, false));
         }
     });
-    _context.set("_toupper", lambda2 {
+    _contextData.set("_toupper", lambda2 {
         [](string s, const renderer& render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
@@ -114,7 +141,7 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
             return s;
         }
     });
-    _context.set("_tolower", lambda2 {
+    _contextData.set("_tolower", lambda2 {
         [](string s, const renderer& render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
@@ -124,7 +151,7 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
     });
     for (const auto& templateFileName: templateFileNames)
     {
-        auto templateFilePath = inputBasePath + templateFileName;
+        auto templateFilePath = _inputBasePath + templateFileName;
         ifstream ifs { templateFilePath };
         if (!ifs.good())
             throw Exception(templateFilePath + ": Failed to open");
@@ -311,17 +338,17 @@ bool dumpContentTypes(object& target, const string& keyName, vector<string> type
 
 vector<string> Printer::print(const Model& model) const
 {
-    auto context = _context;
-    context.set("filenameBase", model.srcFilename);
-    context.set("basePathWithoutHost", model.basePath);
-    context.set("basePath", model.hostAddress + model.basePath);
-    setList(context, "imports", model.imports);
+    auto contextData = _contextData;
+    contextData.set("filenameBase", model.srcFilename);
+    contextData.set("basePathWithoutHost", model.basePath);
+    contextData.set("basePath", model.hostAddress + model.basePath);
+    setList(contextData, "imports", model.imports);
     auto&& mAllTypes = dumpAllTypes(model.types);
     if (!mAllTypes.empty())
-        context.set("allModels", mAllTypes);
+        contextData.set("allModels", mAllTypes);
     auto&& mTypes = dumpTypes(model.types, "");
     if (!mTypes.empty())
-        context.set("models", mTypes);
+        contextData.set("models", mTypes);
     if (!model.callClasses.empty())
     {
         const auto& callClass = model.callClasses.back();
@@ -395,28 +422,28 @@ vector<string> Printer::print(const Model& model) const
             mOperations.emplace("classname", "NOT_IMPLEMENTED");
             mOperations.emplace("consumesNonJson?", globalConsumesNonJson);
             mOperations.emplace("producesNonJson?", globalProducesNonJson);
-            context.set("operations", mOperations);
+            contextData.set("operations", mOperations);
         }
     }
     vector<string> fileNames;
     for (auto fileTemplate: _templates)
     {
-        ostringstream fileNameStr;
-        fileNameStr << _outputBasePath << model.fileDir;
-        fileTemplate.first.render({ "base", model.srcFilename }, fileNameStr);
+        auto fileName = _outputBasePath;
+        fileName.append(model.fileDir)
+            .append(fileTemplate.first.render({ "base", model.srcFilename }));
         if (!fileTemplate.first.error_message().empty())
         {
             throw Exception("Incorrect filename template: " +
                             fileTemplate.first.error_message());
         }
-        auto fileName = fileNameStr.str();
         cout << "Printing " << fileName << endl;
 
         ofstream ofs { fileName };
         if (!ofs.good())
             throw Exception(fileName + ": Couldn't open for writing");
 
-        fileTemplate.second.render(context, ofs);
+        GtadContext c { _inputBasePath, &contextData };
+        fileTemplate.second.render(c, ofs);
         if (fileTemplate.second.error_message().empty())
             _outFilesList << fileName << endl;
         else

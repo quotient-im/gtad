@@ -14,9 +14,9 @@ class Printer
         using templates_type = std::vector<std::pair<template_type, template_type>>;
         using m_object_type = kainjow::mustache::object;
 
-        Printer(context_type&& context,
+        Printer(context_type&& contextData,
                 const std::vector<std::string>& templateFileNames,
-                const std::string& inputBasePath, std::string outputBasePath,
+                std::string inputBasePath, std::string outputBasePath,
                 const std::string& outFilesListPath);
         Printer(Printer&& p) = default;
 
@@ -25,12 +25,13 @@ class Printer
         std::vector<std::string> print(const Model& model) const;
 
     private:
-        context_type _context;
+        context_type _contextData;
         std::string _delimiter;
         mutable template_type _typeRenderer;
         std::string _leftQuote;
         std::string _rightQuote;
         templates_type _templates;
+        std::string _inputBasePath;
         std::string _outputBasePath;
         mutable std::ofstream _outFilesList;
 
