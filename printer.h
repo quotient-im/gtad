@@ -20,12 +20,16 @@ class Printer
                 const std::string& outFilesListPath);
         Printer(Printer&& p) = default;
 
+        Printer::template_type makeMustache(const std::string& tmpl,
+                                            std::string setDelimiter = {}) const;
         std::vector<std::string> print(const Model& model) const;
 
     private:
         context_type _context;
+        std::string _delimiter;
         mutable template_type _typeRenderer;
-        std::string _quoteChar;
+        std::string _leftQuote;
+        std::string _rightQuote;
         templates_type _templates;
         std::string _outputBasePath;
         mutable std::ofstream _outFilesList;

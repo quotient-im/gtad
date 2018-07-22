@@ -26,8 +26,6 @@ using namespace std::placeholders;
 namespace km = kainjow::mustache;
 using km::object;
 using km::partial;
-using km::lambda2;
-using km::renderer;
 
 inline string safeString(const Printer::context_type& data, const string& key,
                          string defaultValue = {})
@@ -55,9 +53,12 @@ inline bool endsWith(const string& s, const string& ss)
     return equal(ss.rbegin(), ss.rend(), s.rbegin());
 }
 
-inline auto make_mustache(const std::string& tmpl)
+Printer::template_type Printer::makeMustache(const string& tmpl,
+                                             string setDelimiter) const
 {
-    km::mustache mstch { tmpl };
+    if (!setDelimiter.empty())
+        setDelimiter = "{{=" + setDelimiter + "=}}";
+    template_type mstch { setDelimiter + tmpl };
     mstch.set_custom_escape([](string s) { return s; });
     return mstch;
 }
@@ -65,40 +66,47 @@ inline auto make_mustache(const std::string& tmpl)
 Printer::Printer(context_type&& context, const vector<string>& templateFileNames,
                  const string& inputBasePath, string outputBasePath,
                  const string& outFilesListPath)
-    : _context(context)
-    , _typeRenderer(make_mustache("{{#scope}}" +
-                                      safeString(context, "_scopeRenderer") +
-                                  "{{/scope}}{{>name}}"))
-    , _quoteChar(safeString(context, "_literalQuote", "\""))
+    : _context(std::move(context))
+    , _delimiter(safeString(_context, "_delimiter"))
+    , _typeRenderer(makeMustache(
+                        safeString(_context, "_typeRenderer", "{{>name}}"),
+                        _delimiter))
+    , _leftQuote(safeString(_context, "_leftQuote",
+                            safeString(_context, "_quote", "\"")))
+    , _rightQuote(safeString(_context, "_rightQuote",
+                             safeString(_context, "_quote", "\"")))
     , _outputBasePath(std::move(outputBasePath))
+    // _outFilesList is initialised further below
 {
+    using km::lambda2;
+    using km::renderer;
     // Enriching the context with "My Mustache library"
-    _context.set("@filePartial", lambda2 { // TODO: Switch to new Mustache's {{>}}
+    _context.set("_filePartial", lambda2 { // TODO: Switch to new Mustache's {{>}}
         [inputBasePath](const string& s, const renderer& render) {
             ifstream ifs { inputBasePath + s };
             if (!ifs.good())
             {
                 ifs.open(inputBasePath + s + ".mustache");
                 if (!ifs.good())
-                {
                     cerr << "Failed to open file for a partial: "
                          << inputBasePath + s << endl;
-                    // FIXME: Figure a better error reporting mechanism
-                    return "/* Failed to open " + inputBasePath + s + " */";
-                }
             }
             string embeddedTemplate;
-            getline(ifs, embeddedTemplate, '\0'); // Won't work on files with NULs
+            if (ifs.good())
+                getline(ifs, embeddedTemplate, '\0'); // Won't work on files with NULs
+            else
+                embeddedTemplate =
+                    "{{_comment}} Failed to open " + inputBasePath + s + "\n";
             return render(embeddedTemplate, false);
         }
     });
-    _context.set("@cap", lambda2 {
+    _context.set("_cap", lambda2 {
         [](const string& s, const renderer& render)
         {
             return capitalizedCopy(render(s, false));
         }
     });
-    _context.set("@toupper", lambda2 {
+    _context.set("_toupper", lambda2 {
         [](string s, const renderer& render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
@@ -106,7 +114,7 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
             return s;
         }
     });
-    _context.set("@tolower", lambda2 {
+    _context.set("_tolower", lambda2 {
         [](string s, const renderer& render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
@@ -125,8 +133,9 @@ Printer::Printer(context_type&& context, const vector<string>& templateFileNames
         if (!getline(ifs, templateContents, '\0')) // Won't work on files with NULs
             throw Exception(templateFilePath + ": Failed to read");
 
-        _templates.emplace_back(withoutSuffix(templateFileName, ".mustache"),
-                                make_mustache(templateContents));
+        _templates.emplace_back(
+            makeMustache(withoutSuffix(templateFileName, ".mustache")),
+            makeMustache(templateContents, _delimiter));
     }
     if (!outFilesListPath.empty())
     {
@@ -159,7 +168,7 @@ void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
     for (auto it = source.begin(); it != source.end();)
     {
         *mIt = wrap(convert(*it));
-        mIt->set("@join", ++it != source.end());
+        mIt->set("_join", ++it != source.end());
         mIt->set("hasMore", it != source.end()); // Swagger compatibility
         ++mIt;
     }
@@ -347,7 +356,7 @@ vector<string> Printer::print(const Model& model) const
                     [this, &call] (const Path::part_type& p) {
                         const string s { call.path, get<0>(p), get<1>(p) };
                         return get<2>(p) == Path::Variable ? s
-                               : _quoteChar + s + _quoteChar;
+                               : _leftQuote + s + _rightQuote;
                     });
 
                 using namespace placeholders;

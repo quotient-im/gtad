@@ -192,28 +192,33 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
         });
 
     Printer::context_type env;
+    using namespace kainjow::mustache;
     const auto& mustacheYaml = configY["mustache"].asMap();
-    const auto& envYaml = mustacheYaml["definitions"].asMap();
+    const auto& envYaml = mustacheYaml["constants"].asMap();
     for (const auto& p: envYaml)
     {
-        using namespace kainjow::mustache;
-
         const auto pName = p.first.as<string>();
         if (p.second.IsScalar())
-            env.set(pName,
-                    partial { [s = p.second.as<string>()] { return s; } });
-        else
         {
-            const auto pDefinition = p.second.asMap().front();
-            const auto pType = pDefinition.first.as<string>();
-            const YamlNode defaultVal = pDefinition.second;
-            if (pType == "set")
-                env.set(pName, { data::type::list });
-            else if (pType == "bool")
-                env.set(pName, { defaultVal.as<bool>() });
-            else
-                env.set(pName, { defaultVal.as<string>() });
+            env.set(pName, p.second.as<string>());
+            continue;
         }
+        const auto pDefinition = p.second.asMap().front();
+        const auto pType = pDefinition.first.as<string>();
+        const YamlNode defaultVal = pDefinition.second;
+        if (pType == "set")
+            env.set(pName, { data::type::list });
+        else if (pType == "bool")
+            env.set(pName, { defaultVal.as<bool>() });
+        else
+            env.set(pName, { defaultVal.as<string>() });
+    }
+    const auto& partialsYaml = mustacheYaml["partials"].asMap();
+    for (const auto& p: partialsYaml)
+    {
+        env.set(p.first.as<string>(),
+                partial { [s = p.second.as<string>()] { return s; } });
+
     }
 
     vector<string> outputFiles;
