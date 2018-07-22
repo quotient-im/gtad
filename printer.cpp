@@ -181,6 +181,13 @@ void dumpDescription(object& target, const ModelT& model)
 
 object Printer::renderType(const TypeUsage& tu) const
 {
+    // This method first produces two contexts: one to render a non-qualified
+    // name (in `values`), the other to do a qualified name
+    // (in `qualifiedValues`). These contexts are filled in, in particular,
+    // with pre-rendered (non-qualified and qualifed, respectively)
+    // inner type names in {{1}}, {{2}} etc. Then, using these two contexts,
+    // a Mustache object for the current type is made, fully rendering
+    // the bare type name in `name` and the qualified name in `qualifiedName`.
     object values { { "name", partial {[name=tu.name] { return name; }} }
                   , { "baseName", tu.baseName }
     };
