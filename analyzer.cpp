@@ -42,24 +42,8 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
 {
     auto yamlTypeNode = node["type"];
 
-    if (yamlTypeNode && yamlTypeNode.IsSequence()) // Multitype/variant
-    {
-        const auto& typeNames = yamlTypeNode.asSequence().asStrings();
-        string baseTypes;
-        for (const auto& t: typeNames)
-        {
-            if (!baseTypes.empty())
-                baseTypes.push_back(',');
-            baseTypes += t;
-        }
-        const auto& protoType =
-            translator.mapType("variant", baseTypes, baseTypes);
-
-        vector<TypeUsage> tus;
-        for (const auto& t: typeNames)
-            tus.emplace_back(translator.mapType(t));
-        return protoType.instantiate(move(tus));
-    }
+    if (yamlTypeNode && yamlTypeNode.IsSequence())
+        return analyzeMultitype(yamlTypeNode.asSequence(), inOut, scope);
 
     auto yamlType = yamlTypeNode.as<string>("object");
     if (yamlType == "array")
@@ -106,6 +90,29 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
     throw YamlException(node, "Unknown type: " + yamlType);
 }
 
+TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
+                                     const string& scope)
+{
+    vector<TypeUsage> tus;
+    for (const auto& yamlType: yamlTypes)
+        tus.emplace_back(yamlType.IsScalar()
+                         ? translator.mapType(yamlType.as<string>())
+                         : analyzeTypeUsage(yamlType, inOut, scope));
+
+    string baseTypes;
+    for (const auto& t: tus)
+    {
+        if (!baseTypes.empty())
+            baseTypes.push_back(',');
+        baseTypes += t.baseName;
+    }
+
+    const auto& protoType = translator.mapType("variant", baseTypes, baseTypes);
+    cout << "Using " << protoType.name << " for a multitype: "
+         << baseTypes << endl;
+    return protoType.instantiate(move(tus));
+}
+
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                                      string scope, string locus)
 {
@@ -120,6 +127,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         refPaths.resize(yamlAllOf.size());
         transform(yamlAllOf.begin(), yamlAllOf.end(), refPaths.begin(),
                   [](YamlMap p) { return p.get("$ref").as<string>(); });
+        // FIXME: we may have a non-$ref (e.g., just 'object') under allOf
     }
 
     for (const auto& refPath: refPaths)
@@ -160,6 +168,10 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                                         : "\"" + refModel.dstFiles.front() + "\"");
         schema.parentTypes.emplace_back(move(tu));
     }
+
+    if (auto yamlOneOf = yamlSchema["oneOf"].asSequence())
+        schema.parentTypes.emplace_back(
+                    analyzeMultitype(yamlOneOf, inOut, scope));
 
     auto name = yamlSchema["title"].as<string>(
                     schema.trivial() ? schema.parentTypes.back().name : "");

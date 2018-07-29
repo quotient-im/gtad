@@ -24,6 +24,7 @@
 
 class YamlNode;
 class YamlMap;
+class YamlSequence;
 
 class Analyzer
 {
@@ -43,6 +44,8 @@ class Analyzer
         enum IsTopLevel : bool { Inner = false, TopLevel = true };
         TypeUsage analyzeTypeUsage(const YamlMap& node, InOut inOut,
                               std::string scope, IsTopLevel isTopLevel = Inner);
+        TypeUsage analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
+                                   const std::string& scope);
         ObjectSchema analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                 std::string scope = {}, std::string locus = {});
 
