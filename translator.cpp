@@ -242,6 +242,7 @@ TypeUsage Translator::mapType(const string& swaggerType,
                               const string& swaggerFormat,
                               const string& baseName) const
 {
+    TypeUsage tu;
     for (const auto& swTypePair: _typesMap)
         if (swTypePair.first == swaggerType)
             for (const auto& swFormatPair: swTypePair.second)
@@ -252,19 +253,20 @@ TypeUsage Translator::mapType(const string& swaggerType,
                      regex_search(swaggerFormat,
                                   regex(++swFormat.begin(), swFormat.end()))))
                 {
-                    // FIXME (#22): The below is a source of great inefficiency.
+                    // FIXME (#22): a source of great inefficiency.
                     // TypeUsage should become a handle to an instance of
                     // a newly-made TypeDefinition type that would own all
                     // the stuff TypeUsage now has, except innerTypes
-                    auto tu = swFormatPair.second;
-                    // Fallback chain: baseName, swaggerFormat, swaggerType
-                    tu.baseName = baseName.empty() ? swaggerFormat.empty() ?
-                                                     swaggerType : swaggerFormat
-                                                   : baseName;
-                    return tu;
+                    tu = swFormatPair.second;
+                    goto conclusion;
                 }
             }
-    return {};
+conclusion:
+    // Fallback chain: baseName, swaggerFormat, swaggerType
+    tu.baseName = baseName.empty() ? swaggerFormat.empty() ?
+                                     swaggerType : swaggerFormat
+                                   : baseName;
+    return tu;
 }
 
 string Translator::mapIdentifier(const string& baseName,
