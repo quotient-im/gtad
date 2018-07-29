@@ -451,29 +451,40 @@ Mustache template syntax boils down to 4 tag types:
   there's nothing to overload it with.
 
 Supporting tag types include a `{{!comment}}` and delimiter reassignment
-(`{{=<% %>=}}` switches from the `{{`/`}}` pair to `<%`/`%>`)
+(e.g., `{{=<% %>=}}` switches from the `{{`/`}}` pair to `<%`/`%>`)
 
-The printer configuration is stored in the top-level `mustache` node and
-includes the following parts:
+As of GTAD 0.7, the printer configuration is stored in the top-level
+`mustache` node and includes the following parts:
 
-##### `definitions`
-This string-to-mustache map is passed as is to the Mustache generator; 
+##### `constants`
+This is a string-to-string map that forms a part of the context for the Mustache
+templating engine. Strings provided as keys correspond to Mustache _variables_
+and values, respectively, are values of those variables. No further
+interpolation of Mustache constructs takes place. Using of a constant `name` in
+Mustache code is as simple as `{{name}}`.
+
+##### `partials`
+This string-to-mustache map is passed as is to the Mustache generator;
 strings defined here are treated as Mustache _partials_; use them to
 factor out often-used Mustache snippets in a manner you would use functions in
 a programming language. Using one partial from another is perfectly fine; the
 configuration file from libQMatrixClient has several examples of such
-inclusion. As of GTAD 0.6, including _partials_ from another file using the
-usual Mustache syntax is not supported but GTAD provides a workaround macro
-`{{#@filePartial}}` that can be used either from `definitions` or directly
-from Mustache templates.
+inclusion. The standard Mustache syntax is used: to use a partial with the name
+`myPartial` put `{{>myPartial}}` into your Mustache code and define
+`myPartial: '(definition)'` in the configuration file. Since GTAD 0.7 you can
+also include a partial defined in another file using the same syntax:
+`{{>path/to/file}}` includes (and interpolates as Mustache code in its turn)
+a file with the path `path/to/file` or, if that is not found,
+`path/to/file.mustache`.
 
 ##### `templates`
-This is the YAML array of file _templates_ used to generate output files.
-For a given language, this is fairly static: in case of C/C++, it's a pair of
-entries: `{{base}}.h.mustache` and `{{base}}.cpp.mustache`. As you might have
-guessed, template file names are themselves Mustache templates; `{{base}}` is
-replaced with the original API description file name (if it has `.yml` or `
-.yaml` extension, it will be stripped; other extensions will be preserved).
+This is a YAML array of paths to files with Mustache _templates_ used
+to generate output files. For a given language, this is fairly static: in case
+of C/C++, it's normally a pair of entries: `{{base}}.h.mustache` and
+`{{base}}.cpp.mustache`. As you might have guessed, template file names are
+themselves Mustache templates; `{{base}}` is replaced with the original API
+description file name (if it has `.yml` or `.yaml` extension, it will be
+stripped; other extensions will be preserved).
 
 ##### `outFilesList`
 This node is not used in libQMatrixClient but is there for convenience and 
