@@ -208,7 +208,8 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     }
     if (additionalProperties)
     {
-        TypeUsage tu {};
+        TypeUsage tu;
+        string description;
         switch (additionalProperties.Type())
         {
             case YAML::NodeType::Map:
@@ -219,6 +220,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                         translator.mapType("map", elemType.baseName,
                                            "string->" + elemType.baseName);
                 tu = protoType.instantiate({move(elemType)});
+                description = additionalProperties["description"].as<string>("");
                 break;
             }
             case YAML::NodeType::Scalar: // Generic map
@@ -236,8 +238,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                 schema.parentTypes = { std::move(tu) };
             else
                 schema.propertyMap = makeVarDecl(std::move(tu),
-                    "additionalProperties", schema,
-                    additionalProperties["description"].as<string>(""));
+                    "additionalProperties", schema, move(description));
         }
     }
 
