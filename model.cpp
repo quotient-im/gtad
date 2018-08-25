@@ -176,6 +176,8 @@ void Model::addSchema(const ObjectSchema& schema)
     types.emplace_back(schema);
     for (const auto& pt: schema.parentTypes)
         addImports(pt);
+    if (!schema.propertyMap.type.empty())
+        addImports(schema.propertyMap.type);
 }
 
 void Model::addImports(const TypeUsage& type)
