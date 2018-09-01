@@ -92,10 +92,31 @@ using InOut = unsigned short;
 static constexpr InOut In = 0x1;
 static constexpr InOut Out = 0x2;
 
-struct ObjectSchema
+struct Scope
 {
-    std::string scope; // Either empty (top-level) or a Call name
+    // Either empty (top-level) or a Call name (only for ObjectSchema)
+    std::string scope;
     std::string name;
+
+    Scope() = default;
+    explicit Scope(std::string name, std::string scope = {})
+        : scope(std::move(scope)), name(std::move(name))
+    { }
+    std::string qualifiedName() const
+    {
+        const auto _name = name.empty() ? "(anonymous)" : name;
+        return scope.empty() ? _name : scope + '.' + _name;
+    }
+};
+
+template <>
+inline std::string qualifiedName(const Scope& scope)
+{
+    return scope.qualifiedName();
+}
+
+struct ObjectSchema : Scope
+{
     std::string description;
     std::vector<TypeUsage> parentTypes;
     std::vector<VarDecl> fields;
@@ -133,14 +154,14 @@ struct ExternalDocs
     std::string url;
 };
 
-struct Call
+struct Call : Scope
 {
     using params_type = VarDecls;
 
     Call(Path callPath, std::string callVerb, std::string callName,
          bool callNeedsSecurity)
-        : path(std::move(callPath)), verb(std::move(callVerb))
-        , name(std::move(callName)), needsSecurity(callNeedsSecurity)
+        : Scope(std::move(callName)), path(std::move(callPath))
+        , verb(std::move(callVerb)), needsSecurity(callNeedsSecurity)
     { }
     ~Call() = default;
     Call(Call&) = delete;
@@ -155,7 +176,6 @@ struct Call
 
     Path path;
     std::string verb;
-    std::string name;
     std::string summary;
     std::string description;
     ExternalDocs externalDocs;
@@ -173,12 +193,6 @@ struct Call
     std::vector<std::string> consumedContentTypes;
     std::vector<Response> responses;
 };
-
-template <>
-inline std::string qualifiedName(const Call& call)
-{
-    return call.name;
-}
 
 struct CallClass
 {
