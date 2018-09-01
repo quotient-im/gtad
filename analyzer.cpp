@@ -114,21 +114,32 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
 }
 
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
-                                     string scope, string locus)
+        string scope, string locus, SubschemasStrategy subschemasStrategy)
 {
     ObjectSchema schema;
     schema.inOut = inOut;
 
+    auto name = yamlSchema["title"].as<string>("");
+    const auto properties = yamlSchema["properties"].asMap();
+    const auto additionalProperties = yamlSchema["additionalProperties"];
+
     vector<string> refPaths;
-    if (auto yamlRef = yamlSchema["$ref"])
-        refPaths.emplace_back(yamlRef.as<string>());
+    if (auto yamlSingleRef = yamlSchema["$ref"])
+        refPaths.emplace_back(yamlSingleRef.as<string>());
     else if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
-    {
-        refPaths.resize(yamlAllOf.size());
-        transform(yamlAllOf.begin(), yamlAllOf.end(), refPaths.begin(),
-                  [](YamlMap p) { return p.get("$ref").as<string>(); });
-        // FIXME: we may have a non-$ref (e.g., just 'object') under allOf
-    }
+        for (const auto& yamlEntry: yamlAllOf)
+        {
+            if (yamlEntry.IsMap())
+                if (auto yamlRef = yamlEntry["$ref"])
+                    refPaths.emplace_back(yamlRef.as<string>());
+        } // non-$refs will be processed later
+
+    // Suppress inlining for trivial schemas. This is needed because otherwise
+    // GTAD agressively inlines data structures that have their own
+    // name and meaning, with consumers of the generated API having
+    // to rebuild those structures back from their pieces.
+    if (refPaths.size() == 1 && !properties && !additionalProperties)
+        subschemasStrategy = ImportSubschemas;
 
     for (const auto& refPath: refPaths)
     {
@@ -146,19 +157,27 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         // find the file.
         cout << "Sub-processing schema in "
              << model.fileDir << "./" << refPath << endl;
-        const auto& refModel =
+        auto&& refModel = // TODO, #33: Only load the model here
                 translator.processFile(model.fileDir + refPath, baseDir);
         if (refModel.types.empty())
             throw YamlException(yamlSchema, "The target file has no schemas");
 
-        if (refModel.trivial())
+        auto&& refSchema = refModel.types.back();
+        if (name.empty() &&
+                (subschemasStrategy == InlineSubschemas || refModel.trivial()))
         {
-            schema.parentTypes.emplace_back(
-                refModel.types.front().parentTypes.front());
+            // Instead of adding another type, just put all parts of
+            // the subschema inline.
+            // FIXME: The files for subschemas are still generated, pending #33.
+            for (auto&& parentType: refSchema.parentTypes) // Should we recurse?
+                schema.parentTypes.emplace_back(std::move(parentType));
+            for (auto&& field: refSchema.fields)
+                schema.fields.emplace_back(std::move(field));
             continue;
         }
+        // TODO, #33: File generation will come here.
 
-        tu.name = refModel.types.back().name;
+        tu.name = refSchema.name;
         tu.baseName = tu.name.empty() ? refPath : tu.name;
         // TODO: distinguish between interface files (that should be imported,
         // headers in C/C+) and implementation files (that should not).
@@ -173,8 +192,18 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         schema.parentTypes.emplace_back(
                     analyzeMultitype(yamlOneOf, inOut, scope));
 
-    auto name = yamlSchema["title"].as<string>(
-                    schema.trivial() ? schema.parentTypes.back().name : "");
+    if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
+        for (const auto& yamlEntry: yamlAllOf)
+            if (auto yamlMap = yamlEntry.asMap())
+                if (!yamlMap["$ref"]) // $refs were processed earlier
+                {
+                    const auto s = analyzeSchema(yamlMap, inOut, scope,
+                                                 locus + " (inner definition)");
+                    addParamsFromSchema(schema.fields, {}, {}, true, s);
+                }
+
+    if (name.empty() && schema.trivial())
+        name = schema.parentTypes.back().name;
     if (!name.empty())
     {
         auto tu = translator.mapType("schema", name);
@@ -186,9 +215,8 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         }
     }
 
-    const auto properties = yamlSchema["properties"].asMap();
-    const auto additionalProperties = yamlSchema["additionalProperties"];
-    if (properties || additionalProperties)
+    if (properties || additionalProperties ||
+            (!schema.empty() && !schema.trivial()))
     {
         // If the schema is not just an alias for another type, name it.
         schema.name = camelCase(name);
@@ -258,7 +286,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     {
         cout << yamlSchema.location() << ": Found "
              << (!locus.empty() ? locus + " schema"
-                 : "schema " + qualifiedName(schema))
+                 : "schema " + schema.qualifiedName())
              << " for "
              << (schema.inOut == In ? "input" :
                  schema.inOut == Out ? "output" :
@@ -273,27 +301,24 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     return schema;
 }
 
-void Analyzer::addParamsFromSchema(VarDecls& varList, const Call& call,
+void Analyzer::addParamsFromSchema(VarDecls& varList, const Scope& scope,
         const string& baseName, bool required, const ObjectSchema& paramSchema)
 {
-    if (paramSchema.parentTypes.empty())
-    {
-        for (const auto & param: paramSchema.fields)
-            model.addVarDecl(varList, param);
-    } else if (paramSchema.trivial())
+    if (paramSchema.trivial())
     {
         // The schema consists of a single parent type, use that type instead.
-        addVarDecl(varList, paramSchema.parentTypes.front(), baseName, call,
+        addVarDecl(varList, paramSchema.parentTypes.front(), baseName, scope,
                    paramSchema.description, required);
-    } else
+    } else if (paramSchema.name.empty())
     {
-        cerr << "Warning: found non-trivial schema for " << baseName
-             << "; these are not supported, expect invalid parameter set"
-             << endl;
-        const auto typeName =
-            paramSchema.name.empty() ? camelCase(baseName) : paramSchema.name;
+        for (const auto& parentType: paramSchema.parentTypes)
+            addVarDecl(varList, parentType, parentType.name, scope, "", required);
+        for (const auto & param: paramSchema.fields)
+            model.addVarDecl(varList, param);
+    } else {
         model.addSchema(paramSchema);
-        addVarDecl(varList, TypeUsage(typeName), baseName, call, "", required);
+        addVarDecl(varList, TypeUsage(paramSchema.name), baseName, scope,
+                   "", required);
     }
 }
 
@@ -397,7 +422,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
 
                     auto&& bodySchema =
                         analyzeSchema(yamlParam.get("schema"), In, call.name,
-                                      "request body");
+                                      "request body", InlineSubschemas);
                     if (bodySchema.empty())
                     {
                         // Special case: an empty schema for a body parameter
@@ -435,7 +460,8 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                     if (auto yamlSchema = yamlResponse["schema"])
                     {
                         auto&& responseSchema =
-                            analyzeSchema(yamlSchema, Out, call.name, "response");
+                            analyzeSchema(yamlSchema, Out, call.name,
+                                          "response", InlineSubschemas);
                         if (responseSchema.trivial() &&
                                 responseSchema.description.empty())
                             responseSchema.description = response.description;

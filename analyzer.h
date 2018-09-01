@@ -42,22 +42,26 @@ class Analyzer
         const Translator& translator;
 
         enum IsTopLevel : bool { Inner = false, TopLevel = true };
+        enum SubschemasStrategy : bool { ImportSubschemas = false,
+                                         InlineSubschemas = true };
+
         TypeUsage analyzeTypeUsage(const YamlMap& node, InOut inOut,
                               std::string scope, IsTopLevel isTopLevel = Inner);
         TypeUsage analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
                                    const std::string& scope);
         ObjectSchema analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
-                std::string scope = {}, std::string locus = {});
+                std::string scope = {}, std::string locus = {},
+                SubschemasStrategy subschemasStrategy = ImportSubschemas);
 
-        void addParamsFromSchema(VarDecls& varList, const Call& call,
+        void addParamsFromSchema(VarDecls& varList, const Scope& scope,
                 const std::string& baseName, bool required,
                 const ObjectSchema& bodyParamSchema);
-        template <typename ScopeT, typename... ArgTs>
+        template <typename... ArgTs>
         VarDecl makeVarDecl(TypeUsage type, const std::string& baseName,
-                         const ScopeT& scope, ArgTs&&... args)
+                         const Scope& scope, ArgTs&&... args)
         {
             return { std::move(type),
-                translator.mapIdentifier(baseName, qualifiedName(scope)),
+                translator.mapIdentifier(baseName, scope.qualifiedName()),
                 baseName, std::forward<ArgTs>(args)... };
         }
 
