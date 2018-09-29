@@ -188,6 +188,7 @@ struct Call : Scope
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
     bool inlineBody = false;
+    bool inlineResponse = false;
 
     std::vector<std::string> producedContentTypes;
     std::vector<std::string> consumedContentTypes;

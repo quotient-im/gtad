@@ -163,28 +163,50 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
             throw YamlException(yamlSchema, "The target file has no schemas");
 
         auto&& refSchema = refModel.types.back();
-        if (name.empty() &&
-                (subschemasStrategy == InlineSubschemas || refModel.trivial()))
-        {
-            // Instead of adding another type, just put all parts of
-            // the subschema inline.
-            // FIXME: The files for subschemas are still generated, pending #33.
-            for (auto&& parentType: refSchema.parentTypes) // Should we recurse?
-                schema.parentTypes.emplace_back(std::move(parentType));
-            for (auto&& field: refSchema.fields)
-                schema.fields.emplace_back(std::move(field));
-            continue;
-        }
-        // TODO, #33: File generation will come here.
 
-        tu.name = refSchema.name;
-        tu.baseName = tu.name.empty() ? refPath : tu.name;
+        // TODO, #33: File generation should be before using dstFiles.
+
         // TODO: distinguish between interface files (that should be imported,
         // headers in C/C+) and implementation files (that should not).
         // filesList.front() assumes that there's only one interface file, and
         // it's at the front of the list, which is very naive.
-        tu.addImport(refModel.dstFiles.empty() ? string{}
-                                        : "\"" + refModel.dstFiles.front() + "\"");
+        auto&& importFile = refModel.dstFiles.empty() ? string{}
+                                    : "\"" + refModel.dstFiles.front() + "\"";
+
+        if (subschemasStrategy == InlineSubschemas || refModel.trivial())
+        {
+            // Instead of adding another type, just put all parts of
+            // the subschema inline.
+            std::move(refSchema.parentTypes.begin(), refSchema.parentTypes.end(),
+                      std::back_inserter(schema.parentTypes)); // Should we recurse?
+
+            // FIXME: The below is ugly. We try to have a cake and eat it,
+            // inline a schema but still use other definitions from its file.
+            // That doesn't look right. On the other hand, having an additional
+            // level of structure just because it's so defined in
+            // the API description (but not in the working API) is not pretty
+            // either.
+            for (auto&& field: refSchema.fields)
+            {
+                // Watch out for supplementary schemas defined in the same file
+                if (refModel.types.size() > 1 &&
+                        find_if(refModel.types.begin(), refModel.types.end() - 1,
+                                [&field] (const ObjectSchema& s)
+                                {
+                                   return field.type.name == s.name &&
+                                          field.type.scope == s.scope;
+                                }) != refModel.types.end() - 1)
+                {
+                    field.type.addImport(importFile);
+                }
+                schema.fields.emplace_back(std::move(field));
+            }
+            continue;
+        }
+
+        tu.name = refSchema.name;
+        tu.baseName = tu.name.empty() ? refPath : tu.name;
+        tu.addImport(move(importFile));
         schema.parentTypes.emplace_back(move(tu));
     }
 
@@ -462,9 +484,12 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                         auto&& responseSchema =
                             analyzeSchema(yamlSchema, Out, call.name,
                                           "response", InlineSubschemas);
-                        if (responseSchema.trivial() &&
-                                responseSchema.description.empty())
-                            responseSchema.description = response.description;
+                        if (responseSchema.trivial())
+                        {
+                            call.inlineResponse = true;
+                            if (responseSchema.description.empty())
+                                responseSchema.description = response.description;
+                        }
                         if (!responseSchema.empty())
                             addParamsFromSchema(response.properties, call,
                                 "data", true, responseSchema);

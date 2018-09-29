@@ -415,6 +415,12 @@ vector<string> Printer::print(const Model& model) const
                                 bind(&Printer::dumpField, this, _1));
                         return mResponse;
                     });
+                if (call.inlineResponse && !call.responses.empty() &&
+                        !call.responses.front().properties.empty())
+                    mCall.emplace("inlineResponse",
+                                  dumpField(call.responses.front()
+                                            .properties.front()));
+
                 return mCall;
             });
         if (!mOperations.empty())
