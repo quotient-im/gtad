@@ -1,28 +1,30 @@
 language: cpp
+dist: xenial
+
+git:
+  depth: false
 
 addons:
   apt:
-    sources:
-    - ubuntu-toolchain-r-test
-    - sourceline: 'ppa:beineri/opt-qt571-trusty'
     packages:
-    - g++-5
-    - gdb # For debugging
-    - qt57-meta-minimal
+    - qt5-default
 
 matrix:
   include:
   - os: linux
     compiler: gcc
-    env: [ 'ENV_EVAL="CC=gcc-5 && CXX=g++-5"' ]
   - os: linux
     compiler: clang
   - os: osx
-    env: [ 'ENV_EVAL="brew update && brew install qt5 && PATH=/usr/local/opt/qt/bin:$PATH"' ]
+    addons:
+      homebrew:
+        update: true
+        packages: [ 'qt5' ]
+    before_cache: [ 'brew cleanup' ]
+    cache: { directories: [ '$HOME/Library/Caches/Homebrew' ] }
 
 install:
-- eval "${ENV_EVAL}"
-- if [ "$TRAVIS_OS_NAME" = "linux" ]; then . /opt/qt57/bin/qt57-env.sh; fi
+- if [ "$TRAVIS_OS_NAME" != "linux" ]; then export PATH="/usr/local/opt/qt/bin:$PATH"; fi
 
 script:
 - mkdir build && cd build
