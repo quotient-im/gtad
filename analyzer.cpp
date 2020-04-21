@@ -119,28 +119,39 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     ObjectSchema schema;
     schema.inOut = inOut;
 
-    auto name = yamlSchema["title"].as<string>("");
-    const auto properties = yamlSchema["properties"].asMap();
-    const auto additionalProperties = yamlSchema["additionalProperties"];
-
+    // Collect minimum information necessary to decide if subschemas inlining
+    // should be suppressed (see also below)
+    bool innerPropertiesFound = false;
     vector<string> refPaths;
     if (auto yamlSingleRef = yamlSchema["$ref"])
         refPaths.emplace_back(yamlSingleRef.as<string>());
     else if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
         for (const auto& yamlEntry: yamlAllOf)
-        {
-            if (yamlEntry.IsMap())
-                if (auto yamlRef = yamlEntry["$ref"])
+            if (YamlMap yamlInnerObject {yamlEntry}; yamlInnerObject) {
+                if (auto yamlRef = yamlInnerObject["$ref"])
                     refPaths.emplace_back(yamlRef.as<string>());
-        } // non-$refs will be processed later
+                else if (!yamlInnerObject["title"]
+                         && yamlInnerObject["type"].as<string>("") == "object") {
+                    // Add properties from schema(s) inside allOf (see #52)
+                    // making sure not to pull named objects though
+                    innerPropertiesFound |=
+                            !yamlInnerObject["properties"].asMap().empty() ||
+                            yamlInnerObject["additionalProperties"].IsDefined();
+                }
+            }
+
+    auto properties = yamlSchema["properties"].asMap();
+    auto additionalProperties = yamlSchema["additionalProperties"];
 
     // Suppress inlining for trivial schemas. This is needed because otherwise
     // GTAD agressively inlines data structures that have their own
     // name and meaning, with consumers of the generated API having
     // to rebuild those structures back from their pieces.
-    if (refPaths.size() == 1 && !properties && !additionalProperties)
+    if (refPaths.size() == 1
+        && !(innerPropertiesFound || properties || additionalProperties))
         subschemasStrategy = ImportSubschemas;
 
+    auto name = yamlSchema["title"].as<string>("");
     for (const auto& refPath: refPaths)
     {
         // First try to resolve refPath in types map; if there's no match, load
@@ -166,48 +177,44 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
 
         // TODO, #33: File generation should be before using dstFiles.
 
-        // TODO: distinguish between interface files (that should be imported,
-        // headers in C/C+) and implementation files (that should not).
-        // filesList.front() assumes that there's only one interface file, and
-        // it's at the front of the list, which is very naive.
+        // XXX: maybe distinguish between interface files (that should be
+        // imported, such as headers in C/C+) and implementation files
+        // (that should not). For now, refModel.dstFiles.front() assumes that
+        // there's only one interface file, and it's at the front of the list.
         auto&& importFile = refModel.dstFiles.empty() ? string{}
                                     : "\"" + refModel.dstFiles.front() + "\"";
 
-        if (subschemasStrategy == InlineSubschemas || refModel.trivial())
-        {
-            // Instead of adding another type, just put all parts of
-            // the subschema inline.
-            std::move(refSchema.parentTypes.begin(), refSchema.parentTypes.end(),
-                      std::back_inserter(schema.parentTypes)); // Should we recurse?
-
-            // FIXME: The below is ugly. We try to have a cake and eat it,
-            // inline a schema but still use other definitions from its file.
-            // That doesn't look right. On the other hand, having an additional
-            // level of structure just because it's so defined in
-            // the API description (but not in the working API) is not pretty
-            // either.
-            for (auto&& field: refSchema.fields)
-            {
-                // Watch out for supplementary schemas defined in the same file
-                if (refModel.types.size() > 1 &&
-                        find_if(refModel.types.begin(), refModel.types.end() - 1,
-                                [&field] (const ObjectSchema& s)
-                                {
-                                   return field.type.name == s.name &&
-                                          field.type.scope == s.scope;
-                                }) != refModel.types.end() - 1)
-                {
-                    field.type.addImport(importFile);
-                }
-                schema.fields.emplace_back(std::move(field));
-            }
+        if (subschemasStrategy == ImportSubschemas && !refModel.trivial()) {
+            tu.name = refSchema.name;
+            tu.baseName = tu.name.empty() ? refPath : tu.name;
+            tu.addImport(move(importFile));
+            schema.parentTypes.emplace_back(move(tu));
             continue;
         }
 
-        tu.name = refSchema.name;
-        tu.baseName = tu.name.empty() ? refPath : tu.name;
-        tu.addImport(move(importFile));
-        schema.parentTypes.emplace_back(move(tu));
+        // Instead of adding another type, just inline parts of the subschema.
+        std::move(refSchema.parentTypes.begin(), refSchema.parentTypes.end(),
+                  std::back_inserter(schema.parentTypes)); // XXX: Recurse?
+
+        // FIXME: The below is ugly. We try to have a cake and eat it,
+        // inline a schema but still use other definitions from its file.
+        // That doesn't look right. On the other hand, having an additional
+        // level of structure just because it's so defined in
+        // the API description (but not in the working API) is not pretty
+        // either.
+        for (auto&& field: refSchema.fields) {
+            // Watch out for supplementary schemas defined in the same file
+            if (refModel.types.size() > 1
+                && find_if(refModel.types.begin(), refModel.types.end() - 1,
+                           [&field](const ObjectSchema& s) {
+                               return field.type.name == s.name
+                                      && field.type.scope == s.scope;
+                           })
+                   != refModel.types.end() - 1) {
+                field.type.addImport(importFile);
+            }
+            schema.fields.emplace_back(std::move(field));
+        }
     }
 
     if (auto yamlOneOf = yamlSchema["oneOf"].asSequence())
