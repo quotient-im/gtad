@@ -54,7 +54,7 @@ inline bool endsWith(const string& s, const string& ss)
 }
 
 Printer::template_type Printer::makeMustache(const string& tmpl,
-                                             string setDelimiter) const
+                                             string setDelimiter)
 {
     if (!setDelimiter.empty())
         setDelimiter = "{{=" + setDelimiter + "=}}";

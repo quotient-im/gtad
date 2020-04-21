@@ -78,8 +78,10 @@ TypeUsage parseTargetType(const YamlNode& yamlTypeNode,
 }
 
 template <typename FnT>
-void parseEntries(const YamlSequence& entriesYaml, FnT inserter,
+auto parseEntries(const YamlSequence& entriesYaml, const FnT& inserter,
                   const YamlMap& commonAttributesYaml = {})
+    -> enable_if_t<is_void_v<decltype(
+        inserter(string(), YamlNode(), YamlMap()))>>
 {
     for (const YamlMap typesBlockYaml: entriesYaml)
     {
@@ -117,16 +119,15 @@ pair_vector_t<TypeUsage> parseTypeEntry(const YamlNode& targetTypeYaml,
         case YAML::NodeType::Scalar: // Use a type with no regard to format
         case YAML::NodeType::Map: // Same, with attributes for the target type
         {
-            return { { string(),
-                         parseTargetType(targetTypeYaml,
-                                         commonAttributesYaml) } };
+            return { { {},
+                       parseTargetType(targetTypeYaml, commonAttributesYaml) } };
         }
         case YAML::NodeType::Sequence: // A list of formats for the type
         {
             pair_vector_t<TypeUsage> targetTypes;
             parseEntries(targetTypeYaml.asSequence(),
                 [&targetTypes](string formatName,
-                    const YamlNode& formatYaml, const YamlMap& commonAttrsYaml)
+                    const YamlNode& typeYaml, const YamlMap& commonAttrsYaml)
                 {
                     if (formatName.empty())
                         formatName = "/"; // Empty format means all formats
@@ -137,7 +138,7 @@ pair_vector_t<TypeUsage> parseTypeEntry(const YamlNode& targetTypeYaml,
                         formatName.pop_back();
                     }
                     targetTypes.emplace_back(move(formatName),
-                        parseTargetType(formatYaml, commonAttrsYaml));
+                        parseTargetType(typeYaml, commonAttrsYaml));
                 }, commonAttributesYaml);
             return targetTypes;
         }

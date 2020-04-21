@@ -33,8 +33,10 @@ Model initModel(string path)
 
 Analyzer::Analyzer(string filePath, string basePath,
                    const Translator& translator)
-        : fileName(filePath), baseDir(move(basePath))
-        , model(initModel(move(filePath))), translator(translator)
+    : fileName(filePath)
+    , baseDir(move(basePath))
+    , model(initModel(move(filePath)))
+    , translator(translator)
 { }
 
 TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
@@ -114,7 +116,8 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
 }
 
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
-        string scope, string locus, SubschemasStrategy subschemasStrategy)
+                                     string scope, string locus,
+                                     SubschemasStrategy subschemasStrategy)
 {
     ObjectSchema schema;
     schema.inOut = inOut;

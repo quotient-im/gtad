@@ -6,38 +6,38 @@
 
 #include <fstream>
 
-class Printer
-{
-    public:
-        using context_type = kainjow::mustache::data;
-        using template_type = kainjow::mustache::mustache;
-        using templates_type = std::vector<std::pair<template_type, template_type>>;
-        using m_object_type = kainjow::mustache::object;
+class Printer {
+public:
+    using context_type = kainjow::mustache::data;
+    using template_type = kainjow::mustache::mustache;
+    using templates_type = std::vector<std::pair<template_type, template_type>>;
+    using m_object_type = kainjow::mustache::object;
+    using string = std::string;
+    template <typename T> using vector = std::vector<T>;
 
-        Printer(context_type&& contextData,
-                const std::vector<std::string>& templateFileNames,
-                std::string inputBasePath, std::string outputBasePath,
-                const std::string& outFilesListPath);
-        Printer(Printer&& p) = default;
+    Printer(context_type&& contextData, const vector<string>& templateFileNames,
+            string inputBasePath, string outputBasePath,
+            const string& outFilesListPath);
+    Printer(Printer&& p) = default;
 
-        Printer::template_type makeMustache(const std::string& tmpl,
-                                            std::string setDelimiter = {}) const;
-        std::vector<std::string> print(const Model& model) const;
+    static Printer::template_type makeMustache(const string& tmpl,
+                                               string setDelimiter = {});
+    vector<string> print(const Model& model) const;
 
-    private:
-        context_type _contextData;
-        std::string _delimiter;
-        mutable template_type _typeRenderer;
-        std::string _leftQuote;
-        std::string _rightQuote;
-        templates_type _templates;
-        std::string _inputBasePath;
-        std::string _outputBasePath;
-        mutable std::ofstream _outFilesList;
+private:
+    context_type _contextData;
+    string _delimiter;
+    mutable template_type _typeRenderer;
+    string _leftQuote;
+    string _rightQuote;
+    templates_type _templates;
+    string _inputBasePath;
+    string _outputBasePath;
+    mutable std::ofstream _outFilesList;
 
-        m_object_type renderType(const TypeUsage& tu) const;
-        m_object_type dumpField(const VarDecl& field) const;
-        m_object_type dumpAllTypes(const Model::schemas_type& types) const;
-        m_object_type dumpTypes(const Model::schemas_type& types,
-                                const std::string& scope) const;
+    [[nodiscard]] m_object_type renderType(const TypeUsage& tu) const;
+    [[nodiscard]] m_object_type dumpField(const VarDecl& field) const;
+    [[nodiscard]] m_object_type dumpAllTypes(const Model::schemas_type& types) const;
+    [[nodiscard]] m_object_type dumpTypes(const Model::schemas_type& types,
+                                          const string& scope) const;
 };

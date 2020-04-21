@@ -28,25 +28,27 @@ class Printer;
 
 class Translator
 {
-    public:
-        Translator(const QString& configFilePath, QString outputDirPath);
-        ~Translator();
+public:
+    using string = std::string;
 
-        Model processFile(std::string filePath, std::string baseDirPath,
-                          InOut inOut = In|Out, bool skipTrivial = true) const;
-        TypeUsage mapType(const std::string& swaggerType,
-                          const std::string& swaggerFormat = {},
-                          const std::string& baseName = {}) const;
-        std::string mapIdentifier(const std::string& baseName,
-                                  const std::string& scope = {}) const;
+    Translator(const QString& configFilePath, QString outputDirPath);
+    ~Translator();
 
-    private:
-        pair_vector_t<std::string> _substitutions;
-        pair_vector_t<std::string> _identifiers;
-        // In JSON/YAML, the below looks like:
-        // <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
-        pair_vector_t<pair_vector_t<TypeUsage>> _typesMap;
+    Model processFile(string filePath, string baseDirPath,
+                      InOut inOut = In | Out, bool skipTrivial = true) const;
+    [[nodiscard]] TypeUsage mapType(const string& swaggerType,
+                                    const string& swaggerFormat = {},
+                                    const string& baseName = {}) const;
+    [[nodiscard]] string mapIdentifier(const string& baseName,
+                                       const string& scope = {}) const;
 
-        QString _outputDirPath;
-        std::unique_ptr<Printer> _printer;
+private:
+    pair_vector_t<string> _substitutions;
+    pair_vector_t<string> _identifiers;
+    // In JSON/YAML, the below looks like:
+    // <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
+    pair_vector_t<pair_vector_t<TypeUsage>> _typesMap;
+
+    QString _outputDirPath;
+    std::unique_ptr<Printer> _printer;
 };

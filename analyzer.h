@@ -28,47 +28,52 @@ class YamlSequence;
 
 class Analyzer
 {
-    public:
-        Analyzer(std::string filePath, std::string basePath,
-                 const Translator& translator);
+public:
+    Analyzer(std::string filePath, std::string basePath,
+             const Translator& translator);
 
-        Model loadModel(const pair_vector_t<std::string>& substitutions,
-                        InOut inOut);
+    Model loadModel(const pair_vector_t<std::string>& substitutions,
+                    InOut inOut);
 
-    private:
-        std::string fileName;
-        std::string baseDir;
-        Model model;
-        const Translator& translator;
+private:
+    std::string fileName;
+    std::string baseDir;
+    Model model;
+    const Translator& translator;
 
-        enum IsTopLevel : bool { Inner = false, TopLevel = true };
-        enum SubschemasStrategy : bool { ImportSubschemas = false,
-                                         InlineSubschemas = true };
+    enum IsTopLevel : bool { Inner = false, TopLevel = true };
+    enum SubschemasStrategy : bool { ImportSubschemas = false,
+                                     InlineSubschemas = true };
 
-        TypeUsage analyzeTypeUsage(const YamlMap& node, InOut inOut,
-                              std::string scope, IsTopLevel isTopLevel = Inner);
-        TypeUsage analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
-                                   const std::string& scope);
-        ObjectSchema analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
-                std::string scope = {}, std::string locus = {},
-                SubschemasStrategy subschemasStrategy = ImportSubschemas);
+    [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node, InOut inOut,
+                                             std::string scope,
+                                             IsTopLevel isTopLevel = Inner);
+    [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence& yamlTypes,
+                                             InOut inOut,
+                                             const std::string& scope);
+    [[nodiscard]] ObjectSchema
+    analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
+                  std::string scope = {}, std::string locus = {},
+                  SubschemasStrategy subschemasStrategy = ImportSubschemas);
 
-        void addParamsFromSchema(VarDecls& varList, const Scope& scope,
-                const std::string& baseName, bool required,
-                const ObjectSchema& bodyParamSchema);
-        template <typename... ArgTs>
-        VarDecl makeVarDecl(TypeUsage type, const std::string& baseName,
-                         const Scope& scope, ArgTs&&... args)
-        {
-            return { std::move(type),
-                translator.mapIdentifier(baseName, scope.qualifiedName()),
-                baseName, std::forward<ArgTs>(args)... };
-        }
+    void addParamsFromSchema(VarDecls& varList, const Scope& scope,
+                             const std::string& baseName, bool required,
+                             const ObjectSchema& bodyParamSchema);
 
-        template <typename... ArgTs>
-        void addVarDecl(VarDecls& varList, ArgTs&&... varDeclArgs)
-        {
-            model.addVarDecl(varList,
-                makeVarDecl(std::forward<ArgTs>(varDeclArgs)...));
-        }
+    template <typename... ArgTs>
+    [[nodiscard]] VarDecl makeVarDecl(TypeUsage type,
+                                      const std::string& baseName,
+                                      const Scope& scope, ArgTs&&... args)
+    {
+        return { std::move(type),
+                 translator.mapIdentifier(baseName, scope.qualifiedName()),
+                 baseName, std::forward<ArgTs>(args)... };
+    }
+
+    template <typename... ArgTs>
+    void addVarDecl(VarDecls& varList, ArgTs&&... varDeclArgs)
+    {
+        model.addVarDecl(varList,
+                         makeVarDecl(std::forward<ArgTs>(varDeclArgs)...));
+    }
 };
