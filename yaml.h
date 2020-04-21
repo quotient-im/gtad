@@ -218,6 +218,9 @@ struct YamlNodePair : public std::pair<YamlNode, YamlNode>
              const std::shared_ptr<std::string>& fileName)
         : pair(YamlNode(p.first, fileName), YamlNode(p.second, fileName))
     { }
+    ~YamlNodePair() = default;
+    void operator=(const YamlNodePair&) = delete;
+    void operator=(YamlNodePair&&) = delete;
 };
 
 class YamlMap : public YamlNodeTemplate<YamlNodePair, YAML::NodeType::Map>
@@ -232,7 +235,7 @@ class YamlMap : public YamlNodeTemplate<YamlNodePair, YAML::NodeType::Map>
             const pair_vector_t<std::string>& replacePairs = {});
 
         template <typename KeyT>
-        YamlNode operator[](KeyT&& key) const
+        const YamlNode operator[](KeyT&& key) const
         {
             return { YAML::Node::operator[](std::forward<KeyT>(key)), _fileName };
         }
