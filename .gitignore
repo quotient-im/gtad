@@ -1,5 +1,15 @@
 build
+build_dir
+
 .kdev4
+.directory
+CMakeLists.txt.user*
 .idea
-# Qt Creator's imported project file
-CMakeLists.txt.user
+
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+quaternion_autogen/
+.cmake/
+
+.DS_Store
