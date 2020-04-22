@@ -29,6 +29,8 @@ class YamlSequence;
 class Analyzer
 {
 public:
+    using string = std::string;
+
     Analyzer(std::string filePath, std::string basePath,
              const Translator& translator);
 
@@ -36,8 +38,8 @@ public:
                     InOut inOut);
 
 private:
-    std::string fileName;
-    std::string baseDir;
+    string fileName;
+    string baseDir;
     Model model;
     const Translator& translator;
 
@@ -46,23 +48,23 @@ private:
                                      InlineSubschemas = true };
 
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node, InOut inOut,
-                                             std::string scope,
+                                             string scope,
                                              IsTopLevel isTopLevel = Inner);
     [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence& yamlTypes,
                                              InOut inOut,
-                                             const std::string& scope);
+                                             const string& scope);
     [[nodiscard]] ObjectSchema
     analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
-                  std::string scope = {}, std::string locus = {},
+                  string scope = {}, const string& locus = {},
                   SubschemasStrategy subschemasStrategy = ImportSubschemas);
 
     void addParamsFromSchema(VarDecls& varList, const Scope& scope,
-                             const std::string& baseName, bool required,
+                             const string& baseName, bool required,
                              const ObjectSchema& bodyParamSchema);
 
     template <typename... ArgTs>
     [[nodiscard]] VarDecl makeVarDecl(TypeUsage type,
-                                      const std::string& baseName,
+                                      const string& baseName,
                                       const Scope& scope, ArgTs&&... args)
     {
         return { std::move(type),

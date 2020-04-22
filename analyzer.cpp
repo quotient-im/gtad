@@ -116,7 +116,7 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
 }
 
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
-                                     string scope, string locus,
+                                     string scope, const string& locus,
                                      SubschemasStrategy subschemasStrategy)
 {
     ObjectSchema schema;

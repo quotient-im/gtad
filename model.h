@@ -207,32 +207,32 @@ inline std::string JSONSchema() { return "json-schema"; }
 
 struct Model
 {
-    using imports_type = std::unordered_set<std::string>;
+    using string = std::string;
+    using imports_type = std::unordered_set<string>;
     using schemas_type = std::vector<ObjectSchema>;
 
-    const std::string fileDir;
-    const std::string srcFilename;
-    std::vector<std::string> dstFiles;
+    const string fileDir;
+    const string srcFilename;
+    std::vector<string> dstFiles;
 
-    std::string apiSpec;
+    string apiSpec;
     int apiSpecVersion = 0; // Encoded as xyy, x - major, yy - minor component
 
-    std::string hostAddress;
-    std::string basePath;
+    string hostAddress;
+    string basePath;
     imports_type imports;
     schemas_type types;
     std::vector<CallClass> callClasses;
 
-    Model(std::string fileDir, std::string fileName)
-        : fileDir(std::move(fileDir)), srcFilename(std::move(fileName))
+    Model(string fileDir, string fileName)
+        : fileDir(move(fileDir)), srcFilename(move(fileName))
     { }
     ~Model() = default;
     Model(const Model&) = delete;
     Model operator=(const Model&) = delete;
     Model(Model&&) = default;
     Model& operator=(Model&&) = delete;
-    Call& addCall(Path path, std::string verb, std::string operationId,
-                  bool needsToken);
+    Call& addCall(Path path, string verb, string operationId, bool needsToken);
     void addVarDecl(VarDecls& varList, VarDecl var);
     void addSchema(const ObjectSchema& schema);
     void addImports(const TypeUsage& type);
