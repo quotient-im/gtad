@@ -32,7 +32,7 @@ void eraseSuffix(std::string* path, const std::string& suffix);
 std::string withoutSuffix(const std::string& path, const std::string& suffix);
 
 template <typename T>
-inline std::string qualifiedName(const T& type)
+[[nodiscard]] inline std::string qualifiedName(const T& type)
 {
     const auto _name = type.name.empty() ? "(anonymous)" : type.name;
     return type.scope.empty() ? _name : type.scope + '.' + _name;
@@ -57,7 +57,7 @@ struct TypeUsage
 
     TypeUsage instantiate(std::vector<TypeUsage>&& innerTypes) const;
 
-    bool empty() const { return name.empty(); }
+    [[nodiscard]] bool empty() const { return name.empty(); }
 
     void addImport(imports_type::value_type import_text)
     {
@@ -71,10 +71,10 @@ struct VarDecl
     std::string name; //< Identifier in the generated code
     std::string baseName; //< As used in the API
     std::string description;
-    bool required;
+    bool required = false;
     std::string defaultValue;
 
-    VarDecl() : required(false) { }
+    VarDecl() = default;
     VarDecl(TypeUsage type, std::string name, std::string baseName,
             std::string description = {}, bool required = true,
             std::string defaultValue = {})
@@ -102,7 +102,7 @@ struct Scope
     explicit Scope(std::string name, std::string scope = {})
         : scope(std::move(scope)), name(std::move(name))
     { }
-    std::string qualifiedName() const
+    [[nodiscard]] std::string qualifiedName() const
     {
         const auto _name = name.empty() ? "(anonymous)" : name;
         return scope.empty() ? _name : scope + '.' + _name;
@@ -110,7 +110,7 @@ struct Scope
 };
 
 template <>
-inline std::string qualifiedName(const Scope& scope)
+[[nodiscard]] inline std::string qualifiedName(const Scope& scope)
 {
     return scope.qualifiedName();
 }
