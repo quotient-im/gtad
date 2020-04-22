@@ -27,9 +27,9 @@
 int main( int argc, char* argv[] )
 {
     QCoreApplication app(argc, argv);
-    QCoreApplication::setOrganizationName("QMatrixClient");
+    QCoreApplication::setOrganizationName("Quotient");
     QCoreApplication::setApplicationName("GTAD");
-    QCoreApplication::setApplicationVersion("0.6");
+    QCoreApplication::setApplicationVersion("0.7");
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QCoreApplication::translate("main",
