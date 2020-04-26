@@ -285,6 +285,12 @@ object Printer::dumpField(const VarDecl& field) const
     return fieldDef;
 }
 
+void Printer::addList(object& target, const string& name,
+                      const VarDecls& properties) const
+{
+    setList(target, name, properties, bind(&Printer::dumpField, this, _1));
+}
+
 object Printer::dumpAllTypes(const Model::schemas_type& types) const
 {
     object mModels;
@@ -387,12 +393,10 @@ vector<string> Printer::print(const Model& model) const
                     });
 
                 using namespace placeholders;
-                setList(mCall, "allParams", call.collateParams(),
-                        bind(&Printer::dumpField, this, _1));
+            	addList(mCall, "allParams", call.collateParams());
                 for (size_t i = 0; i < Call::paramsBlockNames.size(); ++i)
-                    setList(mCall, Call::paramsBlockNames[i] + "Params",
-                            call.allParams[i],
-                            bind(&Printer::dumpField, this, _1));
+                addList(mCall, Call::paramsBlockNames[i] + "Params",
+                            call.allParams[i]);
                 if (call.inlineBody)
                     mCall.emplace("inlineBody",
                                   dumpField(call.bodyParams().front()));
@@ -407,12 +411,12 @@ vector<string> Printer::print(const Model& model) const
                              back_inserter(allProperties));
                         copy(r.properties.begin(), r.properties.end(),
                              back_inserter(allProperties));
-                        setList(mResponse, "allProperties", allProperties,
-                                bind(&Printer::dumpField, this, _1));
-                        setList(mResponse, "properties", r.properties,
-                                bind(&Printer::dumpField, this, _1));
-                        setList(mResponse, "headers", r.headers,
-                                bind(&Printer::dumpField, this, _1));
+
+		                for (const auto& src: {{"allProperties", allProperties},
+		                                       {"properties", r.properties},
+		                                       pair{"headers", r.headers}})
+		                    addList(mResponse, src.first, src.second);
+
                         return mResponse;
                     });
                 if (call.inlineResponse && !call.responses.empty() &&

@@ -37,6 +37,8 @@ private:
 
     [[nodiscard]] m_object_type renderType(const TypeUsage& tu) const;
     [[nodiscard]] m_object_type dumpField(const VarDecl& field) const;
+    void addList(m_object_type& target, const string& name,
+                 const VarDecls& properties) const;
     [[nodiscard]] m_object_type dumpAllTypes(const Model::schemas_type& types) const;
     [[nodiscard]] m_object_type dumpTypes(const Model::schemas_type& types,
                                           const string& scope) const;
