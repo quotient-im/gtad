@@ -27,7 +27,7 @@ public:
 private:
     context_type _contextData;
     string _delimiter;
-    mutable template_type _typeRenderer;
+    template_type _typeRenderer;
     string _leftQuote;
     string _rightQuote;
     templates_type _templates;
