@@ -20,8 +20,7 @@ public:
             const string& outFilesListPath);
     Printer(Printer&& p) = default;
 
-    static Printer::template_type makeMustache(const string& tmpl,
-                                               string setDelimiter = {});
+    Printer::template_type makeMustache(const string& tmpl) const;
     vector<string> print(const Model& model) const;
 
 private:

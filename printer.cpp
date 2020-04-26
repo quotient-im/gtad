@@ -53,12 +53,10 @@ inline bool endsWith(const string& s, const string& ss)
     return equal(ss.rbegin(), ss.rend(), s.rbegin());
 }
 
-Printer::template_type Printer::makeMustache(const string& tmpl,
-                                             string setDelimiter)
+Printer::template_type Printer::makeMustache(const string& tmpl) const
 {
-    if (!setDelimiter.empty())
-        setDelimiter = "{{=" + setDelimiter + "=}}";
-    template_type mstch { setDelimiter + tmpl };
+    km::mustache mstch{
+        _delimiter.empty() ? tmpl : "{{=" + _delimiter + "=}}" + tmpl};
     mstch.set_custom_escape([](string s) { return s; });
     return mstch;
 }
@@ -114,8 +112,7 @@ Printer::Printer(context_type&& contextData,
     : _contextData(std::move(contextData))
     , _delimiter(safeString(_contextData, "_delimiter"))
     , _typeRenderer(makeMustache(
-                        safeString(_contextData, "_typeRenderer", "{{>name}}"),
-                        _delimiter))
+          safeString(_contextData, "_typeRenderer", "{{>name}}")))
     , _leftQuote(safeString(_contextData, "_leftQuote",
                             safeString(_contextData, "_quote", "\"")))
     , _rightQuote(safeString(_contextData, "_rightQuote",
@@ -162,7 +159,7 @@ Printer::Printer(context_type&& contextData,
 
         _templates.emplace_back(
             makeMustache(withoutSuffix(templateFileName, ".mustache")),
-            makeMustache(templateContents, _delimiter));
+            makeMustache(templateContents));
     }
     if (!outFilesListPath.empty())
     {
