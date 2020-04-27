@@ -72,7 +72,7 @@ void eraseSuffix(string* path, const string& suffix)
         path->erase(trimAt);
 }
 
-string withoutSuffix(const string& path, const string& suffix)
+string withoutSuffix(const string& path, const string_view& suffix)
 {
     return path.substr(0, path.find(suffix, path.size() - suffix.size()));
 }
@@ -114,32 +114,26 @@ Path::Path(string path)
     }
 }
 
-const array<string, 4> Call::paramsBlockNames
-    { { "path", "query", "header", "body" } };
+const array<string, 4> Call::ParamGroups{{"path"s, "query"s, "header"s, "body"s}};
 
-size_t getParamsBlockIndex(const string& name)
+auto getParamsBlockIndex(const string& name)
 {
     for (Call::params_type::size_type i = 0; i < 4; ++i)
-        if (Call::paramsBlockNames[i] == name)
+        if (Call::ParamGroups[i] == name)
             return i;
 
     throw ModelException("Unknown params block name: " + name);
 }
 
-const Call::params_type& Call::getParamsBlock(const string& blockName) const
-{
-    return allParams[getParamsBlockIndex(blockName)];
-}
-
 Call::params_type& Call::getParamsBlock(const string& blockName)
 {
-    return allParams[getParamsBlockIndex(blockName)];
+    return params[getParamsBlockIndex(blockName)];
 }
 
 Call::params_type Call::collateParams() const
 {
     params_type allCollated;
-    for (auto c: allParams)
+    for (auto c: params)
         allCollated.insert(allCollated.end(), c.begin(), c.end());
 
     stable_partition(allCollated.begin(), allCollated.end(),

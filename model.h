@@ -29,7 +29,8 @@
 std::string capitalizedCopy(std::string s);
 std::string camelCase(std::string s);
 void eraseSuffix(std::string* path, const std::string& suffix);
-std::string withoutSuffix(const std::string& path, const std::string& suffix);
+std::string withoutSuffix(const std::string& path,
+                          const std::string_view& suffix);
 
 template <typename T>
 [[nodiscard]] inline std::string qualifiedName(const T& type)
@@ -55,13 +56,13 @@ struct TypeUsage
     explicit TypeUsage(std::string typeName) : name(std::move(typeName)) { }
     explicit TypeUsage(const ObjectSchema& schema);
 
-    TypeUsage instantiate(std::vector<TypeUsage>&& innerTypes) const;
+    [[nodiscard]] TypeUsage instantiate(std::vector<TypeUsage>&& innerTypes) const;
 
     [[nodiscard]] bool empty() const { return name.empty(); }
 
-    void addImport(imports_type::value_type import_text)
+    void addImport(imports_type::value_type name)
     {
-        lists["imports"].emplace_back(move(import_text));
+        lists["imports"].emplace_back(move(name));
     }
 };
 
@@ -83,7 +84,7 @@ struct VarDecl
         , required(required), defaultValue(std::move(defaultValue))
     { }
 
-    std::string toString(bool withDefault = false) const;
+    [[nodiscard]] std::string toString(bool withDefault = false) const;
 };
 
 using VarDecls = std::vector<VarDecl>;
@@ -123,8 +124,14 @@ struct ObjectSchema : Scope
     VarDecl propertyMap;
     InOut inOut = 0;
 
-    bool empty() const { return parentTypes.empty() && fields.empty(); }
-    bool trivial() const { return parentTypes.size() == 1 && fields.empty(); }
+    [[nodiscard]] bool empty() const
+    {
+        return parentTypes.empty() && fields.empty();
+    }
+    [[nodiscard]] bool trivial() const
+    {
+        return parentTypes.size() == 1 && fields.empty();
+    }
 };
 
 struct Path : public std::string
@@ -154,6 +161,8 @@ struct ExternalDocs
     std::string url;
 };
 
+enum Location : size_t { InPath = 0, InQuery = 1, InHeaders = 2, InBody = 3 };
+
 struct Call : Scope
 {
     using params_type = VarDecls;
@@ -169,22 +178,17 @@ struct Call : Scope
     Call(Call&&) = default;
     Call operator=(Call&&) = delete;
 
-    static const std::array<std::string, 4> paramsBlockNames;
-    const Call::params_type& getParamsBlock(const std::string& blockName) const;
-    Call::params_type& getParamsBlock(const std::string& blockName);
-    params_type collateParams() const;
+    static const std::array<std::string, 4> ParamGroups;
+
+    [[nodiscard]] params_type& getParamsBlock(const std::string& blockName);
+    [[nodiscard]] params_type collateParams() const;
 
     Path path;
     std::string verb;
     std::string summary;
     std::string description;
     ExternalDocs externalDocs;
-    std::array<params_type, 4> allParams;
-    params_type& pathParams() { return allParams[0]; }
-    params_type& queryParams() { return allParams[1]; }
-    params_type& headerParams() { return allParams[2]; }
-    params_type& bodyParams() { return allParams[3]; }
-    const params_type& bodyParams() const { return allParams[3]; }
+    std::array<params_type, 4> params;
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
     bool inlineBody = false;
@@ -205,8 +209,7 @@ inline std::string OpenAPI3() { return "openapi"; }
 inline std::string RAML() { return "raml"; }
 inline std::string JSONSchema() { return "json-schema"; }
 
-struct Model
-{
+struct Model {
     using string = std::string;
     using imports_type = std::unordered_set<string>;
     using schemas_type = std::vector<ObjectSchema>;
@@ -216,12 +219,15 @@ struct Model
     std::vector<string> dstFiles;
 
     string apiSpec;
-    int apiSpecVersion = 0; // Encoded as xyy, x - major, yy - minor component
+    /// Spec version liberally encoded in a int, e.g. 200 for Swagger 2.0
+    /// or 201909 for JSON Schema 2019-09
+    int apiSpecVersion = 0;
+
+    imports_type imports;
+    schemas_type types;
 
     string hostAddress;
     string basePath;
-    imports_type imports;
-    schemas_type types;
     std::vector<CallClass> callClasses;
 
     Model(string fileDir, string fileName)
@@ -237,8 +243,8 @@ struct Model
     void addSchema(const ObjectSchema& schema);
     void addImports(const TypeUsage& type);
 
-    bool empty() const { return callClasses.empty() && types.empty(); }
-    bool trivial() const
+    [[nodiscard]] bool empty() const { return callClasses.empty() && types.empty(); }
+    [[nodiscard]] bool trivial() const
     {
         return callClasses.empty() &&
                 types.size() == 1 && types.front().trivial();

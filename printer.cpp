@@ -30,7 +30,7 @@ using km::partial;
 inline string safeString(const Printer::context_type& data, const string& key,
                          string defaultValue = {})
 {
-    if (auto value = data.get(key))
+    if (const auto* value = data.get(key))
     {
         if (value->is_string())
             return value->string_value();
@@ -79,10 +79,12 @@ class GtadContext : public km::context<string>
             if (it != filePartialsCache.end())
                 return &it->second;
 
-            ifstream ifs { inputBasePath + name };
+            auto srcFileName = inputBasePath + name;
+            ifstream ifs { srcFileName };
             if (!ifs.good())
             {
-                ifs.open(inputBasePath + name + ".mustache");
+                srcFileName += ".mustache";
+                ifs.open(srcFileName);
                 if (!ifs.good())
                     cerr << "Failed to open file for a partial: "
                          << inputBasePath + name << endl;
@@ -165,7 +167,7 @@ Printer::Printer(context_type&& contextData,
     {
         _outFilesList.open(_outputBasePath + outFilesListPath);
         if (!_outFilesList)
-            cerr << "No out files list set or cannot write to the file" << endl;
+            clog << "No out files list set or cannot write to the file" << endl;
     }
 }
 
@@ -331,16 +333,20 @@ object Printer::dumpTypes(const Model::schemas_type& types,
 
 bool dumpContentTypes(object& target, const string& keyName, vector<string> types)
 {
-    const auto& cTypes = types;
-    setList(target, keyName, cTypes);
+    setList(target, keyName, types);
     const bool hasNonJson =
-            !all_of(cTypes.begin(), cTypes.end(), bind(endsWith, _1, "/json"));
+            !all_of(types.begin(), types.end(), bind(endsWith, _1, "/json"));
     target.emplace(keyName + "NonJson?", hasNonJson);
     return hasNonJson;
 }
 
 vector<string> Printer::print(const Model& model) const
 {
+    if (model.empty()) {
+        clog << "Empty model, no files will be emitted" << endl;
+        return {};
+    }
+
     auto contextData = _contextData;
     contextData.set("filenameBase", model.srcFilename);
     contextData.set("basePathWithoutHost", model.basePath);
@@ -352,80 +358,74 @@ vector<string> Printer::print(const Model& model) const
     auto&& mTypes = dumpTypes(model.types, "");
     if (!mTypes.empty())
         contextData.set("models", mTypes);
-    if (!model.callClasses.empty())
-    {
+
+    if (!model.callClasses.empty()) {
         const auto& callClass = model.callClasses.back();
         bool globalConsumesNonJson = false, globalProducesNonJson = false;
         object mOperations; // Any attributes should be added after setList
-        setList(mOperations, "operation", callClass.calls,
-            [&] (const Call& call) {
-                object mCall { { "operationId", call.name }
-                             , { "camelCaseOperationId", camelCase(call.name) }
-                             , { "httpMethod",  call.verb }
-                             , { "path", call.path }
-                             , { "summary",  call.summary }
-                             , { "skipAuth", !call.needsSecurity }
-                };
-                dumpDescription(mCall, call);
+        setList(mOperations, "operation", callClass.calls, [&](const Call& call) {
+            // clang-format off
+            object mCall { { "operationId", call.name }
+                         , { "camelCaseOperationId", camelCase(call.name) }
+                         , { "httpMethod", call.verb }
+                         , { "path", call.path }
+                         , { "summary", call.summary }
+                         , { "skipAuth", !call.needsSecurity } };
+            // clang-format on
+            dumpDescription(mCall, call);
 
-                globalConsumesNonJson |=
-                    dumpContentTypes(mCall, "consumes",
-                                     call.consumedContentTypes);
-                globalProducesNonJson |=
-                    dumpContentTypes(mCall, "produces",
-                                     call.producedContentTypes);
-                mCall.emplace("producesImage?",
+            globalConsumesNonJson |=
+                dumpContentTypes(mCall, "consumes", call.consumedContentTypes);
+            globalProducesNonJson |=
+                dumpContentTypes(mCall, "produces", call.producedContentTypes);
+            mCall.emplace("producesImage?",
                         all_of(call.producedContentTypes.begin(),
                                call.producedContentTypes.end(),
                                bind(startsWith, _1, "image/")));
 
-                auto&& mCallTypes = dumpTypes(model.types, call.name);
-                if (!mCallTypes.empty())
-                    mCall.emplace("models", mCallTypes);
-                setList(mCall, "pathParts", call.path.parts,
-                    [this, &call] (const Path::part_type& p) {
-                        const string s { call.path, get<0>(p), get<1>(p) };
+            auto&& mCallTypes = dumpTypes(model.types, call.name);
+            if (!mCallTypes.empty())
+                mCall.emplace("models", mCallTypes);
+            setList(mCall, "pathParts", call.path.parts,
+                    [this, &call](const Path::part_type& p) {
+                        const string s{call.path, get<0>(p), get<1>(p)};
                         return get<2>(p) == Path::Variable ? s
                                : _leftQuote + s + _rightQuote;
                     });
 
-                using namespace placeholders;
-            	addList(mCall, "allParams", call.collateParams());
-                for (size_t i = 0; i < Call::paramsBlockNames.size(); ++i)
-                addList(mCall, Call::paramsBlockNames[i] + "Params",
-                            call.allParams[i]);
-                if (call.inlineBody)
-                    mCall.emplace("inlineBody",
-                                  dumpField(call.bodyParams().front()));
+            using namespace placeholders;
+            addList(mCall, "allParams", call.collateParams());
+            for (size_t i = 0; i < Call::ParamGroups.size(); ++i)
+                addList(mCall, Call::ParamGroups[i] + "Params",
+                        call.params[i]);
+            if (call.inlineBody)
+                mCall.emplace("inlineBody",
+                              dumpField(call.params[InBody].front()));
 
-                setList(mCall, "responses", call.responses,
-                    [this](const Response& r) {
-                        object mResponse { { "code", r.code }
-                                         , { "normalResponse?", r.code == "200" }
-                        };
-                        vector<VarDecl> allProperties;
-                        copy(r.headers.begin(), r.headers.end(),
-                             back_inserter(allProperties));
-                        copy(r.properties.begin(), r.properties.end(),
-                             back_inserter(allProperties));
+            setList(mCall, "responses", call.responses, [this](const Response& r) {
+                object mResponse{{"code", r.code},
+                                 {"normalResponse?", r.code == "200"}};
+                vector<VarDecl> allProperties;
+                for (const auto& src: {r.headers, r.properties})
+                    copy(src.begin(), src.end(), back_inserter(allProperties));
 
-		                for (const auto& src: {{"allProperties", allProperties},
-		                                       {"properties", r.properties},
-		                                       pair{"headers", r.headers}})
-		                    addList(mResponse, src.first, src.second);
+                for (const auto& src: {{"allProperties", allProperties},
+                                       {"properties", r.properties},
+                                       pair{"headers", r.headers}})
+                    addList(mResponse, src.first, src.second);
 
-                        return mResponse;
-                    });
-                if (call.inlineResponse && !call.responses.empty() &&
-                        !call.responses.front().properties.empty())
-                    mCall.emplace("inlineResponse",
-                                  dumpField(call.responses.front()
-                                            .properties.front()));
-
-                return mCall;
+                return mResponse;
             });
-        if (!mOperations.empty())
-        {
+            if (call.inlineResponse && !call.responses.empty()
+                && !call.responses.front().properties.empty())
+                mCall.emplace("inlineResponse",
+                              dumpField(
+                                  call.responses.front().properties.front()));
+
+            return mCall;
+        });
+
+        if (!mOperations.empty()) {
             mOperations.emplace("classname", "NOT_IMPLEMENTED");
             mOperations.emplace("consumesNonJson?", globalConsumesNonJson);
             mOperations.emplace("producesNonJson?", globalProducesNonJson);
