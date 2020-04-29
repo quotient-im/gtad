@@ -39,9 +39,9 @@ public:
 
 private:
     string fileName;
-    string baseDir;
+    string _baseDir;
     Model model;
-    const Translator& translator;
+    const Translator& _translator;
 
     enum IsTopLevel : bool { Inner = false, TopLevel = true };
     enum SubschemasStrategy : bool { ImportSubschemas = false,
@@ -68,7 +68,7 @@ private:
                                       const Scope& scope, ArgTs&&... args)
     {
         return { std::move(type),
-                 translator.mapIdentifier(baseName, scope.qualifiedName()),
+                 _translator.mapIdentifier(baseName, scope.qualifiedName()),
                  baseName, std::forward<ArgTs>(args)... };
     }
 

@@ -34,9 +34,9 @@ Model initModel(string path)
 Analyzer::Analyzer(string filePath, string basePath,
                    const Translator& translator)
     : fileName(filePath)
-    , baseDir(move(basePath))
+    , _baseDir(move(basePath))
     , model(initModel(move(filePath)))
-    , translator(translator)
+    , _translator(translator)
 { }
 
 TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
@@ -56,13 +56,13 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
                 auto elemType =
                     analyzeTypeUsage(yamlElemType, inOut, move(scope));
                 const auto& protoType =
-                    translator.mapType("array", elemType.baseName,
+                    _translator.mapType("array", elemType.baseName,
                         camelCase(node["title"].as<string>(
                                            elemType.baseName + "[]")));
                 return protoType.instantiate({move(elemType)});
             }
 
-        return translator.mapType("array");
+        return _translator.mapType("array");
     }
     if (yamlType == "object")
     {
@@ -76,7 +76,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
         {
             model.addSchema(schema);
-            auto tu = translator.mapType("schema", schema.name);
+            auto tu = _translator.mapType("schema", schema.name);
             tu.scope = schema.scope;
             tu.name = tu.baseName = schema.name;
             return tu;
@@ -85,7 +85,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
         // Also, a nameless non-empty schema is now treated as a generic
         // mapType("object"). TODO, low priority: ad-hoc typing (via tuples?)
     }
-    auto tu = translator.mapType(yamlType, node["format"].as<string>(""));
+    auto tu = _translator.mapType(yamlType, node["format"].as<string>(""));
     if (!tu.empty())
         return tu;
 
@@ -98,7 +98,7 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
     vector<TypeUsage> tus;
     for (const auto& yamlType: yamlTypes)
         tus.emplace_back(yamlType.IsScalar()
-                         ? translator.mapType(yamlType.as<string>())
+                         ? _translator.mapType(yamlType.as<string>())
                          : analyzeTypeUsage(yamlType, inOut, scope));
 
     string baseTypes;
@@ -109,7 +109,7 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
         baseTypes += t.baseName;
     }
 
-    const auto& protoType = translator.mapType("variant", baseTypes, baseTypes);
+    const auto& protoType = _translator.mapType("variant", baseTypes, baseTypes);
     cout << "Using " << protoType.name << " for a multitype: "
          << baseTypes << endl;
     return protoType.instantiate(move(tus));
@@ -159,7 +159,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     {
         // First try to resolve refPath in types map; if there's no match, load
         // the schema from the reference path.
-        auto tu = translator.mapType("$ref", refPath);
+        auto tu = _translator.mapType("$ref", refPath);
         if (!tu.empty())
         {
             cout << "Using type " << tu.name << " for " << refPath << endl;
@@ -172,7 +172,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         cout << "Sub-processing schema in "
              << model.fileDir << "./" << refPath << endl;
         auto&& refModel = // TODO, #33: Only load the model here
-                translator.processFile(model.fileDir + refPath, baseDir);
+                _translator.processFile(model.fileDir + refPath, _baseDir);
         if (refModel.types.empty())
             throw YamlException(yamlSchema, "The target file has no schemas");
 
@@ -234,7 +234,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         name = schema.parentTypes.back().name;
     if (!name.empty())
     {
-        auto tu = translator.mapType("schema", name);
+        auto tu = _translator.mapType("schema", name);
         if (!tu.empty())
         {
             cout << "Using type " << tu.name << " for schema " << name << endl;
@@ -285,7 +285,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                 auto elemType = analyzeTypeUsage(additionalProperties.asMap(),
                                                  inOut, schema.scope);
                 const auto& protoType =
-                        translator.mapType("map", elemType.baseName,
+                    _translator.mapType("map", elemType.baseName,
                                            "string->" + elemType.baseName);
                 tu = protoType.instantiate({move(elemType)});
                 description = additionalProperties["description"].as<string>("");
@@ -293,7 +293,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
             }
             case YAML::NodeType::Scalar: // Generic map
                 if (additionalProperties.as<bool>())
-                    tu = translator.mapType("map");
+                    tu = _translator.mapType("map");
                 break;
             default:
                 throw YamlException(additionalProperties,
@@ -359,8 +359,8 @@ vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
 Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                           InOut inOut)
 {
-    cout << "Loading from " << baseDir + fileName << endl;
-    auto yaml = YamlMap::loadFromFile(baseDir + fileName, substitutions);
+    cout << "Loading from " << _baseDir + fileName << endl;
+    auto yaml = YamlMap::loadFromFile(_baseDir + fileName, substitutions);
 
     // Detect which file we have: API description or just data definition
     // TODO: This should be refactored to two separate methods, since we shouldn't
@@ -451,7 +451,7 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                         // means a freeform object.
                         call.inlineBody = true;
                         addVarDecl(call.params[InBody],
-                                   translator.mapType("object"), name, call,
+                                   _translator.mapType("object"), name, call,
                                    yamlParam["description"].as<string>(""),
                                    false);
                     } else {
