@@ -58,9 +58,9 @@ private:
                   string scope = {}, const string& locus = {},
                   SubschemasStrategy subschemasStrategy = ImportSubschemas);
 
-    void addParamsFromSchema(VarDecls& varList, const Scope& scope,
-                             const string& baseName, bool required,
-                             const ObjectSchema& bodyParamSchema);
+    void addFromSchema(VarDecls& targetList, const ObjectSchema& sourceSchema,
+                       const Scope& scope = {}, const string& baseName = {},
+                       bool required = true);
 
     template <typename... ArgTs>
     [[nodiscard]] VarDecl makeVarDecl(TypeUsage type,

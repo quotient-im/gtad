@@ -226,9 +226,9 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
         for (const auto& yamlEntry: yamlAllOf)
             if (auto yamlMap = yamlEntry.asMap(); yamlMap && !yamlMap["$ref"])
-                addParamsFromSchema(schema.fields, {}, {}, true,
-         				analyzeSchema(yamlMap, inOut, scope,
-                                      locus + " (inner definition)"));
+                addFromSchema(schema.fields,
+                              analyzeSchema(yamlMap, inOut, scope,
+                                            locus + " (inner definition)"));
 
     if (name.empty() && schema.trivial())
         name = schema.parentTypes.back().name;
@@ -328,23 +328,25 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     return schema;
 }
 
-void Analyzer::addParamsFromSchema(VarDecls& varList, const Scope& scope,
-        const string& baseName, bool required, const ObjectSchema& paramSchema)
+void Analyzer::addFromSchema(VarDecls& targetList,
+                             const ObjectSchema& sourceSchema,
+                             const Scope& scope, const string& baseName,
+                             bool required)
 {
-    if (paramSchema.trivial())
+    if (sourceSchema.trivial())
     {
         // The schema consists of a single parent type, use that type instead.
-        addVarDecl(varList, paramSchema.parentTypes.front(), baseName, scope,
-                   paramSchema.description, required);
-    } else if (paramSchema.name.empty())
+        addVarDecl(targetList, sourceSchema.parentTypes.front(), baseName,
+                   scope, sourceSchema.description, required);
+    } else if (sourceSchema.name.empty())
     {
-        for (const auto& parentType: paramSchema.parentTypes)
-            addVarDecl(varList, parentType, parentType.name, scope, "", required);
-        for (const auto & param: paramSchema.fields)
-            model.addVarDecl(varList, param);
+        for (const auto& parentType: sourceSchema.parentTypes)
+            addVarDecl(targetList, parentType, parentType.name, scope, "", required);
+        for (const auto & param: sourceSchema.fields)
+            model.addVarDecl(targetList, param);
     } else {
-        model.addSchema(paramSchema);
-        addVarDecl(varList, TypeUsage(paramSchema.name), baseName, scope,
+        model.addSchema(sourceSchema);
+        addVarDecl(targetList, TypeUsage(sourceSchema.name), baseName, scope,
                    "", required);
     }
 }
@@ -459,8 +461,8 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                         // inline that type.
                         if (bodySchema.trivial())
                             call.inlineBody = true;
-                        addParamsFromSchema(call.params[InBody], call,
-                                            name, required, bodySchema);
+                        addFromSchema(call.params[InBody], bodySchema, call,
+                                      name, required);
                     }
                 }
                 const auto yamlResponses = yamlCall.get("responses").asMap();
@@ -488,8 +490,8 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                                     response.description;
                         }
                         if (!responseSchema.empty())
-                            addParamsFromSchema(response.properties, call,
-                                "data", true, responseSchema);
+                            addFromSchema(response.properties, responseSchema,
+                                          call, "data");
                     }
                     call.responses.emplace_back(move(response));
                 }
