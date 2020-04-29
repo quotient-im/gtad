@@ -146,15 +146,12 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     auto properties = yamlSchema["properties"].asMap();
     auto additionalProperties = yamlSchema["additionalProperties"];
 
-    // Suppress inlining for trivial schemas. This is needed because otherwise
-    // GTAD agressively inlines data structures that have their own
-    // name and meaning, with consumers of the generated API having
-    // to rebuild those structures back from their pieces.
-    if (refPaths.size() == 1
-        && !(innerPropertiesFound || properties || additionalProperties))
+    // Suppress inlining if the outer context is non-trivial.
+    auto name = yamlSchema["title"].as<string>("");
+    if (!name.empty() || refPaths.size() != 1 || innerPropertiesFound
+        || properties || additionalProperties)
         subschemasStrategy = ImportSubschemas;
 
-    auto name = yamlSchema["title"].as<string>("");
     for (const auto& refPath: refPaths)
     {
         // First try to resolve refPath in types map; if there's no match, load
@@ -184,27 +181,22 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         // imported, such as headers in C/C+) and implementation files
         // (that should not). For now, refModel.dstFiles.front() assumes that
         // there's only one interface file, and it's at the front of the list.
-        auto&& importFile = refModel.dstFiles.empty() ? string{}
+        auto&& importPath = refModel.dstFiles.empty() ? string{}
                                     : "\"" + refModel.dstFiles.front() + "\"";
 
-        if (subschemasStrategy == ImportSubschemas && !refModel.trivial()) {
+        if (subschemasStrategy == ImportSubschemas) {
             tu.name = refSchema.name;
             tu.baseName = tu.name.empty() ? refPath : tu.name;
-            tu.addImport(move(importFile));
+            tu.addImport(move(importPath));
             schema.parentTypes.emplace_back(move(tu));
             continue;
         }
 
         // Instead of adding another type, just inline parts of the subschema.
+        cout << "Inlining schema from " << refPath << endl;
         move(refSchema.parentTypes.begin(), refSchema.parentTypes.end(),
              back_inserter(schema.parentTypes)); // XXX: Recurse?
 
-        // FIXME: The below is ugly. We try to have a cake and eat it,
-        // inline a schema but still use other definitions from its file.
-        // That doesn't look right. On the other hand, having an additional
-        // level of structure just because it's so defined in
-        // the API description (but not in the working API) is not pretty
-        // either.
         for (auto field: refSchema.fields) {
             // Watch out for supplementary schemas defined in the same file
             if (any_of(refModel.types.begin(), refModel.types.end() - 1,
@@ -212,10 +204,13 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                            return field.type.name == s.name
                                   && field.type.scope == s.scope;
                        })) {
-                field.type.addImport(importFile);
+                cout << "Adding " << importPath
+                     << " to support field " << field.name << endl;
+                field.type.addImport(importPath);
             }
             schema.fields.emplace_back(move(field));
         }
+        schema.propertyMap = refSchema.propertyMap;
     }
 
     if (auto yamlOneOf = yamlSchema["oneOf"].asSequence())
@@ -306,14 +301,15 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                 schema.parentTypes = { std::move(tu) };
             else
                 schema.propertyMap = makeVarDecl(std::move(tu),
-                    "additionalProperties", schema, move(description));
+                                                 "additionalProperties", schema,
+                                                 move(description), false);
         }
     }
 
     if (!schema.empty()) {
         cout << yamlSchema.location() << ": Found "
              << (!locus.empty() ? locus + " schema"
-                 : "schema " + schema.qualifiedName())
+                                : "schema " + schema.qualifiedName())
              << " for "
              << (schema.inOut == In ? "input" :
                  schema.inOut == Out ? "output" :
@@ -321,9 +317,13 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         if (schema.trivial())
             cout << " mapped to "
                  << qualifiedName(schema.parentTypes.front()) << endl;
-        else
+        else {
             cout << " (parent(s): " << schema.parentTypes.size()
-                 << ", field(s): " << schema.fields.size() << ")" << endl;
+                 << ", field(s): " << schema.fields.size();
+            if (!schema.propertyMap.type.empty())
+                cout << "and a property map";
+            cout << ")" << endl;
+        }
     }
     return schema;
 }
@@ -344,6 +344,8 @@ void Analyzer::addFromSchema(VarDecls& targetList,
             addVarDecl(targetList, parentType, parentType.name, scope, "", required);
         for (const auto & param: sourceSchema.fields)
             model.addVarDecl(targetList, param);
+        if (!sourceSchema.propertyMap.type.empty())
+            model.addVarDecl(targetList, sourceSchema.propertyMap);
     } else {
         model.addSchema(sourceSchema);
         addVarDecl(targetList, TypeUsage(sourceSchema.name), baseName, scope,
