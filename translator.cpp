@@ -289,19 +289,18 @@ string Translator::mapIdentifier(const string& baseName,
     return baseName;
 }
 
-Model Translator::processFile(string filePath, string baseDirPath,
-                              InOut inOut, bool skipTrivial) const
+Model&& Translator::processFile(string filePath, string baseDirPath,
+                                InOut inOut, bool skipTrivial) const
 {
-    auto m = Analyzer(move(filePath), move(baseDirPath), *this)
+    auto&& m = Analyzer(move(filePath), move(baseDirPath), *this)
                 .loadModel(_substitutions, inOut);
-    if (m.empty() || (m.trivial() && skipTrivial))
-        return m;
+    if (!(m.empty() || (m.trivial() && skipTrivial))) {
+        QDir d{_outputDirPath + m.fileDir.c_str()};
+        if (!d.exists() && !d.mkpath("."))
+            throw Exception{"Cannot create output directory"};
+        m.dstFiles = _printer->print(m);
+    }
 
-    QDir d { _outputDirPath + m.fileDir.c_str() };
-    if (!d.exists() && !d.mkpath("."))
-        throw Exception { "Cannot create output directory" };
-    m.dstFiles = _printer->print(m);
-
-    return m;
+    return move(m);
 }
 

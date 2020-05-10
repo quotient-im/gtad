@@ -34,8 +34,8 @@ public:
     Analyzer(std::string filePath, std::string basePath,
              const Translator& translator);
 
-    Model loadModel(const pair_vector_t<std::string>& substitutions,
-                    InOut inOut);
+    Model&& loadModel(const pair_vector_t<std::string>& substitutions,
+                      InOut inOut);
 
 private:
     string fileName;
@@ -48,24 +48,21 @@ private:
                                      InlineSubschemas = true };
 
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node, InOut inOut,
-                                             string scope,
+                                             const Call* scope,
                                              IsTopLevel isTopLevel = Inner);
     [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence& yamlTypes,
-                                             InOut inOut,
-                                             const string& scope);
+                                             InOut inOut, const Call* scope);
     [[nodiscard]] ObjectSchema
     analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
-                  string scope = {}, const string& locus = {},
+                  const Call* scope = {}, const string& locus = {},
                   SubschemasStrategy subschemasStrategy = ImportSubschemas);
 
-    void addFromSchema(VarDecls& targetList, const ObjectSchema& sourceSchema,
-                       const Scope& scope = {}, const string& baseName = {},
-                       bool required = true);
+    void mergeFromSchema(ObjectSchema& target, const ObjectSchema& sourceSchema,
+                         const string& baseName = {}, bool required = true);
 
     template <typename... ArgTs>
-    [[nodiscard]] VarDecl makeVarDecl(TypeUsage type,
-                                      const string& baseName,
-                                      const Scope& scope, ArgTs&&... args)
+    [[nodiscard]] VarDecl makeVarDecl(TypeUsage type, const string& baseName,
+                                      const Identifier& scope, ArgTs&&... args)
     {
         return { std::move(type),
                  _translator.mapIdentifier(baseName, scope.qualifiedName()),

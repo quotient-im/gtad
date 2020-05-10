@@ -40,7 +40,7 @@ Analyzer::Analyzer(string filePath, string basePath,
 { }
 
 TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
-                                     string scope, IsTopLevel isTopLevel)
+                                     const Call* scope, IsTopLevel isTopLevel)
 {
     auto yamlTypeNode = node["type"];
 
@@ -93,7 +93,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
 }
 
 TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
-                                     const string& scope)
+                                     const Call* scope)
 {
     vector<TypeUsage> tus;
     for (const auto& yamlType: yamlTypes)
@@ -116,11 +116,11 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
 }
 
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
-                                     string scope, const string& locus,
+                                     const Call* scope,
+                                     const string& locus,
                                      SubschemasStrategy subschemasStrategy)
 {
-    ObjectSchema schema;
-    schema.inOut = inOut;
+    ObjectSchema schema{inOut, yamlSchema["description"].as<string>("")};
 
     // Collect minimum information necessary to decide if subschemas inlining
     // should be suppressed (see also below)
@@ -221,9 +221,9 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
     if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
         for (const auto& yamlEntry: yamlAllOf)
             if (auto yamlMap = yamlEntry.asMap(); yamlMap && !yamlMap["$ref"])
-                addFromSchema(schema.fields,
-                              analyzeSchema(yamlMap, inOut, scope,
-                                            locus + " (inner definition)"));
+                mergeFromSchema(schema,
+                                analyzeSchema(yamlMap, inOut, scope,
+                                              locus + " (inner definition)"));
 
     if (name.empty() && schema.trivial())
         name = schema.parentTypes.back().name;
@@ -244,8 +244,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         // If the schema is not just an alias for another type, name it.
         schema.name = camelCase(name);
     }
-    schema.scope.swap(scope); // Use schema.scope, not scope after this line
-    schema.description = yamlSchema["description"].as<string>("");
+    schema.scope = scope;
 
     if (schema.empty() && yamlSchema["type"].as<string>("object") != "object")
     {
@@ -315,41 +314,48 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                  schema.inOut == Out ? "output" :
                  schema.inOut == (In|Out) ? "in/out" : "undefined use");
         if (schema.trivial())
-            cout << " mapped to "
-                 << qualifiedName(schema.parentTypes.front()) << endl;
+            cout << " mapped to " << schema.parentTypes.front().qualifiedName();
         else {
             cout << " (parent(s): " << schema.parentTypes.size()
                  << ", field(s): " << schema.fields.size();
             if (!schema.propertyMap.type.empty())
                 cout << "and a property map";
-            cout << ")" << endl;
+            cout << ")";
         }
+        cout << endl;
     }
     return schema;
 }
 
-void Analyzer::addFromSchema(VarDecls& targetList,
-                             const ObjectSchema& sourceSchema,
-                             const Scope& scope, const string& baseName,
-                             bool required)
+void Analyzer::mergeFromSchema(ObjectSchema& target,
+                               const ObjectSchema& sourceSchema,
+                               const string& baseName, bool required)
 {
     if (sourceSchema.trivial())
     {
         // The schema consists of a single parent type, use that type instead.
-        addVarDecl(targetList, sourceSchema.parentTypes.front(), baseName,
-                   scope, sourceSchema.description, required);
+        addVarDecl(target.fields, sourceSchema.parentTypes.front(), baseName,
+                   sourceSchema, sourceSchema.description, required);
     } else if (sourceSchema.name.empty())
     {
         for (const auto& parentType: sourceSchema.parentTypes)
-            addVarDecl(targetList, parentType, parentType.name, scope, "", required);
+            addVarDecl(target.fields, parentType, parentType.name,
+                       sourceSchema, "", required);
         for (const auto & param: sourceSchema.fields)
-            model.addVarDecl(targetList, param);
-        if (!sourceSchema.propertyMap.type.empty())
-            model.addVarDecl(targetList, sourceSchema.propertyMap);
+            model.addVarDecl(target.fields, param);
+        if (!sourceSchema.hasPropertyMap()) {
+            if (target.hasPropertyMap()
+                && target.propertyMap.type != sourceSchema.propertyMap.type)
+                throw Exception("Conflicting property map types when merging "
+                                "properties from "
+                                + sourceSchema.qualifiedName());
+            model.addImports(sourceSchema.propertyMap.type);
+            target.propertyMap = sourceSchema.propertyMap;
+        }
     } else {
         model.addSchema(sourceSchema);
-        addVarDecl(targetList, TypeUsage(sourceSchema.name), baseName, scope,
-                   "", required);
+        addVarDecl(target.fields, TypeUsage(sourceSchema), baseName,
+                   sourceSchema, "", required);
     }
 }
 
@@ -360,8 +366,8 @@ vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
     return {};
 }
 
-Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
-                          InOut inOut)
+Model&& Analyzer::loadModel(const pair_vector_t<string>& substitutions,
+                            InOut inOut)
 {
     cout << "Loading from " << _baseDir + fileName << endl;
     auto yaml = YamlMap::loadFromFile(_baseDir + fileName, substitutions);
@@ -441,20 +447,20 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
 //                    }
                     if (in != "body") {
                         addVarDecl(call.getParamsBlock(in),
-                            analyzeTypeUsage(yamlParam, In, call.name, TopLevel),
+                            analyzeTypeUsage(yamlParam, In, &call, TopLevel),
                             name, call, yamlParam["description"].as<string>(""),
                             required, yamlParam["default"].as<string>(""));
                         continue;
                     }
 
                     auto&& bodySchema =
-                        analyzeSchema(yamlParam.get("schema"), In, call.name,
+                        analyzeSchema(yamlParam.get("schema"), In, &call,
                                       "request body", InlineSubschemas);
                     if (bodySchema.empty()) {
                         // Special case: an empty schema for a body parameter
                         // means a freeform object.
                         call.inlineBody = true;
-                        addVarDecl(call.params[InBody],
+                        addVarDecl(call.body.fields,
                                    _translator.mapType("object"), name, call,
                                    yamlParam["description"].as<string>(""),
                                    false);
@@ -463,37 +469,30 @@ Model Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                         // inline that type.
                         if (bodySchema.trivial())
                             call.inlineBody = true;
-                        addFromSchema(call.params[InBody], bodySchema, call,
-                                      name, required);
+                        mergeFromSchema(call.body, bodySchema, name, required);
                     }
                 }
                 const auto yamlResponses = yamlCall.get("responses").asMap();
                 if (const auto yamlResponse = yamlResponses["200"].asMap()) {
-                    Response response {
-                        "200", yamlResponse.get("description").as<string>()
-                    };
+                    Response response { "200" };
                     if (auto yamlHeaders = yamlResponse["headers"])
                         for (const auto& yamlHeader: yamlHeaders.asMap())
                             addVarDecl(response.headers,
-                                analyzeTypeUsage(yamlHeader.second, Out,
-                                                 call.name, TopLevel),
+                                analyzeTypeUsage(yamlHeader.second, Out, &call,
+                                                 TopLevel),
                                 yamlHeader.first.as<string>(), call,
                                 yamlHeader.second["description"].as<string>(""),
                                 false);
 
                     if (auto yamlSchema = yamlResponse["schema"]) {
-                        auto&& responseSchema =
-                            analyzeSchema(yamlSchema, Out, call.name,
-                                          "response", InlineSubschemas);
-                        if (responseSchema.trivial()) {
+                        response.body = analyzeSchema(yamlSchema, Out, &call,
+                                                      "data", InlineSubschemas);
+                        if (response.body.trivial()) {
                             call.inlineResponse = true;
-                            if (responseSchema.description.empty())
-                                responseSchema.description =
-                                    response.description;
+                            if (response.body.description.empty())
+                                response.body.description =
+                                    yamlResponse.get("description").as<string>();
                         }
-                        if (!responseSchema.empty())
-                            addFromSchema(response.properties, responseSchema,
-                                          call, "data");
                     }
                     call.responses.emplace_back(move(response));
                 }

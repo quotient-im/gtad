@@ -34,8 +34,8 @@ public:
     Translator(const QString& configFilePath, QString outputDirPath);
     ~Translator();
 
-    Model processFile(string filePath, string baseDirPath,
-                      InOut inOut = In | Out, bool skipTrivial = true) const;
+    Model&& processFile(string filePath, string baseDirPath,
+                        InOut inOut = In | Out, bool skipTrivial = true) const;
     [[nodiscard]] TypeUsage mapType(const string& swaggerType,
                                     const string& swaggerFormat = {},
                                     const string& baseName = {}) const;

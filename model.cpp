@@ -6,8 +6,14 @@
 
 using namespace std;
 
+string Identifier::qualifiedName() const
+{
+    const auto _name = name.empty() ? "(anonymous)" : name;
+    return scope ? scope->name + '.' + _name : _name;
+}
+
 TypeUsage::TypeUsage(const ObjectSchema& schema)
-    : scope(schema.scope), name(schema.name), baseName(schema.name)
+    : Identifier(schema), baseName(schema.name)
 { }
 
 TypeUsage TypeUsage::instantiate(vector<TypeUsage>&& innerTypes) const
@@ -114,7 +120,7 @@ Path::Path(string path)
     }
 }
 
-const array<string, 4> Call::ParamGroups{{"path"s, "query"s, "header"s, "body"s}};
+const array<string, 3> Call::ParamGroups{{"path"s, "query"s, "header"s}};
 
 auto getParamsBlockIndex(const string& name)
 {
@@ -135,6 +141,9 @@ Call::params_type Call::collateParams() const
     params_type allCollated;
     for (auto c: params)
         allCollated.insert(allCollated.end(), c.begin(), c.end());
+    allCollated.insert(allCollated.end(), body.fields.begin(), body.fields.end());
+    if (body.hasPropertyMap())
+    	allCollated.insert(allCollated.end(), body.propertyMap);
 
     stable_partition(allCollated.begin(), allCollated.end(),
                      [] (const VarDecl& v) { return v.required; });

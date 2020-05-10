@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 #include <array>
+#include <list>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -32,28 +33,31 @@ void eraseSuffix(std::string* path, const std::string& suffix);
 std::string withoutSuffix(const std::string& path,
                           const std::string_view& suffix);
 
-template <typename T>
-[[nodiscard]] inline std::string qualifiedName(const T& type)
+struct Call;
+
+struct Identifier
 {
-    const auto _name = type.name.empty() ? "(anonymous)" : type.name;
-    return type.scope.empty() ? _name : type.scope + '.' + _name;
-}
+    /// As transformed for the generated code, not what's in YAML
+    std::string name;
+    /// For now, only non-empty in case of ObjectSchemas and their TypeUsages
+    const Call* scope = nullptr;
+
+    [[nodiscard]] std::string qualifiedName() const;
+};
 
 struct ObjectSchema;
 
-struct TypeUsage
+struct TypeUsage : Identifier
 {
     using imports_type = std::vector<std::string>;
 
-    std::string scope;
-    std::string name; //< As transformed for the generated code
     std::string baseName; //< As used in the API definition
     std::unordered_map<std::string, std::string> attributes;
     std::unordered_map<std::string, std::vector<std::string>> lists;
     std::vector<TypeUsage> innerTypes; //< Parameter types for type templates
 
     TypeUsage() = default;
-    explicit TypeUsage(std::string typeName) : name(std::move(typeName)) { }
+    explicit TypeUsage(std::string typeName) : Identifier{move(typeName)} { }
     explicit TypeUsage(const ObjectSchema& schema);
 
     [[nodiscard]] TypeUsage instantiate(std::vector<TypeUsage>&& innerTypes) const;
@@ -63,6 +67,17 @@ struct TypeUsage
     void addImport(imports_type::value_type name)
     {
         lists["imports"].emplace_back(move(name));
+    }
+
+    [[nodiscard]] bool operator==(const TypeUsage& other) const
+    {
+        return name == other.name && scope == other.scope
+               && baseName == other.baseName && attributes == other.attributes
+               && lists == other.lists && innerTypes == other.innerTypes;
+    }
+    [[nodiscard]] bool operator!=(const TypeUsage& other) const
+    {
+        return !operator==(other);
     }
 };
 
@@ -93,30 +108,7 @@ using InOut = unsigned short;
 static constexpr InOut In = 0x1;
 static constexpr InOut Out = 0x2;
 
-struct Scope
-{
-    // Either empty (top-level) or a Call name (only for ObjectSchema)
-    std::string scope;
-    std::string name;
-
-    Scope() = default;
-    explicit Scope(std::string name, std::string scope = {})
-        : scope(std::move(scope)), name(std::move(name))
-    { }
-    [[nodiscard]] std::string qualifiedName() const
-    {
-        const auto _name = name.empty() ? "(anonymous)" : name;
-        return scope.empty() ? _name : scope + '.' + _name;
-    }
-};
-
-template <>
-[[nodiscard]] inline std::string qualifiedName(const Scope& scope)
-{
-    return scope.qualifiedName();
-}
-
-struct ObjectSchema : Scope
+struct ObjectSchema : Identifier
 {
     std::string description;
     std::vector<TypeUsage> parentTypes;
@@ -124,13 +116,23 @@ struct ObjectSchema : Scope
     VarDecl propertyMap;
     InOut inOut = 0;
 
+    explicit ObjectSchema(InOut inOut = 0, std::string description = {}) :
+        description(move(description)), inOut(inOut)
+    { }
+
     [[nodiscard]] bool empty() const
     {
         return parentTypes.empty() && fields.empty();
+        // If parentTypes and fields are empty, propertyMap must not exist
     }
     [[nodiscard]] bool trivial() const
     {
-        return parentTypes.size() == 1 && fields.empty();
+        return parentTypes.size() == 1 && fields.empty()
+               && propertyMap.name.empty();
+    }
+    [[nodiscard]] bool hasPropertyMap() const
+    {
+        return !propertyMap.type.empty();
     }
 };
 
@@ -149,10 +151,12 @@ struct Path : public std::string
 
 struct Response
 {
+    explicit Response(std::string code, std::string description = {}) :
+        code(move(code)), body(Out, move(description))
+    { }
     std::string code;
-    std::string description;
-    VarDecls headers = {};
-    VarDecls properties = {};
+    VarDecls headers;
+    ObjectSchema body;
 };
 
 struct ExternalDocs
@@ -161,24 +165,23 @@ struct ExternalDocs
     std::string url;
 };
 
-enum Location : size_t { InPath = 0, InQuery = 1, InHeaders = 2, InBody = 3 };
+enum Location : size_t { InPath = 0, InQuery = 1, InHeaders = 2 };
 
-struct Call : Scope
+struct Call : Identifier
 {
     using params_type = VarDecls;
 
     Call(Path callPath, std::string callVerb, std::string callName,
          bool callNeedsSecurity)
-        : Scope(std::move(callName)), path(std::move(callPath))
+        : Identifier{move(callName)}, path(move(callPath))
         , verb(std::move(callVerb)), needsSecurity(callNeedsSecurity)
     { }
     ~Call() = default;
     Call(Call&) = delete;
     Call operator=(Call&) = delete;
-    Call(Call&&) = default;
+    // Moving is not allowed because Call is used by pointer for scoping
+    Call(Call&&) = delete;
     Call operator=(Call&&) = delete;
-
-    static const std::array<std::string, 4> ParamGroups;
 
     [[nodiscard]] params_type& getParamsBlock(const std::string& blockName);
     [[nodiscard]] params_type collateParams() const;
@@ -188,7 +191,9 @@ struct Call : Scope
     std::string summary;
     std::string description;
     ExternalDocs externalDocs;
-    std::array<params_type, 4> params;
+    static const std::array<std::string, 3> ParamGroups;
+    std::array<params_type, 3> params;
+    ObjectSchema body{In};
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
     bool inlineBody = false;
@@ -201,7 +206,8 @@ struct Call : Scope
 
 struct CallClass
 {
-    std::vector<Call> calls;
+    // Using std::list because it doesn't move the storage around
+    std::list<Call> calls;
 };
 
 inline std::string Swagger() { return "swagger"; }
@@ -228,16 +234,12 @@ struct Model {
 
     string hostAddress;
     string basePath;
-    std::vector<CallClass> callClasses;
+    std::list<CallClass> callClasses;
 
     Model(string fileDir, string fileName)
         : fileDir(move(fileDir)), srcFilename(move(fileName))
     { }
     ~Model() = default;
-    Model(const Model&) = delete;
-    Model operator=(const Model&) = delete;
-    Model(Model&&) = default;
-    Model& operator=(Model&&) = delete;
     Call& addCall(Path path, string verb, string operationId, bool needsToken);
     void addVarDecl(VarDecls& varList, VarDecl var);
     void addSchema(const ObjectSchema& schema);

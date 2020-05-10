@@ -227,10 +227,14 @@ object Printer::renderType(const TypeUsage& tu) const
                   , { "baseName", tu.baseName }
     };
     auto qualifiedValues = values;
-    if (!tu.scope.empty())
+    if (tu.scope)
     {
-        qualifiedValues.emplace("scope", tu.scope);
-        qualifiedValues.emplace("scopeCamelCase", camelCase(tu.scope));
+        // Not using scope->qualifiedName() because:
+        // 1) we don't have nested scopes as a thing
+        // 2) we qualify types with scope names, not scopes (think of referring
+        //    to another type within the same scope)
+        qualifiedValues.emplace("scope", tu.scope->name);
+        qualifiedValues.emplace("scopeCamelCase", camelCase(tu.scope->name));
     }
 
     // Fill parameters for parameterized types
@@ -315,7 +319,7 @@ object Printer::dumpAllTypes(const Model::schemas_type& types) const
                     fieldDef["datatype"] = f.type.name; // Swagger compat
                     return fieldDef;
                 });
-            if (!type.propertyMap.type.empty())
+            if (type.hasPropertyMap())
                 mType["propertyMap"] = dumpField(type.propertyMap);
             return mType;
         });
@@ -323,7 +327,7 @@ object Printer::dumpAllTypes(const Model::schemas_type& types) const
 }
 
 object Printer::dumpTypes(const Model::schemas_type& types,
-                          const string& scope) const
+                          const Identifier* scope) const
 {
     Model::schemas_type selectedTypes;
     copy_if(types.begin(), types.end(), back_inserter(selectedTypes),
@@ -355,7 +359,7 @@ vector<string> Printer::print(const Model& model) const
     auto&& mAllTypes = dumpAllTypes(model.types);
     if (!mAllTypes.empty())
         contextData.set("allModels", mAllTypes);
-    auto&& mTypes = dumpTypes(model.types, "");
+    auto&& mTypes = dumpTypes(model.types);
     if (!mTypes.empty())
         contextData.set("models", mTypes);
 
@@ -383,7 +387,7 @@ vector<string> Printer::print(const Model& model) const
                                call.producedContentTypes.end(),
                                bind(startsWith, _1, "image/")));
 
-            auto&& mCallTypes = dumpTypes(model.types, call.name);
+            auto&& mCallTypes = dumpTypes(model.types, &call);
             if (!mCallTypes.empty())
                 mCall.emplace("models", mCallTypes);
             setList(mCall, "pathParts", call.path.parts,
@@ -398,29 +402,36 @@ vector<string> Printer::print(const Model& model) const
             for (size_t i = 0; i < Call::ParamGroups.size(); ++i)
                 addList(mCall, Call::ParamGroups[i] + "Params",
                         call.params[i]);
-            if (call.inlineBody)
+            if (!call.inlineBody) {
+                addList(mCall, "bodyParams", call.body.fields);
+                if (call.body.hasPropertyMap())
+                    mCall["propertyMap"] = dumpField(call.body.propertyMap);
+            } else
                 mCall.emplace("inlineBody",
-                              dumpField(call.params[InBody].front()));
+                              dumpField(call.body.fields.front()));
 
             setList(mCall, "responses", call.responses, [this](const Response& r) {
                 object mResponse{{"code", r.code},
                                  {"normalResponse?", r.code == "200"}};
                 vector<VarDecl> allProperties;
-                for (const auto& src: {r.headers, r.properties})
+                if (r.body.hasPropertyMap()) {
+                    allProperties.emplace_back(r.body.propertyMap);
+                    mResponse["propertyMap"] = dumpField(r.body.propertyMap);
+                }
+                for (const auto& src: {r.headers, r.body.fields})
                     copy(src.begin(), src.end(), back_inserter(allProperties));
 
                 for (const auto& src: {{"allProperties", allProperties},
-                                       {"properties", r.properties},
+                                       {"properties", r.body.fields},
                                        pair{"headers", r.headers}})
                     addList(mResponse, src.first, src.second);
 
                 return mResponse;
             });
             if (call.inlineResponse && !call.responses.empty()
-                && !call.responses.front().properties.empty())
+                && !call.responses.front().body.fields.empty())
                 mCall.emplace("inlineResponse",
-                              dumpField(
-                                  call.responses.front().properties.front()));
+                    dumpField(call.responses.front().body.fields.front()));
 
             return mCall;
         });

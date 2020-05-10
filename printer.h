@@ -40,5 +40,5 @@ private:
                  const VarDecls& properties) const;
     [[nodiscard]] m_object_type dumpAllTypes(const Model::schemas_type& types) const;
     [[nodiscard]] m_object_type dumpTypes(const Model::schemas_type& types,
-                                          const string& scope) const;
+                                          const Identifier* scope = {}) const;
 };
