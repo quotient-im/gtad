@@ -20,8 +20,7 @@
 
 #include "model.h"
 
-#include <QtCore/QString>
-
+#include <filesystem>
 #include <memory>
 
 class Printer;
@@ -30,11 +29,12 @@ class Translator
 {
 public:
     using string = std::string;
+    using path = std::filesystem::path;
 
-    Translator(const QString& configFilePath, QString outputDirPath);
+    Translator(const path& configFilePath, path outputDirPath);
     ~Translator();
 
-    Model&& processFile(string filePath, string baseDirPath,
+    Model&& processFile(string filePath, path baseDirPath,
                         InOut inOut = In | Out, bool skipTrivial = true) const;
     [[nodiscard]] TypeUsage mapType(const string& swaggerType,
                                     const string& swaggerFormat = {},
@@ -49,6 +49,6 @@ private:
     // <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
     pair_vector_t<pair_vector_t<TypeUsage>> _typesMap;
 
-    QString _outputDirPath;
+    path _outputDirPath;
     std::unique_ptr<Printer> _printer;
 };

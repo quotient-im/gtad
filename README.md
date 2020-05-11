@@ -17,7 +17,7 @@ found in [the talk at Qt World Summit 2017](https://youtu.be/W5TmRozH-rg) that
 also briefly announces the GTAD project.
 
 ## Contacts
- Matrix room: [#gtad:matrix.org](https://matrix.to/#/#gtad:matrix.org).
+Matrix room: [#gtad:matrix.org](https://matrix.to/#/#gtad:matrix.org).
 
 You can also file issues at
 [the project's issue tracker](https://github.com/KitsuneRal/gtad/issues).
@@ -30,24 +30,20 @@ the project has external dependencies taken in as submodules (this may change
 in the future).
 
 ### Pre-requisites
-- a Linux, OSX or Windows system (desktop versions tried; Ubuntu Touch is known
-  to work; mobile Windows and iOS might work too but never tried)
-  - For Ubuntu flavours - zesty or later (or a derivative) is good enough out
-    of the box; older ones will need PPAs at least for a newer Qt; in 
-    particular, if you have xenial you're advised to add Kubuntu Backports PPA
-    for it
+- a recent Linux, Windows or macOS system
+  - for Ubuntu flavours - bionic or newer (or a derivative) is good enough
+  - [macOS 10.15 or later is needed](https://developer.apple.com/documentation/xcode_release_notes/xcode_11_release_notes)
+    due to `std::filesystem` dependency
 - a Git client to check out this repo
-- Qt 5 (either Open Source or Commercial), version 5.7 or higher (to be 
-  phased out once the project switches to C++17 - not yet)
-- CMake (from your package management system or
+- Qt 5 (either Open Source or Commercial), version 5.7 or higher (eventually
+  will be phased out)
+- CMake 3.10 or newer (from your package management system or
   [the official website](https://cmake.org/download/))
-- a C++ toolchain supported by your version of Qt (see a link for your platform
-  at [the Qt's platform requirements page](http://doc.qt.io/qt-5/gettingstarted.html#platform-requirements))
-  - GCC 5 (Windows, Linux, OSX), Clang 5 (Linux), Apple Clang 8.1 (OSX) and
-    Visual C++ 2015 (Windows) are the oldest officially supported; Clang 3.8 and
-    GCC 4.9.2 are known to still work, maintenance patches for them are accepted
-  - any build system that works with CMake and/or qmake should be fine:
-    GNU Make, ninja (any platform), NMake, jom (Windows) are known to work.
+- a C++ toolchain with C++17 support _including File system library_ - this means
+  GCC 8 (Windows, Linux, OSX), Clang 7 (Linux), Xcode 11 (macOS 10.15) or
+  Visual C++ 2017 15.7 (Windows), or newer
+- any build system that works with CMake and/or qmake should be fine:
+  GNU Make, ninja (any platform), NMake, jom (Windows) are known to work.
 
 #### Linux
 Just install things from the list above using your preferred package manager.
@@ -55,9 +51,8 @@ GTAD only uses a tiny subset of Qt Base so you can install as little of Qt as
 possible.
 
 #### OS X
-`brew install qt5` should get you a recent Qt5. If you plan to use CMake, you
-may need to tell it about the path to Qt by passing
-`-DCMAKE_PREFIX_PATH=<where-Qt-installed>`
+`brew install qt5` should get you a recent Qt5. You may need to tell CMake
+about the path to Qt by passing `-DCMAKE_PREFIX_PATH=<where-Qt-installed>`.
 
 #### Windows
 1. Install Qt5 and CMake.
@@ -69,10 +64,6 @@ may need to tell it about the path to Qt by passing
    to run that script on system startup but it's very handy to setup
    the environment before building. Setting `CMAKE_PREFIX_PATH` in the same way
    as for OS X (see above) is fine too.
-
-There are no official MinGW-based 64-bit packages for Qt. If you're determined
-to build with 64-bit Qt, either use a Visual Studio toolchain or build Qt5
-yourself as described in Qt documentation.
 
 ### Building
 In the root directory of the project sources:

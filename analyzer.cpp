@@ -21,7 +21,10 @@
 #include "translator.h"
 #include "yaml.h"
 
+#include <algorithm>
+
 using namespace std;
+namespace fs = filesystem;
 
 Model initModel(string path)
 {
@@ -31,7 +34,7 @@ Model initModel(string path)
     return Model(path.substr(0, dirPos + 1), path.substr(dirPos + 1));
 }
 
-Analyzer::Analyzer(string filePath, string basePath,
+Analyzer::Analyzer(string filePath, fspath basePath,
                    const Translator& translator)
     : fileName(filePath)
     , _baseDir(move(basePath))
@@ -369,8 +372,9 @@ vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
 Model&& Analyzer::loadModel(const pair_vector_t<string>& substitutions,
                             InOut inOut)
 {
-    cout << "Loading from " << _baseDir + fileName << endl;
-    auto yaml = YamlMap::loadFromFile(_baseDir + fileName, substitutions);
+    const auto fullPath = _baseDir / fileName;
+    cout << "Loading from " << fullPath << endl;
+    const auto yaml = YamlMap::loadFromFile(fullPath, substitutions);
 
     // Detect which file we have: API description or just data definition
     // TODO: This should be refactored to two separate methods, since we shouldn't

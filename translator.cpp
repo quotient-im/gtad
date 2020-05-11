@@ -23,8 +23,6 @@
 
 #include "yaml.h"
 
-#include <QtCore/QDir>
-
 #include <regex>
 
 using namespace std;
@@ -153,12 +151,12 @@ pair_vector_t<string> loadStringMap(const YamlMap& yaml)
     for (const auto& subst: yaml)
     {
         auto pattern = subst.first.as<string>();
-        if (Q_UNLIKELY(pattern.empty()))
+        if (pattern.empty()) // [[unlikely]]
             clog << subst.first.location()
                  << ": warning: empty pattern in substitutions, skipping"
                  << endl;
-        else if (Q_UNLIKELY(pattern.size() > 1 &&
-                            pattern.front() != '/' && pattern.back() == '/'))
+        else if (pattern.size() > 1 && pattern.front() != '/'
+                 && pattern.back() == '/') // [[unlikely]]
             clog << subst.first.location()
                  << ": warning: invalid regular expression, skipping" << endl
                  << "(use a regex with \\/ to match strings beginning with /)";
@@ -172,13 +170,11 @@ pair_vector_t<string> loadStringMap(const YamlMap& yaml)
     return stringMap;
 }
 
-Translator::Translator(const QString& configFilePath, QString outputDirPath)
-    : _outputDirPath(outputDirPath.endsWith('/') ?
-                     move(outputDirPath) : outputDirPath + '/')
+Translator::Translator(const path& configFilePath, path outputDirPath)
+    : _outputDirPath(move(outputDirPath))
 {
-    auto cfp = configFilePath.toStdString();
-    cout << "Using config file at " << cfp << endl;
-    const auto configY = YamlMap::loadFromFile(cfp);
+    cout << "Using config file at " << configFilePath << endl;
+    const auto configY = YamlMap::loadFromFile(configFilePath);
 
     const auto& analyzerYaml = configY["analyzer"].asMap();
     _substitutions = loadStringMap(analyzerYaml["subst"].asMap());
@@ -227,14 +223,9 @@ Translator::Translator(const QString& configFilePath, QString outputDirPath)
     for (const auto& f: templatesYaml)
         outputFiles.emplace_back(f.as<string>());
 
-    QString configDir = QFileInfo(configFilePath).dir().path();
-    if (!configDir.isEmpty())
-        configDir += '/';
-
-    _printer = std::make_unique<Printer>(
-        move(env), outputFiles, configDir.toStdString(),
-        _outputDirPath.toStdString(),
-        mustacheYaml["outFilesList"].as<string>(""));
+    _printer = make_unique<Printer>(
+        move(env), outputFiles, configFilePath.parent_path(),
+        _outputDirPath, mustacheYaml["outFilesList"].as<string>(""));
 }
 
 Translator::~Translator() = default;
@@ -289,15 +280,19 @@ string Translator::mapIdentifier(const string& baseName,
     return baseName;
 }
 
-Model&& Translator::processFile(string filePath, string baseDirPath,
+Model&& Translator::processFile(string filePath, path baseDirPath,
                                 InOut inOut, bool skipTrivial) const
 {
     auto&& m = Analyzer(move(filePath), move(baseDirPath), *this)
                 .loadModel(_substitutions, inOut);
     if (!(m.empty() || (m.trivial() && skipTrivial))) {
-        QDir d{_outputDirPath + m.fileDir.c_str()};
-        if (!d.exists() && !d.mkpath("."))
-            throw Exception{"Cannot create output directory"};
+        using namespace std::filesystem;
+        auto targetDir =
+            (_outputDirPath / m.fileDir).parent_path().lexically_normal();
+        create_directories(targetDir);
+        if (!exists(targetDir))
+            throw Exception{"Cannot create output directory "
+                            + targetDir.string()};
         m.dstFiles = _printer->print(m);
     }
 

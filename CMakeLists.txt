@@ -58,4 +58,9 @@ list(APPEND SRCS
 
 add_executable(${CMAKE_PROJECT_NAME} ${SRCS})
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE yaml-cpp/include)
-target_link_libraries(${CMAKE_PROJECT_NAME} Qt5::Core yaml-cpp)
+if (CMAKE_CXX_COMPILER_ID STREQUAL GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.1)
+    set(std_fs_lib "stdc++fs")
+elseif(CMAKE_CXX_COMPILER_ID EQUAL Clang AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
+    set(std_fs_lib "c++fs")
+endif()
+target_link_libraries(${CMAKE_PROJECT_NAME} Qt5::Core yaml-cpp ${std_fs_lib})

@@ -66,20 +66,20 @@ class GtadContext : public km::context<string>
     public:
         using data = km::data;
 
-        GtadContext(string inputBasePath, const data* d)
-            : context(d), inputBasePath(std::move(inputBasePath))
+        GtadContext(Printer::fspath inputBasePath, const data* d)
+            : context(d), inputBasePath(move(inputBasePath))
         { }
 
         const data* get_partial(const string& name) const override
         {
-            if (auto result = context::get_partial(name))
+            if (const auto* result = context::get_partial(name))
                 return result;
 
             auto it = filePartialsCache.find(name);
             if (it != filePartialsCache.end())
                 return &it->second;
 
-            auto srcFileName = inputBasePath + name;
+            auto srcFileName = inputBasePath / name;
             ifstream ifs { srcFileName };
             if (!ifs.good())
             {
@@ -87,7 +87,7 @@ class GtadContext : public km::context<string>
                 ifs.open(srcFileName);
                 if (!ifs.good())
                     cerr << "Failed to open file for a partial: "
-                         << inputBasePath + name << endl;
+                         << srcFileName.string() << endl;
             }
 
             string fileContents;
@@ -95,7 +95,7 @@ class GtadContext : public km::context<string>
                 getline(ifs, fileContents, '\0'); // Won't work on files with NULs
             else
                 fileContents =
-                    "{{_comment}} Failed to open " + inputBasePath + name + "\n";
+                    "{{_comment}} Failed to open " + srcFileName.string() + "\n";
             return &filePartialsCache.insert(
                         make_pair(name,
                             partial([fileContents] { return fileContents; })))
@@ -103,14 +103,14 @@ class GtadContext : public km::context<string>
         }
 
     private:
-        string inputBasePath;
+        Printer::fspath inputBasePath;
         mutable unordered_map<string, data> filePartialsCache;
 };
 
 Printer::Printer(context_type&& contextData,
                  const vector<string>& templateFileNames,
-                 string inputBasePath, string outputBasePath,
-                 const string& outFilesListPath)
+                 fspath inputBasePath, fspath outputBasePath,
+                 const fspath& outFilesListPath)
     : _contextData(std::move(contextData))
     , _delimiter(safeString(_contextData, "_delimiter"))
     , _typeRenderer(makeMustache(
@@ -119,8 +119,8 @@ Printer::Printer(context_type&& contextData,
                             safeString(_contextData, "_quote", "\"")))
     , _rightQuote(safeString(_contextData, "_rightQuote",
                              safeString(_contextData, "_quote", "\"")))
-    , _inputBasePath(std::move(inputBasePath))
-    , _outputBasePath(std::move(outputBasePath))
+    , _inputBasePath(move(inputBasePath))
+    , _outputBasePath(move(outputBasePath))
     // _outFilesList is initialised further below
 {
     using km::lambda2;
@@ -150,14 +150,14 @@ Printer::Printer(context_type&& contextData,
     });
     for (const auto& templateFileName: templateFileNames)
     {
-        auto templateFilePath = _inputBasePath + templateFileName;
+        auto templateFilePath = _inputBasePath / templateFileName;
         ifstream ifs { templateFilePath };
         if (!ifs.good())
-            throw Exception(templateFilePath + ": Failed to open");
+            throw Exception(templateFilePath.string() + ": Failed to open");
 
         string templateContents;
         if (!getline(ifs, templateContents, '\0')) // Won't work on files with NULs
-            throw Exception(templateFilePath + ": Failed to read");
+            throw Exception(templateFilePath.string() + ": Failed to read");
 
         _templates.emplace_back(
             makeMustache(withoutSuffix(templateFileName, ".mustache")),
@@ -165,7 +165,7 @@ Printer::Printer(context_type&& contextData,
     }
     if (!outFilesListPath.empty())
     {
-        _outFilesList.open(_outputBasePath + outFilesListPath);
+        _outFilesList.open(_outputBasePath / outFilesListPath);
         if (!_outFilesList)
             clog << "No out files list set or cannot write to the file" << endl;
     }
@@ -446,28 +446,26 @@ vector<string> Printer::print(const Model& model) const
     vector<string> fileNames;
     for (auto fileTemplate: _templates)
     {
-        auto fileName = _outputBasePath;
-        fileName.append(model.fileDir)
-            .append(fileTemplate.first.render({ "base", model.srcFilename }));
+        auto fPath = _outputBasePath / model.fileDir
+            		 / fileTemplate.first.render({ "base", model.srcFilename });
         if (!fileTemplate.first.error_message().empty())
-        {
             throw Exception("Incorrect filename template: " +
                             fileTemplate.first.error_message());
-        }
-        cout << "Printing " << fileName << endl;
 
-        ofstream ofs { fileName };
+        cout << "Printing " << fPath.string() << endl;
+
+        ofstream ofs{fPath};
         if (!ofs.good())
-            throw Exception(fileName + ": Couldn't open for writing");
+            throw Exception(fPath.string() + ": Couldn't open for writing");
 
-        GtadContext c { _inputBasePath, &contextData };
+        GtadContext c{_inputBasePath, &contextData};
         fileTemplate.second.render(c, ofs);
         if (fileTemplate.second.error_message().empty())
-            _outFilesList << fileName << endl;
+            _outFilesList << fPath.string() << endl;
         else
-            clog << fileName << ": "
+            clog << fPath << ": "
                  << fileTemplate.second.error_message() << endl;
-        fileNames.emplace_back(std::move(fileName));
+        fileNames.emplace_back(move(fPath.string()));
     }
     return fileNames;
 }

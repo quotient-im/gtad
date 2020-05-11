@@ -4,6 +4,7 @@
 
 #include "mustache/mustache.hpp"
 
+#include <filesystem>
 #include <fstream>
 
 class Printer {
@@ -13,15 +14,16 @@ public:
     using templates_type = std::vector<std::pair<template_type, template_type>>;
     using m_object_type = kainjow::mustache::object;
     using string = std::string;
-    template <typename T> using vector = std::vector<T>;
+    using fspath = std::filesystem::path;
 
-    Printer(context_type&& contextData, const vector<string>& templateFileNames,
-            string inputBasePath, string outputBasePath,
-            const string& outFilesListPath);
+    Printer(context_type&& contextData,
+            const std::vector<string>& templateFileNames,
+            fspath inputBasePath, fspath outputBasePath,
+            const fspath& outFilesListPath);
     Printer(Printer&& p) = default;
 
     Printer::template_type makeMustache(const string& tmpl) const;
-    vector<string> print(const Model& model) const;
+    std::vector<string> print(const Model& model) const;
 
 private:
     context_type _contextData;
@@ -30,8 +32,8 @@ private:
     string _leftQuote;
     string _rightQuote;
     templates_type _templates;
-    string _inputBasePath;
-    string _outputBasePath;
+    fspath _inputBasePath;
+    fspath _outputBasePath;
     mutable std::ofstream _outFilesList;
 
     [[nodiscard]] m_object_type renderType(const TypeUsage& tu) const;

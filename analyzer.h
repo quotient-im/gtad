@@ -22,6 +22,8 @@
 #include "model.h"
 #include "util.h"
 
+#include <filesystem>
+
 class YamlNode;
 class YamlMap;
 class YamlSequence;
@@ -30,8 +32,9 @@ class Analyzer
 {
 public:
     using string = std::string;
+    using fspath = std::filesystem::path;
 
-    Analyzer(std::string filePath, std::string basePath,
+    Analyzer(std::string filePath, fspath basePath,
              const Translator& translator);
 
     Model&& loadModel(const pair_vector_t<std::string>& substitutions,
@@ -39,7 +42,7 @@ public:
 
 private:
     string fileName;
-    string _baseDir;
+    fspath _baseDir;
     Model model;
     const Translator& _translator;
 

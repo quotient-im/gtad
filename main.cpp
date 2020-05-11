@@ -20,11 +20,11 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QCommandLineParser>
-#include <QtCore/QDir>
 
+#include <filesystem>
 #include <iostream>
 
-int main( int argc, char* argv[] )
+int main(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setOrganizationName("Quotient");
@@ -60,41 +60,50 @@ int main( int argc, char* argv[] )
 
     parser.process(app);
 
-    try
-    {
-        Translator t(parser.value(configPathOption), parser.value(outputDirOption));
+    try {
+        using namespace std;
+        namespace fs = filesystem;
 
-        QStringList paths, exclusions;
-        for (const auto& path: parser.positionalArguments())
-        {
+        Translator translator{parser.value(configPathOption).toStdString(),
+                              parser.value(outputDirOption).toStdString()};
+
+        vector<fs::path> paths, exclusions;
+        for (const auto& path: parser.positionalArguments()) {
             if (path.endsWith('-'))
-                exclusions.append(path.left(path.size() - 1));
+                exclusions.emplace_back(path.left(path.size() - 1).toStdString());
             else
-                paths.append(path);
+                paths.emplace_back(path.toStdString());
         }
         const auto& roleValue = parser.value(schemaRoleOption);
         const InOut role =
                 roleValue == "i" ? In : roleValue == "o" ? Out : In|Out;
-        for(auto& path: paths)
-        {
-            if (!QFileInfo(path).isDir())
-            {
-                t.processFile(path.toStdString(), "", role, false);
-                continue;
-            }
 
-            if (!path.isEmpty() && !path.endsWith('/'))
-                path.push_back('/');
-            auto filesList = QDir(path).entryList(QDir::Readable|QDir::Files);
-            for (const auto& fn: filesList)
-                if (!exclusions.contains(fn))
-                    t.processFile(fn.toStdString(), path.toStdString(),
-                                  role, false);
+        for(const auto& path: paths) {
+            auto ftype = fs::status(path).type();
+            if (ftype == fs::file_type::regular)
+                translator.processFile(path, "", role, false);
+
+            if (ftype != fs::file_type::directory)
+                continue;
+
+            for (const auto& f: fs::directory_iterator(
+                     path, fs::directory_options::skip_permission_denied)) {
+                if (!f.is_regular_file())
+                    continue;
+                auto&& fName = f.path().filename();
+                if (find(exclusions.begin(), exclusions.end(), fName)
+                    == exclusions.cend())
+                    translator.processFile(move(fName), path, role, false);
+            }
         }
     }
     catch (Exception& e)
     {
         std::cerr << e.message << std::endl;
+        return 3;
+    }
+    catch (std::exception& e) {
+        std::cerr << e.what() << std::endl;
         return 3;
     }
 
