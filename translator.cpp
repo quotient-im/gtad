@@ -257,7 +257,7 @@ TypeUsage Translator::mapType(const string& swaggerType,
                     // FIXME (#22): a source of great inefficiency.
                     // TypeUsage should become a handle to an instance of
                     // a newly-made TypeDefinition type that would own all
-                    // the stuff TypeUsage now has, except innerTypes
+                    // the stuff TypeUsage now has, except paramTypes
                     tu = swFormatPair.second;
                     goto conclusion;
                 }

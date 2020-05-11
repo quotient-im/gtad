@@ -59,7 +59,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
                     _translator.mapType("array", elemType.baseName,
                         camelCase(node["title"].as<string>(
                                            elemType.baseName + "[]")));
-                return protoType.instantiate({move(elemType)});
+                return protoType.specialize({move(elemType)});
             }
 
         return _translator.mapType("array");
@@ -112,7 +112,7 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
     const auto& protoType = _translator.mapType("variant", baseTypes, baseTypes);
     cout << "Using " << protoType.name << " for a multitype: "
          << baseTypes << endl;
-    return protoType.instantiate(move(tus));
+    return protoType.specialize(move(tus));
 }
 
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
@@ -281,7 +281,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
                 const auto& protoType =
                     _translator.mapType("map", elemType.baseName,
                                            "string->" + elemType.baseName);
-                tu = protoType.instantiate({move(elemType)});
+                tu = protoType.specialize({move(elemType)});
                 description = additionalProperties["description"].as<string>("");
                 break;
             }

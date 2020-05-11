@@ -16,19 +16,19 @@ TypeUsage::TypeUsage(const ObjectSchema& schema)
     : Identifier(schema), baseName(schema.name)
 { }
 
-TypeUsage TypeUsage::instantiate(vector<TypeUsage>&& innerTypes) const
+TypeUsage TypeUsage::specialize(vector<TypeUsage>&& params) const
 {
     TypeUsage tu = *this;
-    for (auto&& innerType: innerTypes)
+    for (auto&& paramType: params)
     {
-        tu.innerTypes.emplace_back(innerType);
+        tu.paramTypes.emplace_back(paramType);
 
         auto& tuImports = tu.lists["imports"];
-        const auto singleInnerImport = innerType.attributes.find("imports");
-        if (singleInnerImport != innerType.attributes.end())
+        const auto singleInnerImport = paramType.attributes.find("imports");
+        if (singleInnerImport != paramType.attributes.end())
             tuImports.push_back(singleInnerImport->second);
-        const auto innerImports = innerType.lists.find("imports");
-        if (innerImports != innerType.lists.end())
+        const auto innerImports = paramType.lists.find("imports");
+        if (innerImports != paramType.lists.end())
             tuImports.insert(tuImports.end(),
                              innerImports->second.begin(),
                              innerImports->second.end());

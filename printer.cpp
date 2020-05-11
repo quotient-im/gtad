@@ -238,17 +238,17 @@ object Printer::renderType(const TypeUsage& tu) const
     }
 
     // Fill parameters for parameterized types
-    setList(values, "types", tu.innerTypes,
+    setList(values, "types", tu.paramTypes,
             bind(&Printer::renderType, this, _1));
-    setList(qualifiedValues, "types", tu.innerTypes,
+    setList(qualifiedValues, "types", tu.paramTypes,
             bind(&Printer::renderType, this, _1));
     int i = 0;
-    for (const auto& t: tu.innerTypes)
+    for (const auto& t: tu.paramTypes)
     {
         // Substituting {{1}}, {{2}} and so on with actual inner type names
-        auto mInnerType = renderType(t);
-        values.emplace(to_string(++i), mInnerType["name"]);
-        qualifiedValues.emplace(to_string(i), mInnerType["qualifiedName"]);
+        auto mParamType = renderType(t);
+        values.emplace(to_string(++i), mParamType["name"]);
+        qualifiedValues.emplace(to_string(i), mParamType["qualifiedName"]);
     }
 
     return { { "name", _typeRenderer.render(values) }

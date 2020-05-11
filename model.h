@@ -54,26 +54,26 @@ struct TypeUsage : Identifier
     std::string baseName; //< As used in the API definition
     std::unordered_map<std::string, std::string> attributes;
     std::unordered_map<std::string, std::vector<std::string>> lists;
-    std::vector<TypeUsage> innerTypes; //< Parameter types for type templates
+    std::vector<TypeUsage> paramTypes; //< Parameter types for type templates
 
     TypeUsage() = default;
     explicit TypeUsage(std::string typeName) : Identifier{move(typeName)} { }
     explicit TypeUsage(const ObjectSchema& schema);
 
-    [[nodiscard]] TypeUsage instantiate(std::vector<TypeUsage>&& innerTypes) const;
+    [[nodiscard]] TypeUsage specialize(std::vector<TypeUsage>&& params) const;
 
     [[nodiscard]] bool empty() const { return name.empty(); }
 
-    void addImport(imports_type::value_type name)
+    void addImport(imports_type::value_type importName)
     {
-        lists["imports"].emplace_back(move(name));
+        lists["imports"].emplace_back(move(importName));
     }
 
     [[nodiscard]] bool operator==(const TypeUsage& other) const
     {
         return name == other.name && scope == other.scope
                && baseName == other.baseName && attributes == other.attributes
-               && lists == other.lists && innerTypes == other.innerTypes;
+               && lists == other.lists && paramTypes == other.paramTypes;
     }
     [[nodiscard]] bool operator!=(const TypeUsage& other) const
     {
