@@ -20,8 +20,6 @@
 
 #include "util.h"
 
-#include <utility>
-#include <vector>
 #include <array>
 #include <list>
 #include <unordered_set>
@@ -29,7 +27,6 @@
 
 std::string capitalizedCopy(std::string s);
 std::string camelCase(std::string s);
-void eraseSuffix(std::string* path, const std::string& suffix);
 std::string withoutSuffix(const std::string& path,
                           const std::string_view& suffix);
 
@@ -87,7 +84,7 @@ struct VarDecl
     std::string name; //< Identifier in the generated code
     std::string baseName; //< As used in the API
     std::string description;
-    bool required = false;
+    bool required = false; // For the default constructor
     std::string defaultValue;
 
     VarDecl() = default;
@@ -170,11 +167,12 @@ enum Location : size_t { InPath = 0, InQuery = 1, InHeaders = 2 };
 struct Call : Identifier
 {
     using params_type = VarDecls;
+    using string = std::string;
 
-    Call(Path callPath, std::string callVerb, std::string callName,
+    Call(Path callPath, string callVerb, string callName,
          bool callNeedsSecurity)
         : Identifier{move(callName)}, path(move(callPath))
-        , verb(std::move(callVerb)), needsSecurity(callNeedsSecurity)
+        , verb(move(callVerb)), needsSecurity(callNeedsSecurity)
     { }
     ~Call() = default;
     Call(Call&) = delete;
@@ -183,15 +181,15 @@ struct Call : Identifier
     Call(Call&&) = delete;
     Call operator=(Call&&) = delete;
 
-    [[nodiscard]] params_type& getParamsBlock(const std::string& blockName);
+    [[nodiscard]] params_type& getParamsBlock(const string& blockName);
     [[nodiscard]] params_type collateParams() const;
 
     Path path;
-    std::string verb;
-    std::string summary;
-    std::string description;
+    string verb;
+    string summary;
+    string description;
     ExternalDocs externalDocs;
-    static const std::array<std::string, 3> ParamGroups;
+    static const std::array<string, 3> ParamGroups;
     std::array<params_type, 3> params;
     ObjectSchema body{In};
     // TODO: Embed proper securityDefinitions representation.
@@ -199,8 +197,8 @@ struct Call : Identifier
     bool inlineBody = false;
     bool inlineResponse = false;
 
-    std::vector<std::string> producedContentTypes;
-    std::vector<std::string> consumedContentTypes;
+    std::vector<string> producedContentTypes;
+    std::vector<string> consumedContentTypes;
     std::vector<Response> responses;
 };
 
@@ -220,10 +218,6 @@ struct Model {
     using imports_type = std::unordered_set<string>;
     using schemas_type = std::vector<ObjectSchema>;
 
-    const string fileDir;
-    const string srcFilename;
-    std::vector<string> dstFiles;
-
     string apiSpec;
     /// Spec version liberally encoded in a int, e.g. 200 for Swagger 2.0
     /// or 201909 for JSON Schema 2019-09
@@ -236,10 +230,8 @@ struct Model {
     string basePath;
     std::list<CallClass> callClasses;
 
-    Model(string fileDir, string fileName)
-        : fileDir(move(fileDir)), srcFilename(move(fileName))
-    { }
-    ~Model() = default;
+    void clear();
+
     Call& addCall(Path path, string verb, string operationId, bool needsToken);
     void addVarDecl(VarDecls& varList, VarDecl var);
     void addSchema(const ObjectSchema& schema);

@@ -71,13 +71,6 @@ string camelCase(string s)
     return s;
 }
 
-void eraseSuffix(string* path, const string& suffix)
-{
-    auto trimAt = path->size() - suffix.size();
-    if (path->find(suffix, trimAt) != string::npos)
-        path->erase(trimAt);
-}
-
 string withoutSuffix(const string& path, const string_view& suffix)
 {
     return path.substr(0, path.find(suffix, path.size() - suffix.size()));
@@ -194,4 +187,14 @@ void Model::addImports(const TypeUsage& type)
         const auto& typeImports = typeImportsIt->second;
         imports.insert(typeImports.begin(), typeImports.end());
     }
+}
+
+void Model::clear()
+{
+    apiSpec.clear();
+    imports.clear();
+    types.clear();
+    hostAddress.clear();
+    basePath.clear();
+    callClasses.clear();
 }

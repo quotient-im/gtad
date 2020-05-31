@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <fstream>
 
+class Translator;
+
 class Printer {
 public:
     using context_type = kainjow::mustache::data;
@@ -16,24 +18,21 @@ public:
     using string = std::string;
     using fspath = std::filesystem::path;
 
-    Printer(context_type&& contextData,
-            const std::vector<string>& templateFileNames,
-            fspath inputBasePath, fspath outputBasePath,
-            const fspath& outFilesListPath);
+    Printer(context_type&& contextData, fspath inputBasePath,
+            const fspath& outFilesListPath, const Translator& translator);
     Printer(Printer&& p) = default;
 
     Printer::template_type makeMustache(const string& tmpl) const;
-    std::vector<string> print(const Model& model) const;
+    void print(const fspath& filePathBase, const Model& model) const;
 
 private:
+    const Translator& _translator;
     context_type _contextData;
     string _delimiter;
     template_type _typeRenderer;
     string _leftQuote;
     string _rightQuote;
-    templates_type _templates;
     fspath _inputBasePath;
-    fspath _outputBasePath;
     mutable std::ofstream _outFilesList;
 
     [[nodiscard]] m_object_type renderType(const TypeUsage& tu) const;

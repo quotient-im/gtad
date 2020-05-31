@@ -18,7 +18,6 @@
 
 #include "translator.h"
 
-#include "analyzer.h"
 #include "printer.h"
 
 #include "yaml.h"
@@ -218,17 +217,50 @@ Translator::Translator(const path& configFilePath, path outputDirPath)
 
     }
 
-    vector<string> outputFiles;
-    const auto& templatesYaml = mustacheYaml["templates"].asSequence();
-    for (const auto& f: templatesYaml)
-        outputFiles.emplace_back(f.as<string>());
+    const auto& templatesYaml = mustacheYaml["templates"].asMap();
+    for (auto [templates, nodeName]:
+         { pair{ &_dataTemplates, "data" }, { &_apiTemplates, "api" } })
+        if (auto extToTemplatesYaml = templatesYaml[nodeName].asMap()) {
+            templates->resize(extToTemplatesYaml.size());
+            transform(extToTemplatesYaml.begin(), extToTemplatesYaml.end(),
+                      templates->begin(), [](const YamlNodePair& p) {
+                          return make_pair(p.first.as<string>(),
+                                           p.second.as<string>());
+                      });
+        }
 
-    _printer = make_unique<Printer>(
-        move(env), outputFiles, configFilePath.parent_path(),
-        _outputDirPath, mustacheYaml["outFilesList"].as<string>(""));
+    _printer = make_unique<Printer>(move(env), configFilePath.parent_path(),
+                                    mustacheYaml["outFilesList"].as<string>(""),
+                                    *this);
 }
 
 Translator::~Translator() = default;
+
+string Translator::mapImport(const string& importBaseName) const
+{
+    // This code makes quite a few assumptions as yet:
+    // 1. That an import name is actually a file path (rather than some
+    //    language entity like in Python or Java).
+    auto result = outputBaseDir() / importBaseName;
+    // 2. That the imported file's extension (.h in C/C++) is
+    //    the first on the list, and that only data models can be imported.
+    if (!_dataTemplates.empty())
+        result += _dataTemplates.front().first;
+    return result;
+}
+
+Translator::output_config_t Translator::outputConfig(const path& filePathBase,
+                                                     const Model& model) const
+{
+    const auto fNameBase = outputBaseDir() / filePathBase;
+
+    const auto& srcConfig =
+        model.apiSpec == JSONSchema() ? _dataTemplates : _apiTemplates;
+    output_config_t result;
+    for (const auto& [fExtension, fTemplate]: srcConfig)
+        result.emplace_back(path(fNameBase) += fExtension, fTemplate);
+    return result;
+}
 
 TypeUsage Translator::mapType(const string& swaggerType,
                               const string& swaggerFormat,
@@ -279,23 +311,3 @@ string Translator::mapIdentifier(const string& baseName,
     }
     return baseName;
 }
-
-Model&& Translator::processFile(string filePath, path baseDirPath,
-                                InOut inOut, bool skipTrivial) const
-{
-    auto&& m = Analyzer(move(filePath), move(baseDirPath), *this)
-                .loadModel(_substitutions, inOut);
-    if (!(m.empty() || (m.trivial() && skipTrivial))) {
-        using namespace std::filesystem;
-        auto targetDir =
-            (_outputDirPath / m.fileDir).parent_path().lexically_normal();
-        create_directories(targetDir);
-        if (!exists(targetDir))
-            throw Exception{"Cannot create output directory "
-                            + targetDir.string()};
-        m.dstFiles = _printer->print(m);
-    }
-
-    return move(m);
-}
-

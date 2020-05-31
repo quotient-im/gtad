@@ -22,6 +22,7 @@
 #include "model.h"
 #include "util.h"
 
+#include <stack>
 #include <filesystem>
 
 class YamlNode;
@@ -33,22 +34,35 @@ class Analyzer
 public:
     using string = std::string;
     using fspath = std::filesystem::path;
+    using models_t = std::unordered_map<string, Model>;
 
-    Analyzer(std::string filePath, fspath basePath,
-             const Translator& translator);
+    explicit Analyzer(const Translator& translator, fspath basePath = {});
 
-    Model&& loadModel(const pair_vector_t<std::string>& substitutions,
-                      InOut inOut);
+    const Model& loadModel(const string& filePath, InOut inOut);
+    static const models_t& allModels() { return _allModels; }
 
 private:
-    string fileName;
-    fspath _baseDir;
-    Model model;
+    static models_t _allModels;
+
+    const fspath _baseDir;
     const Translator& _translator;
+
+    struct WorkItem {
+        fspath fileDir;
+        Model* model;
+    };
+    std::stack<WorkItem, std::vector<WorkItem>> _workStack;
 
     enum IsTopLevel : bool { Inner = false, TopLevel = true };
     enum SubschemasStrategy : bool { ImportSubschemas = false,
                                      InlineSubschemas = true };
+
+    [[nodiscard]] Model& curModel() const { return *_workStack.top().model; }
+
+    [[nodiscard]] std::pair<const Model&, string>
+    loadDependency(const string& relPath, InOut inOut = In | Out);
+    void fillDataModel(Model& m, const YamlNode& yaml, const string& filename,
+                       InOut inOut = In | Out);
 
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node, InOut inOut,
                                              const Call* scope,
@@ -75,7 +89,7 @@ private:
     template <typename... ArgTs>
     void addVarDecl(VarDecls& varList, ArgTs&&... varDeclArgs)
     {
-        model.addVarDecl(varList,
-                         makeVarDecl(std::forward<ArgTs>(varDeclArgs)...));
+        curModel().addVarDecl(varList,
+                              makeVarDecl(std::forward<ArgTs>(varDeclArgs)...));
     }
 };

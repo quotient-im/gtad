@@ -30,12 +30,28 @@ class Translator
 public:
     using string = std::string;
     using path = std::filesystem::path;
+    using output_config_t = std::vector<std::pair<path,string>>;
 
     Translator(const path& configFilePath, path outputDirPath);
     ~Translator();
 
-    Model&& processFile(string filePath, path baseDirPath,
-                        InOut inOut = In | Out, bool skipTrivial = true) const;
+    [[nodiscard]] const pair_vector_t<string>& substitutions() const
+    {
+        return _substitutions;
+    }
+    [[nodiscard]] const path& outputBaseDir() const
+    {
+        return _outputDirPath;
+    }
+    [[nodiscard]] Printer& printer() const
+    {
+        return *_printer;
+    }
+
+    [[nodiscard]] output_config_t outputConfig(const path& filePathBase,
+                                               const Model& model) const;
+
+    [[nodiscard]] string mapImport(const string& importBaseName) const;
     [[nodiscard]] TypeUsage mapType(const string& swaggerType,
                                     const string& swaggerFormat = {},
                                     const string& baseName = {}) const;
@@ -45,10 +61,11 @@ public:
 private:
     pair_vector_t<string> _substitutions;
     pair_vector_t<string> _identifiers;
-    // In JSON/YAML, the below looks like:
-    // <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
+    /// In JSON/YAML, the below looks like:
+    /// <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
     pair_vector_t<pair_vector_t<TypeUsage>> _typesMap;
-
+    /// Mapping of file extensions to mustache templates
+    pair_vector_t<string> _dataTemplates, _apiTemplates;
     path _outputDirPath;
     std::unique_ptr<Printer> _printer;
 };

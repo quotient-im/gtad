@@ -18,6 +18,8 @@
 
 #include "printer.h"
 
+#include "translator.h"
+
 #include <algorithm>
 #include <locale>
 
@@ -86,16 +88,14 @@ class GtadContext : public km::context<string>
                 srcFileName += ".mustache";
                 ifs.open(srcFileName);
                 if (!ifs.good())
-                    cerr << "Failed to open file for a partial: "
-                         << srcFileName.string() << endl;
+                    throw Exception("Failed to open file for a partial " + name
+                                    + ", tried "
+                                    + (inputBasePath / name).string() + " and "
+                                    + srcFileName.string());
             }
 
             string fileContents;
-            if (ifs.good())
-                getline(ifs, fileContents, '\0'); // Won't work on files with NULs
-            else
-                fileContents =
-                    "{{_comment}} Failed to open " + srcFileName.string() + "\n";
+            getline(ifs, fileContents, '\0'); // Won't work on files with NULs
             return &filePartialsCache.insert(
                         make_pair(name,
                             partial([fileContents] { return fileContents; })))
@@ -107,11 +107,10 @@ class GtadContext : public km::context<string>
         mutable unordered_map<string, data> filePartialsCache;
 };
 
-Printer::Printer(context_type&& contextData,
-                 const vector<string>& templateFileNames,
-                 fspath inputBasePath, fspath outputBasePath,
-                 const fspath& outFilesListPath)
-    : _contextData(std::move(contextData))
+Printer::Printer(context_type&& contextData, fspath inputBasePath,
+                 const fspath& outFilesListPath, const Translator& translator)
+    : _translator(translator)
+    , _contextData(std::move(contextData))
     , _delimiter(safeString(_contextData, "_delimiter"))
     , _typeRenderer(makeMustache(
           safeString(_contextData, "_typeRenderer", "{{>name}}")))
@@ -120,8 +119,6 @@ Printer::Printer(context_type&& contextData,
     , _rightQuote(safeString(_contextData, "_rightQuote",
                              safeString(_contextData, "_quote", "\"")))
     , _inputBasePath(move(inputBasePath))
-    , _outputBasePath(move(outputBasePath))
-    // _outFilesList is initialised further below
 {
     using km::lambda2;
     using km::renderer;
@@ -148,24 +145,9 @@ Printer::Printer(context_type&& contextData,
             return s;
         }
     });
-    for (const auto& templateFileName: templateFileNames)
-    {
-        auto templateFilePath = _inputBasePath / templateFileName;
-        ifstream ifs { templateFilePath };
-        if (!ifs.good())
-            throw Exception(templateFilePath.string() + ": Failed to open");
-
-        string templateContents;
-        if (!getline(ifs, templateContents, '\0')) // Won't work on files with NULs
-            throw Exception(templateFilePath.string() + ": Failed to read");
-
-        _templates.emplace_back(
-            makeMustache(withoutSuffix(templateFileName, ".mustache")),
-            makeMustache(templateContents));
-    }
     if (!outFilesListPath.empty())
     {
-        _outFilesList.open(_outputBasePath / outFilesListPath);
+        _outFilesList.open(_translator.outputBaseDir() / outFilesListPath);
         if (!_outFilesList)
             clog << "No out files list set or cannot write to the file" << endl;
     }
@@ -219,7 +201,7 @@ object Printer::renderType(const TypeUsage& tu) const
     // This method first produces two contexts: one to render a non-qualified
     // name (in `values`), the other to do a qualified name
     // (in `qualifiedValues`). These contexts are filled in, in particular,
-    // with pre-rendered (non-qualified and qualifed, respectively)
+    // with pre-rendered (non-qualified and qualified, respectively)
     // inner type names in {{1}}, {{2}} etc. Then, using these two contexts,
     // a Mustache object for the current type is made, fully rendering
     // the bare type name in `name` and the qualified name in `qualifiedName`.
@@ -344,29 +326,49 @@ bool dumpContentTypes(object& target, const string& keyName, vector<string> type
     return hasNonJson;
 }
 
-vector<string> Printer::print(const Model& model) const
+void Printer::print(const fspath& filePathBase, const Model& model) const
 {
     if (model.empty()) {
         clog << "Empty model, no files will be emitted" << endl;
-        return {};
+        return;
     }
 
     auto contextData = _contextData;
-    contextData.set("filenameBase", model.srcFilename);
+    contextData.set("filenameBase", filePathBase.filename().string());
     contextData.set("basePathWithoutHost", model.basePath);
     contextData.set("basePath", model.hostAddress + model.basePath);
-    setList(contextData, "imports", model.imports);
-    auto&& mAllTypes = dumpAllTypes(model.types);
+    // FIXME: remove hardwired logic
+    setList(contextData, "imports", model.imports, [](string import) {
+        if (import.empty())
+            cerr << "Warning:"
+                    " empty import, the emitted code will likely be invalid"
+                 << endl;
+
+        if (import.front() != '"' && import.front() != '<')
+            import = '"' + import + '"';
+        return import;
+    });
+
+    // Unnamed schemas are only saved in the model to enable inlining
+    // but cannot be used to emit valid code (not in C++ at least).
+    decltype(model.types) namedSchemas;
+    for (const auto& schema: model.types)
+        if (!schema.name.empty())
+            namedSchemas.emplace_back(schema);
+
+    auto&& mAllTypes = dumpAllTypes(namedSchemas); // Back-comp w/swagger
     if (!mAllTypes.empty())
         contextData.set("allModels", mAllTypes);
-    auto&& mTypes = dumpTypes(model.types);
+
+    auto&& mTypes = dumpTypes(namedSchemas);
     if (!mTypes.empty())
         contextData.set("models", mTypes);
 
+    object mOperations;
     if (!model.callClasses.empty()) {
         const auto& callClass = model.callClasses.back();
         bool globalConsumesNonJson = false, globalProducesNonJson = false;
-        object mOperations; // Any attributes should be added after setList
+        // Any attributes should be added after setList
         setList(mOperations, "operation", callClass.calls, [&](const Call& call) {
             // clang-format off
             object mCall { { "operationId", call.name }
@@ -397,7 +399,6 @@ vector<string> Printer::print(const Model& model) const
                                : _leftQuote + s + _rightQuote;
                     });
 
-            using namespace placeholders;
             addList(mCall, "allParams", call.collateParams());
             for (size_t i = 0; i < Call::ParamGroups.size(); ++i)
                 addList(mCall, Call::ParamGroups[i] + "Params",
@@ -443,29 +444,25 @@ vector<string> Printer::print(const Model& model) const
             contextData.set("operations", mOperations);
         }
     }
-    vector<string> fileNames;
-    for (auto fileTemplate: _templates)
-    {
-        auto fPath = _outputBasePath / model.fileDir
-            		 / fileTemplate.first.render({ "base", model.srcFilename });
-        if (!fileTemplate.first.error_message().empty())
-            throw Exception("Incorrect filename template: " +
-                            fileTemplate.first.error_message());
+    if (mTypes.empty() && mOperations.empty()) {
+        clog << "Warning: no emittable contents found in the model for "
+             << filePathBase << ".*" << endl;
+        return;
+    }
 
-        cout << "Printing " << fPath.string() << endl;
-
+    for (const auto& [fPath, fTemplate]:
+         _translator.outputConfig(filePathBase, model)) {
         ofstream ofs{fPath};
         if (!ofs.good())
             throw Exception(fPath.string() + ": Couldn't open for writing");
 
+        cout << "Emitting " << fPath.string() << endl;
         GtadContext c{_inputBasePath, &contextData};
-        fileTemplate.second.render(c, ofs);
-        if (fileTemplate.second.error_message().empty())
+        auto fullTemplate = makeMustache(fTemplate);
+        fullTemplate.render(c, ofs);
+        if (fullTemplate.error_message().empty())
             _outFilesList << fPath.string() << endl;
         else
-            clog << fPath << ": "
-                 << fileTemplate.second.error_message() << endl;
-        fileNames.emplace_back(move(fPath.string()));
+            clog << fPath << ": " << fullTemplate.error_message() << endl;
     }
-    return fileNames;
 }

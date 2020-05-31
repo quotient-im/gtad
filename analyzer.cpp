@@ -26,21 +26,17 @@
 using namespace std;
 namespace fs = filesystem;
 
-Model initModel(string path)
-{
-    eraseSuffix(&path, ".yaml");
-    auto dirPos = path.rfind('/');
-    // The below code assumes that npos == -1 and that unsigned overflow works
-    return Model(path.substr(0, dirPos + 1), path.substr(dirPos + 1));
-}
+Analyzer::models_t Analyzer::_allModels {};
 
-Analyzer::Analyzer(string filePath, fspath basePath,
-                   const Translator& translator)
-    : fileName(filePath)
-    , _baseDir(move(basePath))
-    , model(initModel(move(filePath)))
+Analyzer::Analyzer(const Translator& translator, fspath basePath)
+    : _baseDir(move(basePath))
     , _translator(translator)
-{ }
+{
+    if (!fs::is_directory(_baseDir))
+        throw Exception("Base path " + _baseDir.string() + " is not a directory");
+    cout << "Using " << _baseDir << " as a base directory for YAML/JSON files"
+         << endl;
+}
 
 TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
                                      const Call* scope, IsTopLevel isTopLevel)
@@ -73,15 +69,20 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, InOut inOut,
         if (isTopLevel && schema.empty() && bool(inOut&Out))
             return {}; // The type returned by this API is void
 
-        if (schema.trivial()) // An alias for another type
+        // Check if it's an alias for another type. NB: if this schema had any
+        // type substitution configured in gtad.yaml, it will be trivial
+        // with the substituting type in parentTypes.front()
+        if (schema.trivial())
             return schema.parentTypes.front();
 
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
         {
-            model.addSchema(schema);
+            curModel().addSchema(schema);
+            // This is just to enrich the type usage with attributes, not
+            // for type substitution
             auto tu = _translator.mapType("schema", schema.name);
+            tu.name = schema.name;
             tu.scope = schema.scope;
-            tu.name = tu.baseName = schema.name;
             return tu;
         }
         // An In empty object is schemaless but existing, mapType("object")
@@ -113,7 +114,7 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes, InOut inOut,
     }
 
     const auto& protoType = _translator.mapType("variant", baseTypes, baseTypes);
-    cout << "Using " << protoType.name << " for a multitype: "
+    cout << "Using " << protoType.qualifiedName() << " for a multitype: "
          << baseTypes << endl;
     return protoType.specialize(move(tus));
 }
@@ -155,65 +156,34 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
         || properties || additionalProperties)
         subschemasStrategy = ImportSubschemas;
 
-    for (const auto& refPath: refPaths)
-    {
-        // First try to resolve refPath in types map; if there's no match, load
-        // the schema from the reference path.
+    for (auto&& refPath: refPaths) {
+        // First try to resolve refPath in types map
         auto tu = _translator.mapType("$ref", refPath);
-        if (!tu.empty())
-        {
+        if (!tu.empty()) {
             cout << "Using type " << tu.name << " for " << refPath << endl;
             schema.parentTypes.emplace_back(move(tu));
             continue;
         }
-        // The referenced file's path is relative to the current file's path;
-        // we have to append a path to the current file's directory in order to
-        // find the file.
-        cout << "Sub-processing schema in "
-             << model.fileDir << "./" << refPath << endl;
-        auto&& refModel = // TODO, #33: Only load the model here
-                _translator.processFile(model.fileDir + refPath, _baseDir);
+
+        // No shortcut in the types map; load the schema from the reference path
+        auto&& [refModel, importPath] = loadDependency(refPath, inOut);
         if (refModel.types.empty())
-            throw YamlException(yamlSchema, "The target file has no schemas");
+            throw Exception(refPath + " has no schemas");
 
         auto&& refSchema = refModel.types.back();
 
-        // TODO, #33: File generation should be before using dstFiles.
-
-        // XXX: maybe distinguish between interface files (that should be
-        // imported, such as headers in C/C+) and implementation files
-        // (that should not). For now, refModel.dstFiles.front() assumes that
-        // there's only one interface file, and it's at the front of the list.
-        auto&& importPath = refModel.dstFiles.empty() ? string{}
-                                    : "\"" + refModel.dstFiles.front() + "\"";
-
-        if (subschemasStrategy == ImportSubschemas) {
-            tu.name = refSchema.name;
-            tu.baseName = tu.name.empty() ? refPath : tu.name;
-            tu.addImport(move(importPath));
-            schema.parentTypes.emplace_back(move(tu));
+        if (subschemasStrategy == InlineSubschemas) {
+            cout << "Inlining the main schema from " << refPath
+                 << endl;
+            mergeFromSchema(schema, refSchema);
+            if (refModel.types.size() > 1)
+                curModel().imports.insert(importPath);
             continue;
         }
-
-        // Instead of adding another type, just inline parts of the subschema.
-        cout << "Inlining schema from " << refPath << endl;
-        move(refSchema.parentTypes.begin(), refSchema.parentTypes.end(),
-             back_inserter(schema.parentTypes)); // XXX: Recurse?
-
-        for (auto field: refSchema.fields) {
-            // Watch out for supplementary schemas defined in the same file
-            if (any_of(refModel.types.begin(), refModel.types.end() - 1,
-                       [&field](const ObjectSchema& s) {
-                           return field.type.name == s.name
-                                  && field.type.scope == s.scope;
-                       })) {
-                cout << "Adding " << importPath
-                     << " to support field " << field.name << endl;
-                field.type.addImport(importPath);
-            }
-            schema.fields.emplace_back(move(field));
-        }
-        schema.propertyMap = refSchema.propertyMap;
+        tu.name = refSchema.name;
+        tu.baseName = tu.name.empty() ? refPath : tu.name;
+        tu.addImport(move(importPath));
+        schema.parentTypes.emplace_back(move(tu));
     }
 
     if (auto yamlOneOf = yamlSchema["oneOf"].asSequence())
@@ -345,21 +315,26 @@ void Analyzer::mergeFromSchema(ObjectSchema& target,
             addVarDecl(target.fields, parentType, parentType.name,
                        sourceSchema, "", required);
         for (const auto & param: sourceSchema.fields)
-            model.addVarDecl(target.fields, param);
+            curModel().addVarDecl(target.fields, param);
         if (!sourceSchema.hasPropertyMap()) {
             if (target.hasPropertyMap()
                 && target.propertyMap.type != sourceSchema.propertyMap.type)
                 throw Exception("Conflicting property map types when merging "
                                 "properties from "
                                 + sourceSchema.qualifiedName());
-            model.addImports(sourceSchema.propertyMap.type);
+            curModel().addImports(sourceSchema.propertyMap.type);
             target.propertyMap = sourceSchema.propertyMap;
         }
     } else {
-        model.addSchema(sourceSchema);
+        curModel().addSchema(sourceSchema);
         addVarDecl(target.fields, TypeUsage(sourceSchema), baseName,
                    sourceSchema, "", required);
     }
+}
+
+inline auto makeModelKey(const string& filePath)
+{
+    return withoutSuffix(filePath, ".yaml");
 }
 
 vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
@@ -369,32 +344,41 @@ vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
     return {};
 }
 
-Model&& Analyzer::loadModel(const pair_vector_t<string>& substitutions,
-                            InOut inOut)
+const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 {
-    const auto fullPath = _baseDir / fileName;
-    cout << "Loading from " << fullPath << endl;
-    const auto yaml = YamlMap::loadFromFile(fullPath, substitutions);
+    cout << "Loading from " << filePath << endl;
+    const auto yaml =
+        YamlMap::loadFromFile(_baseDir / filePath, _translator.substitutions());
+    if (_allModels.count(filePath) > 0) {
+        clog << "Warning: the model has been loaded from " << filePath
+             << " but will be reloaded again" << endl;
+        _allModels.erase(filePath);
+    }
+    auto&& model = _allModels[makeModelKey(filePath)];
+    _workStack.push({fspath(filePath).parent_path(), &model});
 
-    // Detect which file we have: API description or just data definition
-    // TODO: This should be refactored to two separate methods, since we shouldn't
-    // allow loading an API description file referenced from another API description.
-    if (const auto paths = yaml.get("paths", true).asMap())
-    {
-        {
-            if (yaml["swagger"].as<string>("") != "2.0")
-                throw Exception(
-                        "This software only supports swagger version 2.0 for now");
-            model.apiSpec = Swagger();
-            model.apiSpecVersion = 200; // 2.0
-        }
+    // Detect which file we have: API description or data definition
+    if (!yaml["paths"]) {
+        // XXX: this branch is yet unused; one day it will load event schemas
+        fillDataModel(model, yaml, fspath(filePath).filename());
+        return model;
+    }
 
-        auto defaultConsumed = loadContentTypes(yaml, "consumes");
-        auto defaultProduced = loadContentTypes(yaml, "produces");
-        model.hostAddress = yaml["host"].as<string>("");
-        model.basePath = yaml["basePath"].as<string>("");
+    // The rest is exclusive to API descriptions
+    const auto paths = yaml.get("paths", true).asMap();
+    if (yaml["swagger"].as<string>("") != "2.0")
+        throw Exception(
+                "This software only supports swagger version 2.0 for now");
 
-        for (const YamlNodePair& yaml_path: paths)
+    model.apiSpec = Swagger();
+    model.apiSpecVersion = 200; // 2.0
+
+    auto defaultConsumed = loadContentTypes(yaml, "consumes");
+    auto defaultProduced = loadContentTypes(yaml, "produces");
+    model.hostAddress = yaml["host"].as<string>("");
+    model.basePath = yaml["basePath"].as<string>("");
+
+    for (const YamlNodePair& yaml_path: paths)
         try {
             const Path path { yaml_path.first.as<string>() };
 
@@ -504,11 +488,66 @@ Model&& Analyzer::loadModel(const pair_vector_t<string>& substitutions,
         } catch (ModelException& me) {
             throw YamlException(yaml_path.first, me.message);
         }
-    } else {
-        auto schema = analyzeSchema(yaml, inOut);
-        if (schema.name.empty())
-            schema.name = camelCase(model.srcFilename);
-        model.addSchema(schema);
+    _workStack.pop();
+    return model;
+}
+
+pair<const Model&, string> Analyzer::loadDependency(const string& relPath,
+                                                    InOut inOut)
+{
+    const auto& fullPath = _workStack.top().fileDir / relPath;
+    const auto fullPathBase = makeModelKey(fullPath);
+    const auto [mIt, unseen] = _allModels.try_emplace(fullPathBase);
+    auto& model = mIt->second;
+    const pair result {cref(model), _translator.mapImport(fullPathBase)};
+
+    // If there is a matching model just return it
+    auto modelRole = In|Out;
+    if (!unseen) {
+        if (model.apiSpec != JSONSchema())
+            throw Exception("Dependency model for " + relPath
+                            + " is found in the cache but doesn't seem to be"
+                              " for a data schema (format " + model.apiSpec
+                            + ")");
+        if (!model.callClasses.empty())
+            throw Exception(
+                "Internal error: a JSON Schema model has API definitions");
+
+        if (!model.types.empty()) {
+            modelRole = model.types.back().inOut;
+            if (modelRole == (In|Out) || modelRole == inOut) {
+                cout << "Reusing already loaded model for "
+                     << relPath << " with role " << modelRole << endl;
+                return result;
+            }
+            cout << "Found existing data model generated for role " << modelRole
+                 << "; the model will be reloaded for all roles" << endl;
+            modelRole = In|Out;
+            model.clear();
+        } else {
+            clog << "Warning: empty data model for " << relPath
+                 << " has been found in the cache; reloading" << endl;
+            modelRole = inOut;
+        }
     }
-    return move(model);
+
+    cout << "Loading data schema from " << relPath
+         << " with role " << modelRole << endl;
+    const auto yaml =
+        YamlMap::loadFromFile(_baseDir / fullPath, _translator.substitutions());
+    _workStack.push({fullPath.parent_path(), &model});
+    fillDataModel(model, yaml, fspath(fullPathBase).filename(), inOut);
+    _workStack.pop();
+    return result;
+}
+
+void Analyzer::fillDataModel(Model& m, const YamlNode& yaml,
+                             const string& filename, InOut inOut)
+{
+    m.apiSpec = JSONSchema();
+    m.apiSpecVersion = 201909; // Only JSON Schema 2019-09 is targeted for now
+    auto&& s = analyzeSchema(yaml, inOut);
+    if (s.name.empty())
+        s.name = camelCase(filename);
+    m.addSchema(move(s));
 }

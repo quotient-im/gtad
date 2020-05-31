@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#include "analyzer.h"
+#include "printer.h"
 #include "translator.h"
 
 #include <QtCore/QCoreApplication>
@@ -81,11 +83,12 @@ int main(int argc, char* argv[])
         for(const auto& path: paths) {
             auto ftype = fs::status(path).type();
             if (ftype == fs::file_type::regular)
-                translator.processFile(path, "", role, false);
+                Analyzer{translator}.loadModel(path, role);
 
             if (ftype != fs::file_type::directory)
                 continue;
 
+            Analyzer a{translator, path};
             for (const auto& f: fs::directory_iterator(
                      path, fs::directory_options::skip_permission_denied)) {
                 if (!f.is_regular_file())
@@ -93,8 +96,21 @@ int main(int argc, char* argv[])
                 auto&& fName = f.path().filename();
                 if (find(exclusions.begin(), exclusions.end(), fName)
                     == exclusions.cend())
-                    translator.processFile(move(fName), path, role, false);
+                    a.loadModel(move(fName), role);
             }
+        }
+        for (const auto& [pathBase, model]: Analyzer::allModels()) {
+            if (model.empty() || model.trivial())
+                continue;
+
+            auto targetDir = (translator.outputBaseDir() / pathBase)
+                                 .parent_path()
+                                 .lexically_normal();
+            fs::create_directories(targetDir);
+            if (!fs::exists(targetDir))
+                throw Exception{"Cannot create output directory "
+                                + targetDir.string()};
+            translator.printer().print(pathBase, model);
         }
     }
     catch (Exception& e)
