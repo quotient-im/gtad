@@ -4,19 +4,32 @@ dist: bionic
 git:
   depth: false
 
-addons:
-  apt:
-    packages:
-    - qt5-default
-
 matrix:
   include:
   - os: linux
     compiler: gcc
-  - os: linux
-    compiler: clang
+    addons:
+      apt:
+        packages:
+        - qt5-default
+        - g++-8
+    env:
+      [ OVERRIDES="CC=gcc-8 CXX=g++-8" ]
+    # Clang 8 is not tested due to std::filesystem linking nightmare
+    # Clang 9 + libstdc++ 9.1 should be fine but the latter not available in
+    # bionic without PPAs
+#  - os: linux
+#    compiler: clang
+#    addons:
+#      apt:
+#        packages:
+#        - qt5-default
+#        - clang-9
+#        - libstdc++-9
+#    env:
+#      [ OVERRIDES="CC=clang-9 CXX=clang++-9 CPPFLAGS=-stdlib=libstdc++" ]
   - os: osx
-    osx_image: xcode11
+    osx_image: xcode11.4
     addons:
       homebrew:
         update: true
@@ -26,6 +39,7 @@ matrix:
 
 install:
 - if [ "$TRAVIS_OS_NAME" != "linux" ]; then export PATH="/usr/local/opt/qt/bin:$PATH"; fi
+- eval ${OVERRIDES}
 
 script:
 - mkdir build && cd build
