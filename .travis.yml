@@ -12,6 +12,7 @@ matrix:
       apt:
         packages:
         - qt5-default
+        - qtmultimedia5-dev
         - g++-8
     env:
       [ OVERRIDES="CC=gcc-8 CXX=g++-8" ]
@@ -40,8 +41,18 @@ matrix:
 install:
 - if [ "$TRAVIS_OS_NAME" != "linux" ]; then export PATH="/usr/local/opt/qt/bin:$PATH"; fi
 - eval ${OVERRIDES}
+- git clone https://github.com/quotient-im/libQuotient.git
+- git clone https://github.com/quotient-im/matrix-doc.git
 
 script:
-- mkdir build && cd build
+- mkdir build && pushd build
 - cmake ..
 - cmake --build .
+- popd
+# test
+- cd libQuotient
+- cmake .
+- cmake -DMATRIX_DOC_PATH="../matrix-doc" -DGTAD_PATH="../build/gtad" .
+- cmake --build . --target update-api
+- cmake --build . --target all
+
