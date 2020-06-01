@@ -8,8 +8,7 @@ using namespace std;
 
 string Identifier::qualifiedName() const
 {
-    const auto _name = name.empty() ? "(anonymous)" : name;
-    return scope ? scope->name + '.' + _name : _name;
+    return (call ? call->name + roleToChar(role) : "") + name;
 }
 
 TypeUsage::TypeUsage(const ObjectSchema& schema)
@@ -163,7 +162,7 @@ void Model::addSchema(const ObjectSchema& schema)
     auto dupIt = find_if(types.begin(), types.end(),
             [&](const ObjectSchema& s)
             {
-                return s.scope == schema.scope &&
+                return s.call == schema.call &&
                         s.name == schema.name;
             });
     if (dupIt != types.end())

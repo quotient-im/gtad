@@ -30,14 +30,30 @@ std::string camelCase(std::string s);
 std::string withoutSuffix(const std::string& path,
                           const std::string_view& suffix);
 
+enum InOut : unsigned char { InAndOut = 0, OnlyIn, OnlyOut };
+
+constexpr inline char roleToChar(InOut r)
+{
+    return r == OnlyIn ? '>' : r == OnlyOut ? '<' : '.';
+}
+
+template <typename StreamT>
+inline StreamT& operator<<(StreamT& s, const InOut& v)
+{
+    return s << (v == OnlyIn ? "In" : v == OnlyOut ? "Out" : "In/Out");
+}
+
 struct Call;
 
 struct Identifier
 {
     /// As transformed for the generated code, not what's in YAML
     std::string name;
-    /// For now, only non-empty in case of ObjectSchemas and their TypeUsages
-    const Call* scope = nullptr;
+    InOut role = InAndOut;
+    /// Always empty for Calls as they cannot be scoped (as yet)
+    const Call* call = nullptr;
+    // NB: When Calls do get scoped, the scope will likely be a namespace
+    // so the above field will become const Identifier* or smth
 
     [[nodiscard]] std::string qualifiedName() const;
 };
@@ -68,7 +84,7 @@ struct TypeUsage : Identifier
 
     [[nodiscard]] bool operator==(const TypeUsage& other) const
     {
-        return name == other.name && scope == other.scope
+        return name == other.name && call == other.call
                && baseName == other.baseName && attributes == other.attributes
                && lists == other.lists && paramTypes == other.paramTypes;
     }
@@ -101,20 +117,15 @@ struct VarDecl
 
 using VarDecls = std::vector<VarDecl>;
 
-using InOut = unsigned short;
-static constexpr InOut In = 0x1;
-static constexpr InOut Out = 0x2;
-
 struct ObjectSchema : Identifier
 {
     std::string description;
     std::vector<TypeUsage> parentTypes;
     std::vector<VarDecl> fields;
     VarDecl propertyMap;
-    InOut inOut = 0;
 
-    explicit ObjectSchema(InOut inOut = 0, std::string description = {}) :
-        description(move(description)), inOut(inOut)
+    explicit ObjectSchema(InOut inOut = InAndOut, std::string description = {}) :
+        Identifier{"", inOut}, description(move(description))
     { }
 
     [[nodiscard]] bool empty() const
@@ -149,7 +160,7 @@ struct Path : public std::string
 struct Response
 {
     explicit Response(std::string code, std::string description = {}) :
-        code(move(code)), body(Out, move(description))
+        code(move(code)), body(OnlyOut, move(description))
     { }
     std::string code;
     VarDecls headers;
@@ -164,8 +175,7 @@ struct ExternalDocs
 
 enum Location : size_t { InPath = 0, InQuery = 1, InHeaders = 2 };
 
-struct Call : Identifier
-{
+struct Call : Identifier {
     using params_type = VarDecls;
     using string = std::string;
 
@@ -191,7 +201,7 @@ struct Call : Identifier
     ExternalDocs externalDocs;
     static const std::array<string, 3> ParamGroups;
     std::array<params_type, 3> params;
-    ObjectSchema body{In};
+    ObjectSchema body{OnlyIn};
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
     bool inlineBody = false;
@@ -250,3 +260,12 @@ struct ModelException : Exception
     using Exception::Exception;
 };
 
+template <typename StreamT>
+inline StreamT& operator<<(StreamT& s, const Identifier& id)
+{
+    if (id.call)
+        s << id.call->name;
+    if (id.call || id.role != InAndOut)
+        s << roleToChar(id.role);
+    return s << (id.name.empty() && !id.call ? "(anonymous)" : id.name);
+}

@@ -77,8 +77,8 @@ int main(int argc, char* argv[])
                 paths.emplace_back(path.toStdString());
         }
         const auto& roleValue = parser.value(schemaRoleOption);
-        const InOut role =
-                roleValue == "i" ? In : roleValue == "o" ? Out : In|Out;
+        const auto role =
+            roleValue == "i" ? OnlyIn : roleValue == "o" ? OnlyOut : InAndOut;
 
         for(const auto& path: paths) {
             auto ftype = fs::status(path).type();

@@ -209,14 +209,14 @@ object Printer::renderType(const TypeUsage& tu) const
                   , { "baseName", tu.baseName }
     };
     auto qualifiedValues = values;
-    if (tu.scope)
+    if (tu.call)
     {
-        // Not using scope->qualifiedName() because:
-        // 1) we don't have nested scopes as a thing
-        // 2) we qualify types with scope names, not scopes (think of referring
-        //    to another type within the same scope)
-        qualifiedValues.emplace("scope", tu.scope->name);
-        qualifiedValues.emplace("scopeCamelCase", camelCase(tu.scope->name));
+        // Not using call->qualifiedName() because:
+        // 1) we don't have nested calls as a thing
+        // 2) we qualify types with call names, not calls (think of referring
+        //    to another type within the same call)
+        qualifiedValues.emplace("scope", tu.call->name);
+        qualifiedValues.emplace("scopeCamelCase", camelCase(tu.call->name));
     }
 
     // Fill parameters for parameterized types
@@ -285,8 +285,8 @@ object Printer::dumpAllTypes(const Model::schemas_type& types) const
             auto mType = renderType(TypeUsage(type));
             mType["classname"] = type.name; // Swagger compat
             dumpDescription(mType, type);
-            mType["in?"] = (type.inOut & In) != 0;
-            mType["out?"] = (type.inOut & Out) != 0;
+            mType["in?"] = type.role != OnlyOut;
+            mType["out?"] = type.role != OnlyIn;
             if (type.trivial())
             {
                 mType["trivial?"] = true;
@@ -309,11 +309,11 @@ object Printer::dumpAllTypes(const Model::schemas_type& types) const
 }
 
 object Printer::dumpTypes(const Model::schemas_type& types,
-                          const Identifier* scope) const
+                          const Call* scope) const
 {
     Model::schemas_type selectedTypes;
     copy_if(types.begin(), types.end(), back_inserter(selectedTypes),
-            [&](const ObjectSchema& s) { return s.scope == scope; });
+            [&](const ObjectSchema& s) { return s.call == scope; });
     return dumpAllTypes(selectedTypes);
 }
 

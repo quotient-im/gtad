@@ -47,31 +47,40 @@ private:
     const fspath _baseDir;
     const Translator& _translator;
 
-    struct WorkItem {
+    struct Context {
         fspath fileDir;
         Model* model;
+        const Identifier scope;
     };
-    std::stack<WorkItem, std::vector<WorkItem>> _workStack;
+    const Context* _context = nullptr;
+    size_t _indent = 0;
+    friend class ContextOverlay; // defined in analyzer.cpp
 
     enum IsTopLevel : bool { Inner = false, TopLevel = true };
     enum SubschemasStrategy : bool { ImportSubschemas = false,
                                      InlineSubschemas = true };
 
-    [[nodiscard]] Model& curModel() const { return *_workStack.top().model; }
+    [[nodiscard]] const Context& context() const
+    {
+        if (!_context)
+            throw Exception(
+                "Internal error: trying to access the context before creation");
+        return *_context;
+    }
+    [[nodiscard]] Model& currentModel() const { return *context().model; }
+    [[nodiscard]] const Identifier& currentScope() const { return context().scope; }
+    [[nodiscard]] InOut currentRole() const { return currentScope().role; }
+    [[nodiscard]] const Call* currentCall() const { return currentScope().call; }
 
     [[nodiscard]] std::pair<const Model&, string>
-    loadDependency(const string& relPath, InOut inOut = In | Out);
-    void fillDataModel(Model& m, const YamlNode& yaml, const string& filename,
-                       InOut inOut = In | Out);
+    loadDependency(const string& relPath);
+    void fillDataModel(Model& m, const YamlNode& yaml, const string& filename);
 
-    [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node, InOut inOut,
-                                             const Call* scope,
+    [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node,
                                              IsTopLevel isTopLevel = Inner);
-    [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence& yamlTypes,
-                                             InOut inOut, const Call* scope);
+    [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence& yamlTypes);
     [[nodiscard]] ObjectSchema
-    analyzeSchema(const YamlMap& yamlSchema, InOut inOut,
-                  const Call* scope = {}, const string& locus = {},
+    analyzeSchema(const YamlMap& yamlSchema,
                   SubschemasStrategy subschemasStrategy = ImportSubschemas);
 
     void mergeFromSchema(ObjectSchema& target, const ObjectSchema& sourceSchema,
@@ -89,7 +98,12 @@ private:
     template <typename... ArgTs>
     void addVarDecl(VarDecls& varList, ArgTs&&... varDeclArgs)
     {
-        curModel().addVarDecl(varList,
+        currentModel().addVarDecl(varList,
                               makeVarDecl(std::forward<ArgTs>(varDeclArgs)...));
+    }
+
+    [[nodiscard]] auto logOffset() const
+    {
+        return string(_indent * 2, ' ');
     }
 };
