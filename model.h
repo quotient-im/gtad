@@ -218,10 +218,13 @@ struct CallClass
     std::list<Call> calls;
 };
 
-inline std::string Swagger() { return "swagger"; }
-inline std::string OpenAPI3() { return "openapi"; }
-inline std::string RAML() { return "raml"; }
-inline std::string JSONSchema() { return "json-schema"; }
+namespace ApiSpec {
+using namespace std::string_literals;
+static inline const auto Swagger = "swagger"s;
+static inline const auto JSONSchema = "json-schema"s;
+// static inline const auto OpenAPI3 = "openapi"s;
+// static inline const auto RAML = "raml"s;
+}
 
 struct Model {
     using string = std::string;
@@ -229,7 +232,7 @@ struct Model {
     using schemas_type = std::vector<ObjectSchema>;
 
     string apiSpec;
-    /// Spec version liberally encoded in a int, e.g. 200 for Swagger 2.0
+    /// Spec version liberally encoded in an int, e.g. 20 for Swagger 2.0
     /// or 201909 for JSON Schema 2019-09
     int apiSpecVersion = 0;
 

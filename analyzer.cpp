@@ -384,8 +384,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
         throw Exception(
                 "This software only supports swagger version 2.0 for now");
 
-    model.apiSpec = Swagger();
-    model.apiSpecVersion = 200; // 2.0
+    model.apiSpec = ApiSpec::Swagger;
+    model.apiSpecVersion = 20; // Swagger/OpenAPI 2.0
 
     auto defaultConsumed = loadContentTypes(yaml, "consumes");
     auto defaultProduced = loadContentTypes(yaml, "produces");
@@ -518,7 +518,7 @@ pair<const Model&, string> Analyzer::loadDependency(const string& relPath)
     // If there is a matching model just return it
     auto modelRole = InAndOut;
     if (!unseen) {
-        if (model.apiSpec != JSONSchema())
+        if (model.apiSpec != ApiSpec::JSONSchema)
             throw Exception("Dependency model for " + relPath
                             + " is found in the cache but doesn't seem to be"
                               " for a data schema (format " + model.apiSpec
@@ -559,7 +559,7 @@ pair<const Model&, string> Analyzer::loadDependency(const string& relPath)
 void Analyzer::fillDataModel(Model& m, const YamlNode& yaml,
                              const string& filename)
 {
-    m.apiSpec = JSONSchema();
+    m.apiSpec = ApiSpec::JSONSchema;
     m.apiSpecVersion = 201909; // Only JSON Schema 2019-09 is targeted for now
     auto&& s = analyzeSchema(yaml);
     if (s.name.empty())

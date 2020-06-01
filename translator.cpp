@@ -255,7 +255,7 @@ Translator::output_config_t Translator::outputConfig(const path& filePathBase,
     const auto fNameBase = outputBaseDir() / filePathBase;
 
     const auto& srcConfig =
-        model.apiSpec == JSONSchema() ? _dataTemplates : _apiTemplates;
+        model.apiSpec == ApiSpec::JSONSchema ? _dataTemplates : _apiTemplates;
     output_config_t result;
     for (const auto& [fExtension, fTemplate]: srcConfig)
         result.emplace_back(path(fNameBase) += fExtension, fTemplate);
