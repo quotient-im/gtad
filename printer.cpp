@@ -403,36 +403,56 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
             for (size_t i = 0; i < Call::ParamGroups.size(); ++i)
                 addList(mCall, Call::ParamGroups[i] + "Params",
                         call.params[i]);
-            if (!call.inlineBody) {
-                addList(mCall, "bodyParams", call.body.fields);
-                if (call.body.hasPropertyMap())
-                    mCall["propertyMap"] = dumpField(call.body.propertyMap);
-            } else
-                mCall.emplace("inlineBody",
-                              dumpField(call.body.fields.front()));
+
+            dispatchVisit(
+                call.body,
+                [this, &mCall](const FlatSchema& unpackedBody) {
+                    addList(mCall, "bodyParams", unpackedBody.fields);
+                    if (unpackedBody.hasPropertyMap())
+                        mCall["propertyMap"] =
+                            dumpField(unpackedBody.propertyMap);
+                },
+                [this, &mCall](const VarDecl& packedBody) {
+                    mCall.emplace("inlineBody", dumpField(packedBody));
+                },
+                [](monostate) {});
+            mCall["hasBody?"] = !holds_alternative<monostate>(call.body);
 
             setList(mCall, "responses", call.responses, [this](const Response& r) {
                 object mResponse{{"code", r.code},
                                  {"normalResponse?", r.code == "200"}};
-                vector<VarDecl> allProperties;
-                if (r.body.hasPropertyMap()) {
-                    allProperties.emplace_back(r.body.propertyMap);
-                    mResponse["propertyMap"] = dumpField(r.body.propertyMap);
-                }
-                for (const auto& src: {r.headers, r.body.fields})
-                    copy(src.begin(), src.end(), back_inserter(allProperties));
 
+                VarDecls allProperties;
+                copy(r.headers.begin(), r.headers.end(),
+                     back_inserter(allProperties));
+
+                dispatchVisit(
+                    r.body,
+                    [this, &mResponse,
+                     &allProperties](const FlatSchema& unpackedBody) {
+                        addList(mResponse, "properties", unpackedBody.fields);
+                        copy(unpackedBody.fields.begin(),
+                             unpackedBody.fields.end(),
+                             back_inserter(allProperties));
+                        if (unpackedBody.hasPropertyMap()) {
+                            allProperties.emplace_back(unpackedBody.propertyMap);
+                            mResponse["propertyMap"] =
+                                dumpField(unpackedBody.propertyMap);
+                        }
+                    },
+                    [this, &mResponse,
+                     &allProperties](const VarDecl& packedBody) {
+                        mResponse.emplace("inlineResponse",
+                                          dumpField(packedBody));
+                        allProperties.emplace_back(packedBody);
+                    },
+                    [](monostate) {});
                 for (const auto& src: {{"allProperties", allProperties},
-                                       {"properties", r.body.fields},
                                        pair{"headers", r.headers}})
                     addList(mResponse, src.first, src.second);
 
                 return mResponse;
             });
-            if (call.inlineResponse && !call.responses.empty()
-                && !call.responses.front().body.fields.empty())
-                mCall.emplace("inlineResponse",
-                    dumpField(call.responses.front().body.fields.front()));
 
             return mCall;
         });

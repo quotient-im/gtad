@@ -153,157 +153,26 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes)
 }
 
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
-                                     SubschemasStrategy subschemasStrategy)
+                                     RefsStrategy refsStrategy)
 {
-    ObjectSchema schema{currentRole(), currentCall(),
-                        yamlSchema["description"].as<string>("")};
-
-    // Collect minimum information necessary to decide if subschemas inlining
-    // should be suppressed (see also below)
-    bool innerPropertiesFound = false;
-    vector<string> refPaths;
-    if (auto yamlSingleRef = yamlSchema["$ref"])
-        refPaths.emplace_back(yamlSingleRef.as<string>());
-    else if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
-        for (const auto& yamlEntry: yamlAllOf)
-            if (YamlMap yamlInnerObject {yamlEntry}; yamlInnerObject) {
-                if (auto yamlRef = yamlInnerObject["$ref"])
-                    refPaths.emplace_back(yamlRef.as<string>());
-                else if (!yamlInnerObject["title"]
-                         && yamlInnerObject["type"].as<string>("") == "object") {
-                    // Add properties from schema(s) inside allOf (see #52)
-                    // making sure not to pull named objects though
-                    innerPropertiesFound |=
-                            !yamlInnerObject["properties"].asMap().empty() ||
-                            yamlInnerObject["additionalProperties"].IsDefined();
-                }
-            }
-
-    auto properties = yamlSchema["properties"].asMap();
-    auto additionalProperties = yamlSchema["additionalProperties"];
-
-    // Suppress inlining if the outer context is non-trivial.
-    auto name = yamlSchema["title"].as<string>("");
-    if (!name.empty() || refPaths.size() != 1 || innerPropertiesFound
-        || properties || additionalProperties)
-        subschemasStrategy = ImportSubschemas;
-
-    for (auto&& refPath: refPaths) {
-        // First try to resolve refPath in types map
-        auto tu = _translator.mapType("$ref", refPath);
-        if (!tu.empty()) {
-            cout << "Using type " << tu.name << " for " << refPath << endl;
-            schema.parentTypes.emplace_back(move(tu));
-            continue;
-        }
-
-        // No shortcut in the types map; load the schema from the reference path
-        auto&& [refModel, importPath] = loadDependency(refPath);
-        if (refModel.types.empty())
-            throw Exception(refPath + " has no schemas");
-
-        auto&& refSchema = refModel.types.back();
-
-        if (subschemasStrategy == InlineSubschemas) {
-            cout << "Inlining the main schema from " << refPath
+    if (auto yamlRef = yamlSchema["$ref"]) {
+        // https://tools.ietf.org/html/draft-pbryan-zyp-json-ref-03#section-3
+        if (yamlSchema.size() > 1)
+            clog << yamlSchema.location() << ": Warning: "
+                    "members next to $ref in the same map will be ignored"
                  << endl;
-            mergeFromSchema(schema, refSchema);
-            if (refModel.types.size() > 1)
-                currentModel().imports.insert(importPath);
-            continue;
-        }
-        tu.name = refSchema.name;
-        tu.baseName = tu.name.empty() ? refPath : tu.name;
-        tu.addImport(move(importPath));
-        schema.parentTypes.emplace_back(move(tu));
+        return resolveRef(yamlRef.as<string>(), refsStrategy);
     }
 
-    if (auto yamlOneOf = yamlSchema["oneOf"].asSequence())
-        schema.parentTypes.emplace_back(analyzeMultitype(yamlOneOf));
-
-    // Process inline schemas in allOf ($refs were processed earlier)
-    if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
-        for (const auto& yamlEntry: yamlAllOf)
-            if (auto yamlMap = yamlEntry.asMap(); yamlMap && !yamlMap["$ref"])
-                mergeFromSchema(schema,analyzeSchema(yamlMap));
-
-    if (name.empty() && schema.trivial())
-        name = schema.parentTypes.back().name;
-    if (!name.empty())
-    {
-        auto tu = _translator.mapType("schema", name);
-        if (!tu.empty())
-        {
-            cout << logOffset() << "Using type " << tu.name << " for schema " << name << endl;
-            schema.parentTypes = { move(tu) }; // Override the type entirely
-            return schema;
-        }
-    }
-
-    if (properties || additionalProperties ||
-            (!schema.empty() && !schema.trivial()))
-    {
-        // If the schema is not just an alias for another type, name it.
-        schema.name = camelCase(name);
-    }
-
-    if (schema.empty() && yamlSchema["type"].as<string>("object") != "object")
-    {
-        auto parentType = analyzeTypeUsage(yamlSchema);
-        if (!parentType.empty())
-            schema.parentTypes.emplace_back(move(parentType));
-    }
-
-    if (properties)
-    {
-        const auto requiredList = yamlSchema["required"].asSequence();
-        for (const auto& property: properties) {
-            auto&& baseName = property.first.as<string>();
-            auto required = any_of(requiredList.begin(), requiredList.end(),
-                                [&baseName](const YamlNode& n)
-                                    { return baseName == n.as<string>(); } );
-            addVarDecl(schema.fields,
-                       analyzeTypeUsage(property.second),
-                       move(baseName), schema,
-                       property.second["description"].as<string>(""), required);
-        }
-    }
-    if (additionalProperties) {
-        TypeUsage tu;
-        string description;
-        switch (additionalProperties.Type()) {
-            case YAML::NodeType::Map: {
-                auto elemType =
-                    analyzeTypeUsage(additionalProperties.asMap());
-                const auto& protoType =
-                    _translator.mapType("map", elemType.baseName,
-                                        "string->" + elemType.baseName);
-                tu = protoType.specialize({move(elemType)});
-                description = additionalProperties["description"].as<string>("");
-                break;
-            }
-            case YAML::NodeType::Scalar: // Generic map
-                if (additionalProperties.as<bool>())
-                    tu = _translator.mapType("map");
-                break;
-            default:
-                throw YamlException(additionalProperties,
-                    "additionalProperties should be either a boolean or a map");
-        }
-
-        if (!tu.empty()) {
-            if (schema.empty())
-                schema.parentTypes = {std::move(tu)};
-            else
-                schema.propertyMap =
-                    makeVarDecl(move(tu), "additionalProperties", schema,
-                                move(description));
-        }
-    }
+    auto schema = yamlSchema["type"].as<string>("object") == "object"
+                      ? analyzeObject(yamlSchema, refsStrategy)
+                      : makeEphemeralSchema(analyzeTypeUsage(yamlSchema));
 
     if (!schema.empty()) {
-        cout << logOffset() << yamlSchema.location() << ": Found "
-             << "schema " + schema.qualifiedName() << " for " << schema.role;
+        cout << logOffset() << yamlSchema.location() << ": schema for "
+             << schema;
+        if (const auto& scopeName = currentScope().name; !scopeName.empty())
+            cout << '/' << scopeName;
         if (schema.trivial())
             cout << " mapped to " << schema.parentTypes.front().qualifiedName();
         else {
@@ -318,36 +187,207 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
     return schema;
 }
 
-void Analyzer::mergeFromSchema(ObjectSchema& target,
-                               const ObjectSchema& sourceSchema,
-                               const string& baseName, bool required)
+ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
+                                     RefsStrategy refsStrategy)
 {
-    if (sourceSchema.trivial())
-    {
-        // The schema consists of a single parent type, use that type instead.
-        addVarDecl(target.fields, sourceSchema.parentTypes.front(), baseName,
-                   sourceSchema, sourceSchema.description, required);
-    } else if (sourceSchema.name.empty())
-    {
-        for (const auto& parentType: sourceSchema.parentTypes)
-            addVarDecl(target.fields, parentType, parentType.name,
-                       sourceSchema, "", required);
-        copy(sourceSchema.fields.cbegin(), sourceSchema.fields.cend(),
-             back_inserter(target.fields));
-        if (!sourceSchema.hasPropertyMap()) {
-            if (target.hasPropertyMap()
-                && target.propertyMap.type != sourceSchema.propertyMap.type)
-                throw Exception("Conflicting property map types when merging "
-                                "properties from "
-                                + sourceSchema.qualifiedName());
-            currentModel().addImports(sourceSchema.propertyMap.type);
-            target.propertyMap = sourceSchema.propertyMap;
+    ObjectSchema schema{currentRole(), currentCall(),
+                        yamlSchema["description"].as<string>("")};
+
+    // The name is taken from: the schema's "title" property; failing that,
+    // the _inline_ schema(s) "title" in allOf (with the last one winning,
+    // if there are several); and failing that, parent schemas (i.e., taken
+    // in oneOf or $ref'ed in allOf).
+    string name;
+
+    if (auto yamlOneOf = yamlSchema["oneOf"].asSequence())
+        schema.parentTypes.emplace_back(analyzeMultitype(yamlOneOf));
+
+    if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
+        for (const auto& yamlEntry: yamlAllOf) {
+            auto&& innerSchema = analyzeSchema(yamlEntry, refsStrategy);
+            if (!innerSchema.name.empty())
+                name = innerSchema.name; // FIXME: not always correct
+            for (const auto& parentType: innerSchema.parentTypes) {
+                currentModel().addImports(parentType);
+                schema.parentTypes.emplace_back(parentType);
+            }
+            if (!innerSchema.description.empty())
+                schema.description = innerSchema.description;
+            for (auto&& f: innerSchema.fields) {
+                f.name = _translator.mapIdentifier(f.baseName,
+                                                   schema.qualifiedName());
+                if (!f.name.empty())
+                    schema.fields.emplace_back(move(f));
+            }
+
+            if (innerSchema.hasPropertyMap()) {
+                auto&& pm = innerSchema.propertyMap;
+                if (schema.hasPropertyMap() && schema.propertyMap.type != pm.type)
+                    throw YamlException(
+                        yamlEntry, "Conflicting property map types when "
+                                   "merging properties to the main schema");
+
+                pm.name = _translator.mapIdentifier(pm.baseName,
+                                                    schema.qualifiedName());
+                if (!pm.name.empty())
+                    schema.propertyMap = move(pm);
+            }
         }
-    } else {
-        currentModel().addSchema(sourceSchema);
-        addVarDecl(target.fields, TypeUsage(sourceSchema), baseName,
-                   sourceSchema, "", required);
+
+    name = yamlSchema["title"].as<string>(name);
+
+    if (name.empty() && schema.trivial())
+        name = schema.parentTypes.back().name;
+    if (!name.empty()) {
+        // Now that we have a good idea of the schema identity we can check if
+        // the configuration has anything to substitute this schema with.
+        if (auto&& tu = _translator.mapType("schema", name); !tu.empty())
+            return makeEphemeralSchema(move(tu));
+
+        name = _translator.mapIdentifier(name, currentScope().qualifiedName());
     }
+
+    auto properties = yamlSchema["properties"].asMap();
+    auto additionalProperties = yamlSchema["additionalProperties"];
+
+    if (properties || additionalProperties
+        || (!schema.empty() && !schema.trivial())) {
+        // If the schema is not just an alias for another type, name it.
+        schema.name = camelCase(name);
+    }
+
+    if (properties) {
+        const auto requiredList = yamlSchema["required"].asSequence();
+        for (const auto& property: properties) {
+            auto&& baseName = property.first.as<string>();
+            auto required = any_of(requiredList.begin(), requiredList.end(),
+                                   [&baseName](const YamlNode& n) {
+                                       return baseName == n.as<string>();
+                                   });
+            addVarDecl(schema.fields, analyzeTypeUsage(property.second),
+                       move(baseName), schema,
+                       property.second["description"].as<string>(""), required);
+        }
+    }
+    if (additionalProperties) {
+        TypeUsage tu;
+        string description;
+        switch (additionalProperties.Type()) {
+        case YAML::NodeType::Map: {
+            auto elemType = analyzeTypeUsage(additionalProperties.asMap());
+            const auto& protoType =
+                _translator.mapType("map", elemType.baseName,
+                                    "string->" + elemType.baseName);
+            tu = protoType.specialize({move(elemType)});
+            description = additionalProperties["description"].as<string>("");
+            break;
+        }
+        case YAML::NodeType::Scalar: // Generic map
+            if (additionalProperties.as<bool>())
+                tu = _translator.mapType("map");
+            break;
+        default:
+            throw YamlException(additionalProperties,
+                "additionalProperties should be either a boolean or a map");
+        }
+
+        if (!tu.empty()) {
+            if (schema.empty())
+                return makeEphemeralSchema(move(tu));
+
+            schema.propertyMap = makeVarDecl(move(tu), "additionalProperties",
+                                             schema, move(description));
+        }
+    }
+    return schema;
+}
+
+Body Analyzer::analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
+                                 string description, bool required)
+{
+    if (currentRole() == InAndOut)
+        throw YamlException(yamlSchema,
+                "Internal error, role must be either OnlyIn or OnlyOut");
+
+    const Identifier location {"", currentRole(), currentCall() };
+    auto packedType = _translator.mapType("schema", location.qualifiedName());
+    if (packedType.empty()) {
+        auto&& bodySchema = analyzeSchema(yamlSchema);
+
+        if (description.empty())
+            description = bodySchema.description;
+
+        // For description of packed vs. unpacked bodies cf. the documentation
+        // at Body definition
+        if (bodySchema.empty()) {
+            if (currentRole() == OnlyOut) // cf. the end of analyzeType() :-/
+                return {}; // An empty schema for _response_ means "ignore body"
+
+            // An empty schema for _request_ means a freeform object
+            required = false;
+            packedType = _translator.mapType("object");
+        } else if (bodySchema.trivial())
+            // If the schema consists of a single parent type, inline that type
+            packedType = bodySchema.parentTypes.front();
+        else if (bodySchema.hasParents())
+            // If the schema is complex (=with both parents and properties),
+            // add a definition for it and make a single parameter with
+            // the type of the schema.
+            packedType = addSchema(move(bodySchema));
+        else
+            // No parents, non-empty - unpack the schema to body properties
+            return FlatSchema(bodySchema); // Slicing is ok because no parents
+    }
+    // pack the whole schema in one parameter/property
+    cout << logOffset() << yamlSchema.location() << ": substituting the "
+         << location << " schema with a '" << packedType.name << ' ' << name
+         << "' parameter" << endl;
+    return makeVarDecl(move(packedType), name, *currentCall(), move(description),
+                       required);
+}
+
+ObjectSchema Analyzer::resolveRef(const string& refPath,
+                                  RefsStrategy refsStrategy)
+{
+    // First try to resolve refPath in types map
+    auto&& tu = _translator.mapType("$ref", refPath);
+    if (tu.empty()) {
+        // No type shortcut in the types map (but tu may have some attributes
+        // loaded by mapType() above)
+        auto&& [refModel, importPath] = loadDependency(refPath);
+        if (refModel.types.empty())
+            throw Exception(refPath + " has no schemas");
+
+        auto&& refSchema = refModel.types.back();
+
+        if (refsStrategy == InlineRefs || refModel.trivial()) {
+            cout << logOffset() << "Schema at " << refPath;
+            if (refsStrategy != InlineRefs)
+                cout << " is trivial (see the mapping above) and";
+            cout << " will be inlined" << endl;
+
+            for (auto&& i: refModel.imports)
+                currentModel().imports.insert(i);
+            if (refModel.types.size() > 1)
+                currentModel().imports.insert(importPath);
+            return refSchema;
+        }
+        tu.name = refSchema.name;
+        tu.baseName = tu.name.empty() ? refPath : tu.name;
+        currentModel().imports.emplace(move(importPath));
+    }
+    cout << logOffset() << "Resolved $ref: " << refPath << " to type usage "
+         << tu.name << endl;
+
+    return makeEphemeralSchema(move(tu));
+}
+
+ObjectSchema Analyzer::makeEphemeralSchema(TypeUsage&& tu) const
+{
+    ObjectSchema result{currentRole()};
+    if (!tu.empty())
+        result.parentTypes.emplace_back(move(tu));
+    return result;
 }
 
 VarDecl Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
@@ -465,55 +505,38 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 //                    for (const YamlNodePair p: yamlParam)
 //                        cout << "  At " << p.first.location() << ": "
 //                                        << p.first.as<string>() << endl;
-//                    }
+
+                    auto&& description =
+                        yamlParam["description"].as<string>("");
                     if (in != "body") {
                         addVarDecl(call.getParamsBlock(in),
-                            analyzeTypeUsage(yamlParam, TopLevel),
-                            name, call, yamlParam["description"].as<string>(""),
-                            required, yamlParam["default"].as<string>(""));
+                                   analyzeTypeUsage(yamlParam, TopLevel),
+                                   name, call, move(description), required,
+                                   yamlParam["default"].as<string>(""));
                         continue;
                     }
 
-                    auto&& bodySchema =
-                        analyzeSchema(yamlParam.get("schema"),
-                                      InlineSubschemas);
-                    if (bodySchema.empty()) {
-                        // Special case: an empty schema for a body parameter
-                        // means a freeform object.
-                        call.inlineBody = true;
-                        addVarDecl(call.body.fields,
-                                   _translator.mapType("object"), name, call,
-                                   yamlParam["description"].as<string>(""),
-                                   false);
-                    } else {
-                        // If the schema consists of a single parent type,
-                        // inline that type.
-                        if (bodySchema.trivial())
-                            call.inlineBody = true;
-                        mergeFromSchema(call.body, bodySchema, name, required);
-                    }
+                    call.body = analyzeBodySchema(yamlParam.get("schema"), name,
+                                                  move(description), required);
                 }
                 const auto yamlResponses = yamlCall.get("responses").asMap();
                 if (const auto yamlResponse = yamlResponses["200"].asMap()) {
-                    Response response{ "200" };
+                    Response response{
+                        "200", yamlResponse.get("description").as<string>()};
+                    ContextOverlay _outContext(*this, response.code, OnlyOut,
+                                               &call);
                     if (auto yamlHeaders = yamlResponse["headers"])
                         for (const auto& yamlHeader: yamlHeaders.asMap())
                             addVarDecl(response.headers,
                                 analyzeTypeUsage(yamlHeader.second, TopLevel),
                                 yamlHeader.first.as<string>(), call,
-                                yamlHeader.second["description"].as<string>(""),
-                                false);
+                                yamlHeader.second["description"].as<string>(""));
 
-                    if (auto yamlSchema = yamlResponse["schema"]) {
-                        response.body = analyzeSchema(yamlSchema,
-                                                      InlineSubschemas);
-                        if (response.body.trivial()) {
-                            call.inlineResponse = true;
-                            if (response.body.description.empty())
-                                response.body.description =
-                                    yamlResponse.get("description").as<string>();
-                        }
-                    }
+                    if (const auto& yamlBody = yamlResponse["schema"])
+                        response.body = analyzeBodySchema(yamlBody, "data"s,
+                                                          response.description,
+                                                          false);
+
                     call.responses.emplace_back(move(response));
                 }
             }

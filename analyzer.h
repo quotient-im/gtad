@@ -57,8 +57,7 @@ private:
     friend class ContextOverlay; // defined in analyzer.cpp
 
     enum IsTopLevel : bool { Inner = false, TopLevel = true };
-    enum SubschemasStrategy : bool { ImportSubschemas = false,
-                                     InlineSubschemas = true };
+    enum RefsStrategy : bool { ImportRefs = false, InlineRefs = true };
 
     [[nodiscard]] const Context& context() const
     {
@@ -82,11 +81,16 @@ private:
     [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence& yamlTypes);
     [[nodiscard]] ObjectSchema
     analyzeSchema(const YamlMap& yamlSchema,
-                  SubschemasStrategy subschemasStrategy = ImportSubschemas);
+                  RefsStrategy refsStrategy = ImportRefs);
+    [[nodiscard]] ObjectSchema analyzeObject(const YamlMap& yamlSchema,
+                                             RefsStrategy refsStrategy);
 
-    void mergeFromSchema(ObjectSchema& target, const ObjectSchema& sourceSchema,
-                         const string& baseName = {}, bool required = true);
+    Body analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
+                           string description, bool required = true);
 
+    ObjectSchema resolveRef(const string& refPath, RefsStrategy refsStrategy);
+
+    [[nodiscard]] ObjectSchema makeEphemeralSchema(TypeUsage&& tu) const;
     [[nodiscard]] VarDecl makeVarDecl(TypeUsage type, const string& baseName,
                                       const Identifier& scope,
                                       string description, bool required = false,

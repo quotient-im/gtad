@@ -24,6 +24,7 @@
 #include <list>
 #include <unordered_set>
 #include <unordered_map>
+#include <variant>
 
 std::string capitalizedCopy(std::string s);
 std::string camelCase(std::string s);
@@ -116,16 +117,26 @@ struct VarDecl : Identifier
 
 using VarDecls = std::vector<VarDecl>;
 
-struct ObjectSchema : Identifier
-{
+struct FlatSchema : Identifier {
+    explicit FlatSchema(InOut inOut, const Call* scope = nullptr)
+        : Identifier{"", inOut, scope}
+    { }
+    VarDecls fields;
+    VarDecl propertyMap;
+
+    [[nodiscard]] bool hasPropertyMap() const
+    {
+        return !propertyMap.type.empty();
+    }
+};
+
+struct ObjectSchema : FlatSchema {
     std::string description;
     std::vector<TypeUsage> parentTypes;
-    std::vector<VarDecl> fields;
-    VarDecl propertyMap;
 
     explicit ObjectSchema(InOut inOut, const Call* scope = nullptr,
                           std::string description = {})
-        : Identifier{"", inOut, scope}, description(move(description))
+        : FlatSchema(inOut, scope), description(move(description))
     { }
 
     [[nodiscard]] bool empty() const
@@ -138,11 +149,51 @@ struct ObjectSchema : Identifier
         return parentTypes.size() == 1 && fields.empty()
                && propertyMap.name.empty();
     }
-    [[nodiscard]] bool hasPropertyMap() const
-    {
-        return !propertyMap.type.empty();
-    }
+    [[nodiscard]] bool hasParents() const { return !parentTypes.empty(); }
 };
+
+/** @brief A structure to store request and response bodies
+ *
+ * The first option in this variant corresponds to the case when the body
+ * is expected to be empty. No parameters are exposed in the internal API
+ * (for the client app).
+ *
+ * The second option ("unpacked body") corresponds to the case where
+ * the top level of the body schema does not involve parent types.
+ * In that case it is feasible and convenient for the generated code
+ * to use top level properties of the schema for internal (for the client app)
+ * API parameters, instead of wrapping the whole body schema into a single
+ * parameter.
+ *
+ * The third option ("packed body") is for complex schemas with both
+ * parent types and properties involved (trivial schemas with a single
+ * parent type and no properties are inlined and the same criteria is applied
+ * to the inlined contents instead). Unpacking properties is not feasible
+ * in that case so the generated API will have a single body parameter.
+ */
+using Body = std::variant<std::monostate, FlatSchema, VarDecl>;
+
+[[nodiscard]] inline bool empty(const Body& body)
+{
+    return std::holds_alternative<std::monostate>(body);
+}
+
+/** \brief Helper type to visit Body objects
+ *
+ * Taken from https://en.cppreference.com/w/cpp/utility/variant/visit
+ */
+template <class... Ts>
+struct overloadedVisitor : Ts... { using Ts::operator()...; };
+template <class... Ts>
+overloadedVisitor(Ts...) -> overloadedVisitor<Ts...>; // not needed as of C++20
+
+/** Convenience wrapper around std::visit */
+template <typename VariantT, typename... VisitorTs>
+inline auto dispatchVisit(VariantT&& var, VisitorTs&&... visitors)
+{
+    return std::visit(overloadedVisitor{std::forward<VisitorTs>(visitors)...},
+                      std::forward<VariantT>(var));
+}
 
 struct Path : public std::string
 {
@@ -160,12 +211,12 @@ struct Path : public std::string
 struct Response
 {
     explicit Response(std::string code, std::string description = {}) :
-        code(move(code)), description(move(description)), body(OnlyOut)
+        code(move(code)), description(move(description))
     { }
     std::string code;
     std::string description;
     VarDecls headers;
-    ObjectSchema body;
+    Body body;
 };
 
 struct ExternalDocs
@@ -202,11 +253,9 @@ struct Call : Identifier {
     ExternalDocs externalDocs;
     static const std::array<string, 3> ParamGroups;
     std::array<params_type, 3> params;
-    ObjectSchema body{OnlyIn};
+    Body body;
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
-    bool inlineBody = false;
-    bool inlineResponse = false;
 
     std::vector<string> producedContentTypes;
     std::vector<string> consumedContentTypes;
@@ -247,7 +296,7 @@ struct Model {
     void clear();
 
     Call& addCall(Path path, string verb, string operationId, bool needsToken);
-    void addSchema(const ObjectSchema& schema);
+    void addSchema(ObjectSchema&& schema);
     void addImports(const TypeUsage& type);
 
     [[nodiscard]] bool empty() const { return callClasses.empty() && types.empty(); }

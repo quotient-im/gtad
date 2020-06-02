@@ -133,9 +133,18 @@ Call::params_type Call::collateParams() const
     params_type allCollated;
     for (auto c: params)
         allCollated.insert(allCollated.end(), c.begin(), c.end());
-    allCollated.insert(allCollated.end(), body.fields.begin(), body.fields.end());
-    if (body.hasPropertyMap())
-    	allCollated.insert(allCollated.end(), body.propertyMap);
+    dispatchVisit(
+        body,
+        [&allCollated](const FlatSchema& unpacked) {
+            allCollated.insert(allCollated.end(), unpacked.fields.begin(),
+                               unpacked.fields.end());
+            if (unpacked.hasPropertyMap())
+                allCollated.emplace_back(unpacked.propertyMap);
+        },
+        [&allCollated](const VarDecl& packed) {
+            allCollated.emplace_back(packed);
+        },
+        [](monostate) {});
 
     stable_partition(allCollated.begin(), allCollated.end(),
                      [] (const VarDecl& v) { return v.required; });
@@ -151,7 +160,7 @@ Call& Model::addCall(Path path, string verb, string operationId, bool needsToken
     return cc.calls.back();
 }
 
-void Model::addSchema(const ObjectSchema& schema)
+void Model::addSchema(ObjectSchema&& schema)
 {
     auto dupIt = find_if(types.begin(), types.end(),
             [&](const ObjectSchema& s)
@@ -162,11 +171,11 @@ void Model::addSchema(const ObjectSchema& schema)
     if (dupIt != types.end())
         return;
 
-    types.emplace_back(schema);
     for (const auto& pt: schema.parentTypes)
         addImports(pt);
     if (!schema.propertyMap.type.empty())
         addImports(schema.propertyMap.type);
+    types.emplace_back(move(schema));
 }
 
 void Model::addImports(const TypeUsage& type)
