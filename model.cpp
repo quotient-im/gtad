@@ -151,12 +151,6 @@ Call& Model::addCall(Path path, string verb, string operationId, bool needsToken
     return cc.calls.back();
 }
 
-void Model::addVarDecl(VarDecls& varList, VarDecl var)
-{
-    addImports(var.type);
-    varList.emplace_back(move(var));
-}
-
 void Model::addSchema(const ObjectSchema& schema)
 {
     auto dupIt = find_if(types.begin(), types.end(),

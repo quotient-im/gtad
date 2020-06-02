@@ -106,15 +106,8 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
             return schema.parentTypes.front();
 
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
-        {
-            currentModel().addSchema(schema);
-            // This is just to enrich the type usage with attributes, not
-            // for type substitution
-            auto tu = _translator.mapType("schema", schema.name);
-            tu.name = schema.name;
-            tu.call = schema.call;
-            return tu;
-        }
+            return addSchema(move(schema)); // Wrap the schema in a TypeUsage
+
         // An OnlyIn empty object is schemaless but existing, mapType("object")
         // Also, a nameless non-empty schema is now treated as a generic
         // mapType("object"). TODO, low priority: ad-hoc typing (via tuples?)
@@ -124,6 +117,17 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
         return tu;
 
     throw YamlException(node, "Unknown type: " + yamlType);
+}
+
+TypeUsage Analyzer::addSchema(ObjectSchema&& schema)
+{
+    // This is just to enrich the type usage with attributes, not
+    // for type substitution
+    auto tu = _translator.mapType("schema", schema.name);
+    tu.name = schema.name;
+    tu.call = schema.call;
+    currentModel().addSchema(move(schema));
+    return tu;
 }
 
 TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes)
@@ -151,7 +155,8 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes)
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
                                      SubschemasStrategy subschemasStrategy)
 {
-    ObjectSchema schema{currentRole(), yamlSchema["description"].as<string>("")};
+    ObjectSchema schema{currentRole(), currentCall(),
+                        yamlSchema["description"].as<string>("")};
 
     // Collect minimum information necessary to decide if subschemas inlining
     // should be suppressed (see also below)
@@ -241,7 +246,6 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
         // If the schema is not just an alias for another type, name it.
         schema.name = camelCase(name);
     }
-    schema.call = currentCall();
 
     if (schema.empty() && yamlSchema["type"].as<string>("object") != "object")
     {
@@ -328,8 +332,8 @@ void Analyzer::mergeFromSchema(ObjectSchema& target,
         for (const auto& parentType: sourceSchema.parentTypes)
             addVarDecl(target.fields, parentType, parentType.name,
                        sourceSchema, "", required);
-        for (const auto & param: sourceSchema.fields)
-            currentModel().addVarDecl(target.fields, param);
+        copy(sourceSchema.fields.cbegin(), sourceSchema.fields.cend(),
+             back_inserter(target.fields));
         if (!sourceSchema.hasPropertyMap()) {
             if (target.hasPropertyMap()
                 && target.propertyMap.type != sourceSchema.propertyMap.type)
@@ -344,6 +348,18 @@ void Analyzer::mergeFromSchema(ObjectSchema& target,
         addVarDecl(target.fields, TypeUsage(sourceSchema), baseName,
                    sourceSchema, "", required);
     }
+}
+
+VarDecl Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
+                              const Identifier& scope,
+                              string description, bool required,
+                              string defaultValue) const
+{
+    auto&& id = _translator.mapIdentifier(baseName, scope.qualifiedName());
+
+    currentModel().addImports(type);
+    return {std::move(type),   move(id), baseName,
+            move(description), required, move(defaultValue)};
 }
 
 inline auto makeModelKey(const string& filePath)

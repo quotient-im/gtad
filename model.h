@@ -94,22 +94,21 @@ struct TypeUsage : Identifier
     }
 };
 
-struct VarDecl
+struct VarDecl : Identifier
 {
     TypeUsage type;
-    std::string name; //< Identifier in the generated code
-    std::string baseName; //< As used in the API
+    std::string baseName; //< Identifier as used in the API
     std::string description;
     bool required = false; // For the default constructor
     std::string defaultValue;
 
     VarDecl() = default;
     VarDecl(TypeUsage type, std::string name, std::string baseName,
-            std::string description = {}, bool required = true,
+            std::string description, bool required = false,
             std::string defaultValue = {})
-        : type(std::move(type)), name(std::move(name))
-        , baseName(std::move(baseName)), description(std::move(description))
-        , required(required), defaultValue(std::move(defaultValue))
+        : Identifier{move(name)}, type(std::move(type))
+        , baseName(move(baseName)), description(move(description))
+        , required(required), defaultValue(move(defaultValue))
     { }
 
     [[nodiscard]] std::string toString(bool withDefault = false) const;
@@ -124,8 +123,9 @@ struct ObjectSchema : Identifier
     std::vector<VarDecl> fields;
     VarDecl propertyMap;
 
-    explicit ObjectSchema(InOut inOut = InAndOut, std::string description = {}) :
-        Identifier{"", inOut}, description(move(description))
+    explicit ObjectSchema(InOut inOut, const Call* scope = nullptr,
+                          std::string description = {})
+        : Identifier{"", inOut, scope}, description(move(description))
     { }
 
     [[nodiscard]] bool empty() const
@@ -160,9 +160,10 @@ struct Path : public std::string
 struct Response
 {
     explicit Response(std::string code, std::string description = {}) :
-        code(move(code)), body(OnlyOut, move(description))
+        code(move(code)), description(move(description)), body(OnlyOut)
     { }
     std::string code;
+    std::string description;
     VarDecls headers;
     ObjectSchema body;
 };
@@ -246,7 +247,6 @@ struct Model {
     void clear();
 
     Call& addCall(Path path, string verb, string operationId, bool needsToken);
-    void addVarDecl(VarDecls& varList, VarDecl var);
     void addSchema(const ObjectSchema& schema);
     void addImports(const TypeUsage& type);
 

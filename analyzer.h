@@ -78,6 +78,7 @@ private:
 
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node,
                                              IsTopLevel isTopLevel = Inner);
+    TypeUsage addSchema(ObjectSchema&& schema);
     [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence& yamlTypes);
     [[nodiscard]] ObjectSchema
     analyzeSchema(const YamlMap& yamlSchema,
@@ -86,20 +87,15 @@ private:
     void mergeFromSchema(ObjectSchema& target, const ObjectSchema& sourceSchema,
                          const string& baseName = {}, bool required = true);
 
-    template <typename... ArgTs>
     [[nodiscard]] VarDecl makeVarDecl(TypeUsage type, const string& baseName,
-                                      const Identifier& scope, ArgTs&&... args)
-    {
-        return { std::move(type),
-                 _translator.mapIdentifier(baseName, scope.qualifiedName()),
-                 baseName, std::forward<ArgTs>(args)... };
-    }
+                                      const Identifier& scope,
+                                      string description, bool required = false,
+                                      string defaultValue = {}) const;
 
     template <typename... ArgTs>
-    void addVarDecl(VarDecls& varList, ArgTs&&... varDeclArgs)
+    void addVarDecl(VarDecls& varList, ArgTs&&... varDeclArgs) const
     {
-        currentModel().addVarDecl(varList,
-                              makeVarDecl(std::forward<ArgTs>(varDeclArgs)...));
+        varList.emplace_back(makeVarDecl(std::forward<ArgTs>(varDeclArgs)...));
     }
 
     [[nodiscard]] auto logOffset() const
