@@ -354,7 +354,10 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
     if (tu.empty()) {
         // No type shortcut in the types map (but tu may have some attributes
         // loaded by mapType() above)
-        auto&& [refModel, importPath] = loadDependency(refPath);
+        const auto titleIt = tu.attributes.find("title");
+        const auto& overrideTitle =
+            titleIt != tu.attributes.cend() ? titleIt->second : string();
+        auto&& [refModel, importPath] = loadDependency(refPath, overrideTitle);
         if (refModel.types.empty())
             throw Exception(refPath + " has no schemas");
 
@@ -548,7 +551,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
     return model;
 }
 
-pair<const Model&, string> Analyzer::loadDependency(const string& relPath)
+pair<const Model&, string> Analyzer::loadDependency(const string& relPath,
+                                                    const string& overrideTitle)
 {
     const auto& fullPath = context().fileDir / relPath;
     const auto fullPathBase = makeModelKey(fullPath);
@@ -594,6 +598,8 @@ pair<const Model&, string> Analyzer::loadDependency(const string& relPath)
     ContextOverlay _modelContext(*this, fullPath.parent_path(), &model,
                                  Identifier{{}, modelRole});
     fillDataModel(model, yaml, fspath(fullPathBase).filename());
+    if (!overrideTitle.empty() && !model.types.empty())
+        model.types.back().name = overrideTitle;
     return result;
 }
 
