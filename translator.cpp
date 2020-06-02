@@ -294,20 +294,31 @@ conclusion:
 }
 
 string Translator::mapIdentifier(const string& baseName,
-                                 const string& scope) const
+                                 const Identifier* scope, bool required) const
 {
-    auto scopedName = scope;
+    auto scopedName = scope ? scope->qualifiedName() : string();
     scopedName.append(1, '/').append(baseName);
+    string newName = baseName;
     for (const auto& entry: _identifiers)
     {
         const auto& pattn = entry.first;
-        if (!pattn.empty() && pattn.front() == '/')
-            return regex_replace(scopedName,
-                                 regex(++pattn.begin(), pattn.end()),
-                                 entry.second);
-
-        if (pattn == baseName || pattn == scopedName)
-            return entry.second;
+        if (!pattn.empty() && pattn.front() == '/') {
+            auto&& replaced = regex_replace(scopedName,
+                                            regex(++pattn.begin(), pattn.end()),
+                                            entry.second);
+            if (replaced != scopedName) {
+                clog << "Regex replace: " << scopedName << " -> " << replaced << endl;
+                newName = replaced;
+                break;
+            }
+        } else if (pattn == baseName || pattn == scopedName) {
+            newName = entry.second;
+            break;
+        }
     }
-    return baseName;
+    if (newName.empty() && required)
+        throw Exception(
+            "Attempt to skip the required variable '" + baseName
+            + "' - check 'identifiers' block in your gtad.yaml");
+    return newName;
 }

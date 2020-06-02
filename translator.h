@@ -56,7 +56,8 @@ public:
                                     const string& swaggerFormat = {},
                                     const string& baseName = {}) const;
     [[nodiscard]] string mapIdentifier(const string& baseName,
-                                       const string& scope = {}) const;
+                                       const Identifier* scope,
+                                       bool required) const;
 
 private:
     pair_vector_t<string> _substitutions;

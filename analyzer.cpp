@@ -214,8 +214,8 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
             if (!innerSchema.description.empty())
                 schema.description = innerSchema.description;
             for (auto&& f: innerSchema.fields) {
-                f.name = _translator.mapIdentifier(f.baseName,
-                                                   schema.qualifiedName());
+                f.name =
+                    _translator.mapIdentifier(f.baseName, &schema, f.required);
                 if (!f.name.empty())
                     schema.fields.emplace_back(move(f));
             }
@@ -227,8 +227,8 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
                         yamlEntry, "Conflicting property map types when "
                                    "merging properties to the main schema");
 
-                pm.name = _translator.mapIdentifier(pm.baseName,
-                                                    schema.qualifiedName());
+                pm.name = _translator.mapIdentifier(pm.baseName, &schema,
+                                                    pm.required);
                 if (!pm.name.empty())
                     schema.propertyMap = move(pm);
             }
@@ -244,7 +244,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
         if (auto&& tu = _translator.mapType("schema", name); !tu.empty())
             return makeEphemeralSchema(move(tu));
 
-        name = _translator.mapIdentifier(name, currentScope().qualifiedName());
+        name = _translator.mapIdentifier(name, &currentScope(), false);
     }
 
     auto properties = yamlSchema["properties"].asMap();
@@ -395,7 +395,9 @@ VarDecl Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
                               string description, bool required,
                               string defaultValue) const
 {
-    auto&& id = _translator.mapIdentifier(baseName, scope.qualifiedName());
+    auto&& id = _translator.mapIdentifier(baseName, &scope, required);
+    if (id.empty())
+        return {}; // A signal to skip the variable
 
     currentModel().addImports(type);
     return {std::move(type),   move(id), baseName,
