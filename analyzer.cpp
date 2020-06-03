@@ -295,8 +295,9 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
             if (schema.empty())
                 return makeEphemeralSchema(move(tu));
 
-            schema.propertyMap = makeVarDecl(move(tu), "additionalProperties",
-                                             schema, move(description));
+            if (auto&& v = makeVarDecl(move(tu), "additionalProperties", schema,
+                                       move(description)))
+                schema.propertyMap = *v;
         }
     }
     return schema;
@@ -339,11 +340,16 @@ Body Analyzer::analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
             return FlatSchema(bodySchema); // Slicing is ok because no parents
     }
     // pack the whole schema in one parameter/property
-    cout << logOffset() << yamlSchema.location() << ": substituting the "
-         << location << " schema with a '" << packedType.name << ' ' << name
-         << "' parameter" << endl;
-    return makeVarDecl(move(packedType), name, *currentCall(), move(description),
-                       required);
+    if (auto&& v = makeVarDecl(move(packedType), name, *currentCall(),
+                           move(description), required)) {
+        cout << logOffset() << yamlSchema.location() << ": substituting the "
+             << location << " schema with a '" << v->type.qualifiedName() << ' '
+             << v->name << "' parameter" << endl;
+        return *v;
+    }
+    cout << logOffset() << yamlSchema.location() << location
+         << " schema has been nullified by configuration" << endl;
+    return {};
 }
 
 ObjectSchema Analyzer::resolveRef(const string& refPath,
@@ -393,7 +399,7 @@ ObjectSchema Analyzer::makeEphemeralSchema(TypeUsage&& tu) const
     return result;
 }
 
-VarDecl Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
+optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
                               const Identifier& scope,
                               string description, bool required,
                               string defaultValue) const
@@ -403,8 +409,8 @@ VarDecl Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
         return {}; // A signal to skip the variable
 
     currentModel().addImports(type);
-    return {std::move(type),   move(id), baseName,
-            move(description), required, move(defaultValue)};
+    return VarDecl{std::move(type),   move(id), baseName,
+                   move(description), required, move(defaultValue)};
 }
 
 inline auto makeModelKey(const string& filePath)
