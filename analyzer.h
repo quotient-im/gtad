@@ -24,6 +24,7 @@
 
 #include <stack>
 #include <filesystem>
+#include <optional>
 
 class YamlNode;
 class YamlMap;
