@@ -16,13 +16,20 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 
 # Setup command line parameters for the compiler and linker
-foreach (FLAG "" all pedantic extra no-unused-parameter
-        no-unused-lambda-capture no-shadow-field-in-constructor)
-    CHECK_CXX_COMPILER_FLAG("-W${FLAG}" WARN_${FLAG}_SUPPORTED)
-    if ( WARN_${FLAG}_SUPPORTED AND NOT CMAKE_CXX_FLAGS MATCHES "(^| )-W?${FLAG}($| )")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W${FLAG}")
-    endif ()
-endforeach ()
+if (MSVC)
+    add_compile_options(/EHsc /W3
+        /wd4100 /wd4127 /wd4242 /wd4244 /wd4245 /wd4267 /wd4365 /wd4456 /wd4459
+        /wd4464 /wd4505 /wd4514 /wd4571 /wd4619 /wd4623 /wd4625 /wd4626 /wd4706
+        /wd4710 /wd4774 /wd4820 /wd4946 /wd5026 /wd5027)
+else ()
+    foreach (FLAG "" all pedantic extra no-unused-parameter
+            no-unused-lambda-capture no-shadow-field-in-constructor)
+        CHECK_CXX_COMPILER_FLAG("-W${FLAG}" WARN_${FLAG}_SUPPORTED)
+        if (WARN_${FLAG}_SUPPORTED AND NOT CMAKE_CXX_FLAGS MATCHES "(^| )-W?${FLAG}($| )")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W${FLAG}")
+        endif ()
+    endforeach ()
+endif ()
 
 find_package(Qt5 5.7 REQUIRED Core)
 get_filename_component(Qt5_Prefix "${Qt5_DIR}/../../../.." ABSOLUTE)
@@ -44,7 +51,7 @@ option(YAML_CPP_BUILD_TESTS "Enable yaml-cpp tests" OFF)
 option(YAML_CPP_BUILD_TOOLS "Enable yaml-cpp tools" OFF)
 option(YAML_CPP_BUILD_CONTRIB "Enable contrib stuff in library" OFF)
 add_subdirectory(yaml-cpp)
-add_subdirectory(mustache)
+#add_subdirectory(mustache) # This is only needed to build mustache tests
 
 list(APPEND SRCS
     main.cpp
