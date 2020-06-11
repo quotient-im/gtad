@@ -42,7 +42,7 @@ install:
 - if [ "$TRAVIS_OS_NAME" != "linux" ]; then export PATH="/usr/local/opt/qt/bin:$PATH"; fi
 - eval ${OVERRIDES}
 - git clone https://github.com/quotient-im/libQuotient.git
-- git clone https://github.com/quotient-im/matrix-doc.git
+- git clone https://github.com/matrix-org/matrix-doc.git
 
 script:
 - mkdir build && pushd build
@@ -51,8 +51,6 @@ script:
 - popd
 # test
 - cd libQuotient
-- cmake .
 - cmake -DMATRIX_DOC_PATH="../matrix-doc" -DGTAD_PATH="../build/gtad" .
 - cmake --build . --target update-api
 - cmake --build . --target all
-

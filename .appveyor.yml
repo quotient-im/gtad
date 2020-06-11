@@ -2,6 +2,7 @@ image: Visual Studio 2017
 
 environment:
   DEPLOY_DIR: gtad-%APPVEYOR_BUILD_VERSION%
+  CMAKE_ARGS: '-G "NMake Makefiles JOM"'
   matrix:
   - QTDIR: C:\Qt\5.9\msvc2017_64
     VCVARS: "vcvars64.bat"
@@ -19,7 +20,7 @@ init:
 before_build:
 - git submodule update --init --recursive
 - mkdir build && cd build
-- cmake -G "NMake Makefiles JOM" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX="%DEPLOY_DIR%" ..
+- cmake %CMAKE_ARGS% -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX="%DEPLOY_DIR%" ..
 
 build_script:
 - cmake --build .
@@ -28,11 +29,22 @@ after_build:
 - cmake --build . --target install
 - 7z a gtad.zip "%DEPLOY_DIR%\"
 
+before_test:
+- cd ..
+- git clone https://github.com/quotient-im/libQuotient.git
+- git clone https://github.com/matrix-org/matrix-doc.git
+- cd gtad
+
+test_script:
+- cd ..\libQuotient
+- cmake %CMAKE_ARGS% -DMATRIX_DOC_PATH="../matrix-doc" -DGTAD_PATH="../gtad/%DEPLOY_DIR%/gtad" .
+- cmake --build . --target update-api
+- cmake --build . --target all
+- cd ..\gtad
+
 # Uncomment this to connect to the AppVeyor build worker
 #on_finish:
 #  - ps: $blockRdp = $true; iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
-
-test: off
 
 artifacts:
 - path: gtad.zip
