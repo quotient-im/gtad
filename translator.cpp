@@ -246,7 +246,7 @@ string Translator::mapImport(const string& importBaseName) const
     //    the first on the list, and that only data models can be imported.
     if (!_dataTemplates.empty())
         result += _dataTemplates.front().first;
-    return result;
+    return result.string();
 }
 
 Translator::output_config_t Translator::outputConfig(const path& filePathBase,

@@ -74,7 +74,7 @@ private:
 
     [[nodiscard]] std::pair<const Model&, string>
     loadDependency(const string& relPath, const string& overrideTitle);
-    void fillDataModel(Model& m, const YamlNode& yaml, const string& filename);
+    void fillDataModel(Model& m, const YamlNode& yaml, const fspath &filename);
 
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node,
                                              IsTopLevel isTopLevel = Inner);

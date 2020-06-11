@@ -26,6 +26,7 @@
 #include <yaml-cpp/node/detail/impl.h>
 
 #include <iostream>
+#include <filesystem>
 #include <utility>
 
 // Mostly taken from yaml-cpp but stores and adds fileName to the returned values
@@ -231,7 +232,7 @@ class YamlMap : public YamlNodeTemplate<YamlNodePair, YAML::NodeType::Map>
 
         using my_type::YamlNodeTemplate;
 
-        static YamlMap loadFromFile(const std::string& fileName,
+        static YamlMap loadFromFile(const std::filesystem::path& fileName,
             const pair_vector_t<std::string>& replacePairs = {});
 
         template <typename KeyT>

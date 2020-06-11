@@ -561,7 +561,7 @@ pair<const Model&, string> Analyzer::loadDependency(const string& relPath,
                                                     const string& overrideTitle)
 {
     const auto& fullPath = context().fileDir / relPath;
-    const auto fullPathBase = makeModelKey(fullPath);
+    const auto fullPathBase = makeModelKey(fullPath.string());
     const auto [mIt, unseen] = _allModels.try_emplace(fullPathBase);
     auto& model = mIt->second;
     const pair result {cref(model), _translator.mapImport(fullPathBase)};
@@ -610,12 +610,12 @@ pair<const Model&, string> Analyzer::loadDependency(const string& relPath,
 }
 
 void Analyzer::fillDataModel(Model& m, const YamlNode& yaml,
-                             const string& filename)
+                             const fs::path& filename)
 {
     m.apiSpec = ApiSpec::JSONSchema;
     m.apiSpecVersion = 201909; // Only JSON Schema 2019-09 is targeted for now
     auto&& s = analyzeSchema(yaml);
     if (s.name.empty())
-        s.name = camelCase(filename);
+        s.name = camelCase(filename.string());
     m.addSchema(move(s));
 }

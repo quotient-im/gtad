@@ -83,7 +83,7 @@ int main(int argc, char* argv[])
         for(const auto& path: paths) {
             auto ftype = fs::status(path).type();
             if (ftype == fs::file_type::regular)
-                Analyzer{translator}.loadModel(path, role);
+                Analyzer{translator}.loadModel(path.string(), role);
 
             if (ftype != fs::file_type::directory)
                 continue;
@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
                 auto&& fName = f.path().filename();
                 if (find(exclusions.begin(), exclusions.end(), fName)
                     == exclusions.cend())
-                    a.loadModel(move(fName), role);
+                    a.loadModel(fName.string(), role);
             }
         }
         for (const auto& [pathBase, model]: Analyzer::allModels()) {
