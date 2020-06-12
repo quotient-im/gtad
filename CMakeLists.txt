@@ -71,3 +71,6 @@ elseif(CMAKE_CXX_COMPILER_ID EQUAL Clang AND CMAKE_CXX_COMPILER_VERSION VERSION_
     set(std_fs_lib "c++fs")
 endif()
 target_link_libraries(${CMAKE_PROJECT_NAME} Qt5::Core yaml-cpp ${std_fs_lib})
+
+install(TARGETS ${CMAKE_PROJECT_NAME}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
