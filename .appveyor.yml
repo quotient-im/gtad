@@ -37,7 +37,7 @@ before_test:
 test_script:
 - cd ..\libQuotient
 - cmake %CMAKE_ARGS% -DMATRIX_DOC_PATH="../matrix-doc" -DGTAD_PATH="../gtad/build/gtad" .
-- cmake --build . --target update-api
+- cmake --build . --target generate-unformatted-api
 - cmake --build . --target all
 - cd ..\gtad
 
