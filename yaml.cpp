@@ -82,7 +82,7 @@ YAML::Node makeNodeFromFile(const string& fileName,
 
         string fileContents = readFile(fileName);
         if (fileContents.empty())
-            throw YAML::BadFile();
+            throw YAML::BadFile(fileName);
         for (const auto& subst: replacePairs)
             fileContents = std::regex_replace(fileContents,
                                  std::regex(subst.first), subst.second);
