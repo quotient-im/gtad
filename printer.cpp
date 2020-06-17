@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <locale>
+#include <regex>
 
 using namespace std;
 using namespace std::placeholders;
@@ -193,7 +194,14 @@ void setList(ObjT& target, const string& name, const ContT& source)
 template <typename ModelT>
 void dumpDescription(object& target, const ModelT& model)
 {
-    setList(target, "description", km::split(model.description, '\n'));
+    vector<string> lines{};
+    if (!model.description.empty()) {
+        regex re{"\\n"};
+        lines = {sregex_token_iterator{model.description.cbegin(),
+                                       model.description.cend(), re, -1},
+                 sregex_token_iterator{}};
+    }
+    setList(target, "description", lines);
 }
 
 object Printer::renderType(const TypeUsage& tu) const
