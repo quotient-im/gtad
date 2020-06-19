@@ -14,7 +14,7 @@ languages with static type checking.
 
 A brief introduction to the topic of API description languages (ADLs) can be
 found in [the talk at Qt World Summit 2017](https://youtu.be/W5TmRozH-rg) that
-also briefly announces the GTAD project.
+also announces the GTAD project.
 
 ## Contacts
 Matrix room: [#gtad:matrix.org](https://matrix.to/#/#gtad:matrix.org).
@@ -74,7 +74,8 @@ cmake .. # Pass -DCMAKE_PREFIX_PATH and -DCMAKE_INSTALL_PREFIX here if needed
 cmake --build . --target all
 ```
 This will produce a gtad binary in `build_dir` inside your project sources.
-Installing is not supported yet.
+Installing is not generally supported yet; `cmake --build . --target install`
+installs a single executable with no dependencies and/or documentation.
 
 ## Usage
 
@@ -82,7 +83,7 @@ GTAD uses 3 inputs to generate "things":
 1. Swagger/OpenAPI definition files, further referred to as OpenAPI files or
    OpenAPI definitions. Only
    [OpenAPI 2](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md)
-   is supported yet (version 3 is in
+   is supported for now (version 3 is in
    [the roadmap](https://github.com/KitsuneRal/gtad/projects/1#column-526169)).
    Each file is treated as a separate source. Notably, the referenced
    (via `$ref`) files are parsed independently from the referring ones;
@@ -93,23 +94,20 @@ GTAD uses 3 inputs to generate "things":
    files). The format of this file is described in detail below.
 3. Source code template files. As of now, GTAD uses
    [Kainjow's Mustache implementation](https://github.com/kainjow/Mustache) for
-   templating. This may change in the future (Lua looks as a very promising 
-   candidate to replace Mustache). GTAD exports the model for the API as
+   templating. GTAD exports the model for the API as
    a Mustache structure; this is covered in the respective section below.
 
 A good example of GTAD usage can be found in
-[libQMatrixClient](https://github.com/QMatrixClient/libqmatrixclient/) that has
+[libQuotient](https://github.com/quotient-im/libQuotient/) that has
 its network request classes generated from OpenAPI definitions of
 [Matrix CS API](https://matrix.org/docs/spec/client_server/unstable.html).
 The CMakeLists.txt has a GTAD invocation line, using
-[gtad.yaml](https://github.com/QMatrixClient/libqmatrixclient/blob/master/lib/csapi/gtad.yaml)
-for the configuration file and
-[{{base}}.h.mustache](https://github.com/QMatrixClient/libqmatrixclient/blob/master/lib/csapi/%7B%7Bbase%7D%7D.h.mustache)/
-[{{base}}.cpp.mustache](https://github.com/QMatrixClient/libqmatrixclient/blob/master/lib/csapi/%7B%7Bbase%7D%7D.cpp.mustache)
-as templates for code generation. See also notes in that project's
-[CONTRIBUTING.md](https://github.com/QMatrixClient/libqmatrixclient/blob/master/CONTRIBUTING.md)
+[gtad.yaml](https://github.com/quotient-im/libQuotient/blob/master/gtad/gtad.yaml)
+for the configuration file and a few Mustache templates for code generation
+next to it. See also notes in that project's
+[CONTRIBUTING.md](https://github.com/quotient-im/libQuotient/blob/master/CONTRIBUTING.md)
 and
-[CMakeLists.txt](https://github.com/QMatrixClient/libqmatrixclient/blob/master/CMakeLists.txt)
+[CMakeLists.txt](https://github.com/quotient-im/libQuotient/blob/master/CMakeLists.txt)
 for an idea how to integrate GTAD in your project.
 
 ### Invocation
@@ -172,53 +170,78 @@ the rest of the string until the trailing optional `/` becomes a regular
 expression as described at https://en.cppreference.com/w/cpp/regex/ecmascript.
 When using the regular expression for matching, the substitution string can
 include `$1`,`$2`,... to reference the submatches; or `$&` to reference
-the entire match.
+the entire match. Except from the first and the last position, `/` has
+no special meaning and should not be escaped.
 
-One of the main cases for `identifiers` is escaping parameter names that clash
+One of the main cases for `identifiers` is to change names that clash
 with reserved words of the target language (`unsigned` in the example below)
 or otherwise undesirable as field/parameter names. If you add, e.g.,
 `unsigned: unsignedData` to the `identifiers` section, GTAD will transform
 all target parameter names `unsigned` to `unsignedData`, unbreaking C++ code
-that would be otherwise invalid. The Mustache configuration will have both
+that otherwise would be invalid. The Mustache configuration will have both
 the original (`{{baseName}}`) and the transformed (`{{paramName}}` or
-`{{nameCamelCase}}`) names of those parameters so that you can still use it
-for JSON key names in actual API payloads in your template files.
+`{{nameCamelCase}}`) names of those parameters so that you can still use
+the original name for JSON key names in actual API payloads and
+a transformed one to name C++ identifiers in your template files.
 
-Since GTAD 0.7 you can prepend the scope (schema or call name; see below for
-a caveat on the call name syntax) as they appear in the API definition file
-to limit the substitution to a specific occurence of the identifier.
-The separating character is `/` (works without escaping even inside regexes).
+Since GTAD 0.7 you can use the scope (schema or call name; see below for
+the caveat on the call name syntax) to match specific occurence(s) of
+the identifier. The scope name is matched in the original form as it appears
+in the API description file but is not represented in the substituting string
+in any way; it cannot be rewritten. The separating character is `/` (unescaped, as mentioned).
 For calls, you should use the name provided in the `operationId` field
-followed by either `>` for identifiers in the request or `<` for those in
-the response. There's no syntax to cover both directions in one go as yet.
+followed by either `>` for identifiers in the request or `<` for those
+in the response. If you need to cover both directions, you're likely also
+covering several calls using a regex; just put a full stop (`.`)
+instead of the direction character.
 
-Such prepending is especially useful to adjust the parameter name for
-`additionalProperties` (see further in this document) in different schemas.
-E.g., the line 
+Scope matching is especially useful to adjust the parameter name for
+`additionalProperties` (see further in this document) in different schemas
+and the "packed" response body name (by default it's always `data`) in
+different calls. A "packed" body is a case when the entire JSON in
+the request or response body is treated as a single piece (parameter or
+returned value, respectively). In the opposite, "unpacked" case
+the top-level JSON object in the request body or response body is
+destructured to a series of parameters.
+
+Also since GTAD 0.7 you can skip the entire field by renaming it to an empty
+string. This is useful to prune deprecated fields from your generated code
+without touching the original API description. To protect you from shooting
+yourself in the foot GTAD will error if an attempt is made to remove a field 
+that has `required: true` in the API description.
+
+Example (the first line works in GTAD 0.6, the rest since GTAD 0.7): 
 ```yaml
-AuthenticationData/additionalProperties: authInfo
+default: isDefault                                # 1
+AuthenticationData/additionalProperties: authInfo # 2
+/^requestTokenTo.*</data/: response               # 3
+/requestOpenIdToken</(.*)/: token$1               # 4
+setAccountData>/additionalProperties: accountData # 5
+getProtocols</data: protocols                     # 6
+login>/medium: "" # The quotes are mandatory here # 7
 ```
-will rename the `additionalProperties` field of `AuthenticationData` schema
-to `authInfo` (the schema name will be kept intact by this; read about
-the `types` section on renaming schemas). It's  at the same time, you can
-have a line
-```yaml
-getWhoIs</additionalProperties: devices
-```
-that will rename the `additionalProperties` property in the response
-of `getWhoIs` operation to `devices`.
-
-The scope part cannot be rewritten, and the substitution string
-must NOT include it. In particular, if you combine scoping with
-regular expressions make sure to exclude the scope part from
-the substitution string. 
-
-Since GTAD 0.7 you can also skip the entire field by renaming it to an empty
-string - e.g., `login>/medium: ""` (mind the quotes, they are required) will
-remove the `medium` parameter from the definition for `login` request. This
-is useful to prune deprecated fields from your generated code without
-touching the original API description. To protect you from shooting yourself
-GTAD will error if an attempt to remove a `required` field is made.
+This will:
+1. All parameters named `default` in the source API will be named `isDefault`
+   in the generated code.
+2. Rename the `additionalProperties` field of `AuthenticationData`
+   schema to `authInfo`. The schema name will be kept intact, only
+   the identifier will be renamed.
+3. For any call with the name starting with `requestTokenTo`, rename the `data`
+   parameter (likely, but not necessarily, representing the "packed" response
+   body) occuring in the call's response (`<`) to `response`. The call name
+   itself is not changed.
+4. For a call named `requestOpenIdToken`, prepend every parameter in its
+   response with `token`. This line can be abbreviated to
+   `/requestOpenIdToken</: token`; this is not recommended though, as it relies
+   quite heavily on the specific way GTAD makes a replacement and may break
+   once this logic changes.
+5. Rename the `additionalProperties` field occuring in the top level of
+   the `setAccountData` call's request body to `accountData`.
+6. Rename the `data` field (likely a "packed" response body) in
+   the `getProtocols` call's response body to `protocols`.
+7. Completely remove the `medium` parameter from the `login` request definition,
+   as long as this parameter is not marked with `required: true` in the API
+   description file. 
 
 ##### `types`
 This is the biggest and the most important part of the analyzer configuration,
@@ -357,11 +380,42 @@ the following non-standard _types_/_formats_ in the GTAD configuration file
     # For all other ref'ed types, resolve references as usual and set the
     # 'referenced' attribute
     //: { referenced: }
-
   ```
   Beware: supplying `type` in a catch-all (`//`) node in this section
   (e.g., `$ref: { //: { type: Ref } }`) will lead to coercion of _all_
   not explicitly mentioned $ref'ed types to the type specified in this node.
+  
+  Since GTAD 0.7, two special type attributes can be used in `$ref` blocks:
+  - `title: newName` will override the name of the main (top-level) referenced
+    structure with `newName`, disregarding any `title` it has in
+    the API description.
+  - `_inline: true` will attempt to "inline" the top-level structure.
+    
+    As described in the very beginning of the `Usage` section, GTAD usually
+    represents files included via `$ref` as separate type definitions
+    in separate target files. There's one exception to that: if the loaded
+    model turns out to be "trivial" - containing exactly one schema that
+    has an exactly one parent, basically, an alias for another type -
+    GTAD will replace usages of this schema with usages of the original type
+    and eliminate the schema from the generated files entirely (both for
+    definition and for usage).
+    
+    If `_inline: true` is specified for a given `$ref` GTAD will attempt
+    to apply the same optimisation even if the loaded schema is non-trivial.
+    This is useful in cases where an additional level of indirection
+    complicates the code without bringing value, e.g., to unroll the top-level
+    response object to a series of response parameters instead. Not all schemas
+    can be inlined; if the $ref'ed schema itself consists of a `$ref` to yet 
+    another schema _and_ parameters on top of that (more generally: if there's
+    an `allOf` instance with more than one list entry in the API description)
+    such schema will be "imported" as usual regardless of the `_inline` value -
+    that is, the type will be defined in a separate file and this type will
+    be used at the place of reference, with imports added
+    in the referring file.
+    
+    As of GTAD 0.7, `_inline: false` does nothing; eventually it may force
+    generating a full-fledged type for a schema even when the schema is
+    trivial.
     
 - _type_ `object`: this is an entry (without _formats_ underneath) that
   describes the target type to be used when GTAD could not find any schema
@@ -370,8 +424,8 @@ the following non-standard _types_/_formats_ in the GTAD configuration file
   when an input parameter for an API call is described as `schema` without
   any attributes or with a sole `type: object` attribute; this normally means
   that a user can supply _anything_. Either a generic type (`std::any` in
-  C++17 or `void*` in C) or a generic JSON object (as long as the API is based
-  on JSON structures) such as Qt's `QJsonObject` can be used for this purpose.
+  C++17 or `void*` in C) or a generic JSON object such as Qt's `QJsonObject`
+  (as long as the API is based on JSON structures) can be used for this purpose.
 
 - `map`: this is what OpenAPI clumsily calls `additionalProperties` but 
   a better name would probably be "property map" or "property list". 
@@ -402,41 +456,48 @@ the following non-standard _types_/_formats_ in the GTAD configuration file
   e.g. mapping to C++17 `std::variant<>` might look like:
   ```yaml
   variant:
-    std::variant<{{#types}}{{_}}{{#@join}}, {{/@join}}{{/@types}}>
+    std::variant<{{#types}}{{_}}{{#_join}}, {{/_join}}{{/types}}>
     imports: <variant>
   ```
 
 ##### Advanced type mapping configuration
 
 In case when an element type of an array or a property map is in turn
-a container (an array, a map/`additionalProperties` or a variant) _and_
-it does not have a name, the _format_ can be specified as follows (no nesting,
-`string[][]` is not
-supported):
-- for arrays: `<elementType>[]`
-- for maps aka `additionalProperties`: `string-><elementType>`
-- for variants: `<elementType1>,<elementType2>,...` (in the same order as in
-the API description)
+a container (an array, a map/`additionalProperties` or a variant) _and_ it
+does not have a name, the _format_ can be specified as follows (no nesting,
+`string[][]` is not supported):
+- for arrays: `<elementType>[]`;
+- for maps aka `additionalProperties`: `string-><elementType>`;
+- for variants: `<elementType1>,<elementType2>,...` (exactly in the same
+  order as in the API description).
+
 You should _not_ put any whitespaces in those constructs. The consolidated
 example follows:
 ```yaml
 - array:
-  # Here's also an example of passing the namespace as a separate type
+  # Here's also an example of passing the namespace as a custom `ns` type
   # attribute so that you could add or omit it in the code, depending
   # on your `using` context.
-- string: { type: vector<string>, ns: std }
-- int[]: { type: vector<vector<int>> }
-- /string->.+/: # Any additionalProperties map with non-empty structure
-    type: "QVector<QHash<QString, {{1}}>>"
-    # You can use imports either as a string or as a list attribute in
-    # configuration; here's the example of using it as a list.
-    imports: [ <QVector>, <QHash> ]
-- /^string,null|null,string$/:
-    QStringList # Because QString can assume null values
+  - string: { type: vector<string>, ns: std }
+  - int[]: vector<vector<int>> # A shortcut for { type: ... }
+  - /string->.+/: # Any additionalProperties map with non-empty structure
+      type: "QVector<QHash<QString, {{1}}>>"
+      # You can use imports either as a string or as a list attribute in
+      # configuration; here's the example of using it as a list.
+      imports: [ <QVector>, <QHash> ]
+  - /^string,null|null,string$/:
+      QStringList # Because QString can assume null values
 ```
 Generally though it's better (more readable) to assign a name to such
 an element type and use this name instead - but you have to change the API
 description for that.
+
+It's not possible to use the same shortcut on the _type_ (top) level:
+```yaml
+- int[]: # will not work
+- array:
+  - int: # correct
+```
 
 #### Printer configuration
 
@@ -471,17 +532,17 @@ Mustache template syntax boils down to 4 tag types:
     function with that name, the function gets the inner block and renders it,
     optionally using the current context (definition of new lambdas without
     code rebuilding is unfortunately impossible due to the compiled nature
-    of C++);
+    of C++ and the lack of dynamically loaded plugins framework in GTAD);
 - `{{>partial}}` - somewhat similar to `{{variable}}` but the _result_ of
   substitution is treated as a Mustache template itself, meaning that Mustache
-  goes over it looking for more tags to substitute.
+  goes through it looking for more tags to substitute.
 - `{{^invertedSection}}{{/invertedSection}}` - the same as a _genuine section_
   except that it checks that a particular value is _false_ in the current
   context (i.e. it's either absent or evaluates to false) and only renders
   the inner block if the value is not found. No context overloading occurs as
   there's nothing to overload it with.
 
-Supporting tag types include a `{{!comment}}` and delimiter reassignment
+Auxiliary tag types include a `{{!comment}}` tag and delimiter reassignment
 (e.g., `{{=<% %>=}}` switches from the `{{`/`}}` pair to `<%`/`%>`)
 
 As of GTAD 0.7, the printer configuration is stored in the top-level
@@ -509,10 +570,10 @@ a file with the path `path/to/file` or, if that is not found,
 `path/to/file.mustache`.
 
 ##### `templates`
-This is two maps of extensions for generated files to Mustache _templates_
-used to generate each file: one map under `api` for API operation descriptions
-and another one under `data` for data schemas. For a given language, this is
-fairly static: in case of C/C++, it's likely to look like:
+This consists of two maps of extensions for generated files to Mustache
+_templates_ used to generate each file: one map under `api` for API operation
+descriptions and another one under `data` for data schemas. For a given
+language, this is fairly static: in case of C/C++, it's likely to look like:
 ```yaml
 templates:
   data:
@@ -538,15 +599,17 @@ be entirely overwritten on every GTAD run.
 
 ##### Mustache tips and tricks
 
-The used implementation of Mustache is very literal with respect to newlines:
-it does not try to collapse/eliminate any of them around Mustache tags. This
-becomes quite a problem if you try to get the nicely formatted text directly
-from GTAD. To save effort on repositioning Mustache tags desperately in order
-to get the formatting right it's much more labour-efficient to feed GTAD
-output to clang-format or a similar code formatter (libQuotient does that in
-CMakeLists.txt). If you still need some way to eliminate extra newlines, note
-that the ending `}}` of any tag can be put on a newline. Hence, the minimal
-way to consume a nasty newline is to just put a Mustache comment as follows:
+Mustache does not know anything about the target language and only does minimal
+work to collapse/eliminate linebreaks (basically - if there's nothing on the
+line except Mustache tags the extra linebreak will be eliminated). This becomes
+quite a problem if you try to get the nicely formatted text directly from GTAD.
+To save effort on repositioning Mustache tags desperately in order to get
+the formatting right it's much more labour-efficient to feed GTAD output to
+clang-format or a similar code formatter (libQuotient does that in
+`CMakeLists.txt`). If you still need some way to eliminate extra linebreaks,
+note that the ending `}}` of any tag can be put on a new line. Hence,
+the minimal way to consume a nasty linebreak is to just put a Mustache comment
+as follows:
 ```handlebars
 (a lot of text, I really want to break it {{!
 }}in two lines but only in the template)
@@ -565,8 +628,9 @@ start with `@` to avoid clashes with ordinary context values.
   the passed text, e.g. `{{#@toupper}}tExt{{/@toupper}}` becomes `TEXT`.
 - before GTAD 0.7, `@filePartial` allowed to load a Mustache template from
   another file, with the relative or absolute path passed as the argument.
-  This is no more needed now that GTAD is on Kainjow Mustache v 4.0 that 
-  allows to use the normal Mustache `{{>partial}}` syntax for the same.
+  This is no more needed now that GTAD is on Kainjow Mustache v4.0 that 
+  allows to use the normal Mustache `{{>partial}}` syntax to load a partial
+  either from the context (`gtad.yaml`) or, failing that, from a file.
 
 GTAD has a few extensions to _lists_ compared to original Mustache:
 - on the same level with the list `l` an additional boolean variable with
@@ -578,23 +642,26 @@ GTAD has a few extensions to _lists_ compared to original Mustache:
   the following snippet
   ```handlebars
   {{#l?}}{{#l}}{{#a}}
-    {{!the following is on an l list nested in a}}
+    {{!the following is supposed to be on the `l?` nested in `a`;
+       but it checks the upper level `l?` when inner `l?` is empty or false}}
     {{^l?}}something{{/l?}}
-  {{/a}}{{/l}}{{#l?}}
+  {{/a}}{{/l}}{{/l?}}
   ```
-  will emit `something` even if the inner `l` list is empty.
-- inside the list, a boolean variable `@join` is set to true for all elements
+  will not emit `something` even if the inner `l` list is empty. Fixing this is
+  [on the roadmap](https://github.com/KitsuneRal/gtad/issues/50).
+- inside the list, a boolean variable `_join` is set to true for all elements
   except the last one. For (eventual) compatibility with Mustache templates
-  used in swagger-codegen, there's a synonym `hasMore` equal to `@join`.
+  used in swagger-codegen, there's a synonym `hasMore` equal to `_join`.
 - because the above variables have to be created under the list context,
   lists of literals are exposed to templates as lists of hashmaps, with the
-  original element value saved to `{{_}}`.
+  original element value accessed at `{{_}}` instead of `{{.}}` that is
+  usual for Mustache.
   
 The following example demonstrates list-related tags coming together.
 The template:
 ```handlebars
-The list{{#list?}}: {{#list}}{{_}}{{#@join}}, {{/@join}}{{/list}}{{/list?}}{{!
-See the note about newlines in "Tips and tricks" above
+The list{{#list?}}: {{#list}}{{_}}{{#_join}}, {{/_join}}{{/list}}{{/list?
+}}{{!See the note about linebreaks in "Tips and tricks" above
 }}{{^list?}} is empty{{/list?}}
 ```
 For the context: `{ "list": [1, 2, 3] }` the output will be:
