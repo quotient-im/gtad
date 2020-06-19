@@ -345,14 +345,14 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
     contextData.set("basePathWithoutHost", model.basePath);
     contextData.set("basePath", model.hostAddress + model.basePath);
     // FIXME: remove hardwired logic
-    setList(contextData, "imports", model.imports, [](string import) {
+    setList(contextData, "imports", model.imports, [this](string import) {
         if (import.empty())
             cerr << "Warning:"
                     " empty import, the emitted code will likely be invalid"
                  << endl;
 
-        if (import.front() != '"' && import.front() != '<')
-            import = '"' + import + '"';
+        if (!startsWith(import, _leftQuote) && import.front() != '<')
+            import = _leftQuote + import + _rightQuote;
         return import;
     });
 
