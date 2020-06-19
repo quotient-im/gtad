@@ -339,9 +339,8 @@ Body Analyzer::analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
             // No parents, non-empty - unpack the schema to body properties
             return FlatSchema(bodySchema); // Slicing is ok because no parents
     }
-    // pack the whole schema in one parameter/property
-    if (auto&& v = makeVarDecl(move(packedType), name, *currentCall(),
-                           move(description), required)) {
+    if (auto&& v = makeVarDecl(move(packedType), name, location,
+                               move(description), required)) {
         cout << logOffset() << yamlSchema.location() << ": substituting the "
              << location << " schema with a '" << v->type.qualifiedName() << ' '
              << v->name << "' parameter" << endl;
