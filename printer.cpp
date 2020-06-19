@@ -45,15 +45,14 @@ inline string safeString(const Printer::context_type& data, const string& key,
 
 // While C++20 is not around
 
-inline bool startsWith(const string& s, const string::value_type* ss)
+inline bool startsWith(const string_view& s, const string_view& ss)
 {
-    for (auto ps = s.begin(); ps != s.end() && ss; ++ps, ++ss);
-    return !ss;
+    return s.size() >= ss.size() && equal (ss.begin(), ss.end(), s.begin());
 }
 
-inline bool endsWith(const string& s, const string& ss)
+inline bool endsWith(const string_view& s, const string_view& ss)
 {
-    return equal(ss.rbegin(), ss.rend(), s.rbegin());
+    return s.size() >= ss.size() && equal(ss.rbegin(), ss.rend(), s.rbegin());
 }
 
 Printer::template_type Printer::makeMustache(const string& tmpl) const
