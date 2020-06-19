@@ -307,7 +307,8 @@ string Translator::mapIdentifier(const string& baseName,
                                             regex(++pattn.begin(), pattn.end()),
                                             entry.second);
             if (replaced != scopedName) {
-                clog << "Regex replace: " << scopedName << " -> " << replaced << endl;
+//                cout << "Regex replace: " << scopedName << " -> " << replaced
+//                     << endl;
                 newName = replaced;
                 break;
             }
