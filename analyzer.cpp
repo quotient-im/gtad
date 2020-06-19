@@ -368,17 +368,28 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
 
         auto&& refSchema = refModel.types.back();
 
+        // Take the configuration override into account
+        if (auto inlineAttrIt = tu.attributes.find("_inline");
+            inlineAttrIt != tu.attributes.end() && inlineAttrIt->second == "true")
+            refsStrategy = InlineRefs;
         if (refsStrategy == InlineRefs || refModel.trivial()) {
-            cout << logOffset() << "Schema at " << refPath;
-            if (refsStrategy != InlineRefs)
-                cout << " is trivial (see the mapping above) and";
-            cout << " will be inlined" << endl;
+            if (!refSchema.hasParents()
+                || !(!refSchema.fields.empty() || refSchema.hasPropertyMap())) {
+                if (refModel.trivial())
+                    cout << logOffset() << "The model at " << refPath
+                         << " is trivial (see the mapping above) and";
+                else
+                    cout << logOffset() << "The main schema from " << refPath;
+                cout << " will be inlined" << endl;
 
-            for (auto&& i: refModel.imports)
-                currentModel().imports.insert(i);
-            if (refModel.types.size() > 1)
-                currentModel().imports.insert(importPath);
-            return refSchema;
+                for (auto&& i: refModel.imports)
+                    currentModel().imports.insert(i);
+                if (refModel.types.size() > 1)
+                    currentModel().imports.insert(importPath);
+                return refSchema;
+            } else
+                cout << logOffset()
+                     << "Inlining suppressed due to model complexity" << endl;
         }
         tu.name = refSchema.name;
         tu.baseName = tu.name.empty() ? refPath : tu.name;
