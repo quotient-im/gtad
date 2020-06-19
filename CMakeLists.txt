@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1) # Maybe works with even older versions
+cmake_minimum_required(VERSION 3.8) # Older ones don't know about C++17
 
 project(gtad CXX)
 

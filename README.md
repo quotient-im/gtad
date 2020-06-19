@@ -32,12 +32,12 @@ in the future).
 ### Pre-requisites
 - a recent Linux, Windows or macOS system
   - for Ubuntu flavours - bionic or newer (or a derivative) is good enough
-  - [macOS 10.15 or later is needed](https://developer.apple.com/documentation/xcode_release_notes/xcode_11_release_notes)
+  - [macOS 10.15 SDK or later is needed](https://developer.apple.com/documentation/xcode_release_notes/xcode_11_release_notes)
     due to `std::filesystem` dependency
 - a Git client to check out this repo
 - Qt 5 (either Open Source or Commercial), version 5.7 or higher (eventually
   will be phased out)
-- CMake 3.10 or newer (from your package management system or
+- CMake 3.8 or newer (from your package management system or
   [the official website](https://cmake.org/download/))
 - a C++ toolchain with C++17 support _including File system library_ - this means
   GCC 8 (Windows, Linux, OSX), Clang 7 (Linux), Xcode 11 (macOS 10.15) or
