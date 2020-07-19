@@ -95,22 +95,21 @@ struct TypeUsage : Identifier
     }
 };
 
-struct VarDecl : Identifier
-{
+struct VarDecl : Identifier {
+    using string = std::string;
     TypeUsage type;
-    std::string baseName; //< Identifier as used in the API
-    std::string description;
-    bool required = false; // For the default constructor
-    std::string defaultValue;
+    string baseName; //< Identifier as used in the API
+    string description;
+    bool required = false;
+    string defaultValue;
 
     VarDecl() = default;
-    VarDecl(TypeUsage type, std::string name, std::string baseName,
-            std::string description, bool required = false,
-            std::string defaultValue = {})
+    VarDecl(TypeUsage type, string name, string baseName, string description,
+            bool required = false, string defaultValue = {})
         : Identifier{move(name)}, type(std::move(type))
         , baseName(move(baseName)), description(move(description))
         , required(required), defaultValue(move(defaultValue))
-    { }
+    {}
 
     [[nodiscard]] std::string toString(bool withDefault = false) const;
 };
