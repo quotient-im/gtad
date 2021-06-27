@@ -1,7 +1,7 @@
-# Copyright (C) 2019 Project Quotient
-#
-# You may use this file under the terms of the LGPL-2.1 license
-# See the file LICENSE from this package for details.
+# SPDX-FileCopyrightText: 2019 Kitsune Ral <Kitsune-Ral@users.sf.net>
+# SPDX-FileCopyrightText: 2019 Marc Deop <marc@marcdeop.com>
+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 # This is the clang-format configuration style to be used by libQuotient.
 # Inspired by:
@@ -19,25 +19,32 @@ Language: Cpp
 BasedOnStyle: WebKit
 #AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
+#AlignConsecutiveMacros: false
 #AlignConsecutiveAssignments: false
 #AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
-AlignOperands: true
+AlignOperands: true # 'Align' since ClangFormat 11 
 #AlignTrailingComments: false
+#AllowAllArgumentsOnNextLine: true
+#AllowAllConstructorInitializersOnNextLine: true
 #AllowAllParametersOfDeclarationOnNextLine: true
-#AllowShortBlocksOnASingleLine: false
+#AllowShortEnumsOnASingleLine: true
+#AllowShortBlocksOnASingleLine: Empty
 #AllowShortCaseLabelsOnASingleLine: false
 #AllowShortFunctionsOnASingleLine: All
-#AllowShortIfStatementsOnASingleLine: false
+#AllowShortLambdasOnASingleLine: All
+#AllowShortIfStatementsOnASingleLine: Never
 #AllowShortLoopsOnASingleLine: false
+#AlwaysBreakAfterDefinitionReturnType: None # deprecated
 #AlwaysBreakAfterReturnType: None
 #AlwaysBreakBeforeMultilineStrings: false
-AlwaysBreakTemplateDeclarations: true
+AlwaysBreakTemplateDeclarations: Yes
 #BinPackArguments: true
 #BinPackParameters: true
 BraceWrapping:
+  AfterCaseLabel:  false
   AfterClass:      false
-  AfterControlStatement: false
+  AfterControlStatement: MultiLine
   AfterEnum:       false
   AfterFunction:   true
   AfterNamespace:  false
@@ -53,24 +60,20 @@ BraceWrapping:
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeBraces: Custom
 #BreakBeforeInheritanceComma: false
-#BreakInheritanceList: BeforeColon # Only supported since clang-format 7
+#BreakInheritanceList: BeforeColon
 #BreakBeforeTernaryOperators: true
-#BreakConstructorInitializersBeforeComma: false
+#BreakConstructorInitializersBeforeComma: false # deprecated?
 #BreakConstructorInitializers: BeforeComma
 #BreakStringLiterals: true
 ColumnLimit: 80
-#CommentPragmas: '^!|^:'
-CompactNamespaces: false
-ConstructorInitializerAllOnOneLineOrOnePerLine: true
+#CompactNamespaces: false
+#ConstructorInitializerAllOnOneLineOrOnePerLine: false
 #ConstructorInitializerIndentWidth: 4
 #ContinuationIndentWidth: 4
 Cpp11BracedListStyle: true
+#DeriveLineEnding: true
 #DerivePointerAlignment: false
 FixNamespaceComments: true
-ForEachMacros:   
-  - foreach
-  - Q_FOREACH
-  - forever
 IncludeBlocks: Regroup
 IncludeCategories:
   - Regex:    '^<Qt.+/'
@@ -84,13 +87,12 @@ IncludeCategories:
   - Regex:    '.*'
     Priority: 1
 IncludeIsMainRegex: '(_test)?$'
+#IncludeIsMainSourceRegex: ''
 #IndentCaseLabels: false
+IndentGotoLabels: false
 IndentPPDirectives: AfterHash
-#IndentWidth:     4
+#IndentWidth: 4
 #IndentWrappedFunctionNames: false
-#JavaScriptQuotes: Leave
-#JavaScriptWrapImports: true
-#KeepLineBreaksForNonEmptyLines: false
 KeepEmptyLinesAtTheStartOfBlocks: false
 #MacroBlockBegin: ''
 #MacroBlockEnd:   ''
@@ -105,25 +107,34 @@ PenaltyBreakString: 200
 PenaltyExcessCharacter: 20
 PenaltyReturnTypeOnItsOwnLine: 60
 #PointerAlignment: Left
-#ReflowComments:  true
+#ReflowComments: true
 #SortIncludes: true
-SortUsingDeclarations: false
+#SortUsingDeclarations: true
 #SpaceAfterCStyleCast: false
+#SpaceAfterLogicalNot: false
 #SpaceAfterTemplateKeyword: true
 #SpaceBeforeAssignmentOperators: true
-SpaceBeforeCpp11BracedList: false
+#SpaceBeforeCpp11BracedList: true
 #SpaceBeforeCtorInitializerColon: true
 #SpaceBeforeInheritanceColon: true
 #SpaceBeforeParens: ControlStatements
-SpaceBeforeRangeBasedForLoopColon: false
+#SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyBlock: false
 #SpaceInEmptyParentheses: false
 #SpacesBeforeTrailingComments: 1
 #SpacesInAngles:  false
+#SpacesInConditionalStatement: false
 #SpacesInContainerLiterals: true
 #SpacesInCStyleCastParentheses: false
 #SpacesInParentheses: false
 #SpacesInSquareBrackets: false
-Standard: Cpp11
-#TabWidth: 4
+#SpaceBeforeSquareBrackets: false
+Standard: c++17
+StatementMacros:
+  - Q_UNUSED
+  - QT_REQUIRE_VERSION
+TabWidth: 4
+#UseCRLF: false
 #UseTab: Never
 ...
+
