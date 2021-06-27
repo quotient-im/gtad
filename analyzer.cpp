@@ -374,7 +374,8 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
             refsStrategy = InlineRefs;
         if (refsStrategy == InlineRefs || refModel.trivial()) {
             if (!refSchema.hasParents()
-                || !(!refSchema.fields.empty() || refSchema.hasPropertyMap())) {
+                || !(!refSchema.fields.empty() || refSchema.hasPropertyMap()))
+            {
                 if (refModel.trivial())
                     cout << logOffset() << "The model at " << refPath
                          << " is trivial (see the mapping above) and";
@@ -382,14 +383,19 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
                     cout << logOffset() << "The main schema from " << refPath;
                 cout << " will be inlined" << endl;
 
-                for (auto&& i: refModel.imports)
-                    currentModel().imports.insert(i);
+                // merge() doesn't work because imports have to be copied
+                // from the constant refModel
+                currentModel().imports.insert(refModel.imports.begin(),
+                                              refModel.imports.end());
+                // If the model is non-trivial the main schema may depend
+                // on stuff in dependent types; so add the import anyway,
+                // even though the model is inlined.
                 if (refModel.types.size() > 1)
-                    currentModel().imports.insert(importPath);
+                    currentModel().imports.insert(move(importPath));
                 return refSchema;
-            } else
-                cout << logOffset()
-                     << "Inlining suppressed due to model complexity" << endl;
+            }
+            cout << logOffset()
+                 << "Inlining suppressed due to model complexity" << endl;
         }
         tu.name = refSchema.name;
         tu.baseName = tu.name.empty() ? refPath : tu.name;
