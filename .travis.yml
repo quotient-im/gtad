@@ -46,6 +46,6 @@ script:
 - popd
 # test
 - cd libQuotient
-- cmake -DMATRIX_DOC_PATH="../matrix-doc" -DGTAD_PATH="../build/gtad" .
+- cmake -DMATRIX_DOC_PATH="../matrix-doc" -DGTAD_PATH="../build/gtad" -DCLANG_FORMAT=/usr/bin/clang-format .
 - cmake --build . --target update-api
 - cmake --build . --target all
