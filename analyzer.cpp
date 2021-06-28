@@ -266,7 +266,8 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
                                    });
             addVarDecl(schema.fields, analyzeTypeUsage(property.second),
                        move(baseName), schema,
-                       property.second["description"].as<string>(""), required);
+                       property.second["description"].as<string>(""), required,
+                       property.second["default"].as<string>(""));
         }
     }
     if (additionalProperties) {
