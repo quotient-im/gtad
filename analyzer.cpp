@@ -208,7 +208,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
             if (!innerSchema.name.empty())
                 name = innerSchema.name; // FIXME: not always correct
             for (const auto& parentType: innerSchema.parentTypes) {
-                currentModel().addImports(parentType);
+                currentModel().addImportsFrom(parentType);
                 schema.parentTypes.emplace_back(parentType);
             }
             if (!innerSchema.description.empty())
@@ -367,6 +367,7 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
         if (refModel.types.empty())
             throw Exception(refPath + " has no schemas");
 
+        tu.addImport(importPath.string());
         auto&& refSchema = refModel.types.back();
 
         // Take the configuration override into account
@@ -389,10 +390,11 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
                 currentModel().imports.insert(refModel.imports.begin(),
                                               refModel.imports.end());
                 // If the model is non-trivial the main schema may depend
-                // on stuff in dependent types; so add the import anyway,
+                // on stuff in dependent types; instead of trying to figure out
+                // actually needed dependencies, just add the whole import
                 // even though the model is inlined.
                 if (refModel.types.size() > 1)
-                    currentModel().imports.insert(move(importPath));
+                    currentModel().addImportsFrom(tu); // One import actually
                 return refSchema;
             }
             cout << logOffset()
@@ -400,7 +402,7 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
         }
         tu.name = refSchema.name;
         tu.baseName = tu.name.empty() ? refPath : tu.name;
-        currentModel().imports.emplace(move(importPath));
+        currentModel().addImportsFrom(tu);
     }
     cout << logOffset() << "Resolved $ref: " << refPath << " to type usage "
          << tu.name << endl;
@@ -425,7 +427,7 @@ optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
     if (id.empty())
         return {}; // A signal to skip the variable
 
-    currentModel().addImports(type);
+    currentModel().addImportsFrom(type);
     return VarDecl{std::move(type),   move(id), baseName,
                    move(description), required, move(defaultValue)};
 }
@@ -574,8 +576,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
     return model;
 }
 
-pair<const Model&, string> Analyzer::loadDependency(const string& relPath,
-                                                    const string& overrideTitle)
+pair<const Model&, fs::path>
+Analyzer::loadDependency(const string& relPath, const string& overrideTitle)
 {
     const auto& fullPath = context().fileDir / relPath;
     const auto fullPathBase = makeModelKey(fullPath.string());

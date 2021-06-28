@@ -72,7 +72,7 @@ private:
     [[nodiscard]] InOut currentRole() const { return currentScope().role; }
     [[nodiscard]] const Call* currentCall() const { return currentScope().call; }
 
-    [[nodiscard]] std::pair<const Model&, string>
+    [[nodiscard]] std::pair<const Model&, fspath>
     loadDependency(const string& relPath, const string& overrideTitle);
     void fillDataModel(Model& m, const YamlNode& yaml, const fspath &filename);
 

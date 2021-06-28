@@ -172,13 +172,13 @@ void Model::addSchema(ObjectSchema&& schema)
         return;
 
     for (const auto& pt: schema.parentTypes)
-        addImports(pt);
+        addImportsFrom(pt);
     if (!schema.propertyMap.type.empty())
-        addImports(schema.propertyMap.type);
+        addImportsFrom(schema.propertyMap.type);
     types.emplace_back(move(schema));
 }
 
-void Model::addImports(const TypeUsage& type)
+void Model::addImportsFrom(const TypeUsage& type)
 {
     const auto singleTypeImport = type.attributes.find("imports");
     if (singleTypeImport != type.attributes.end())
