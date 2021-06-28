@@ -238,7 +238,13 @@ class YamlMap : public YamlNodeTemplate<YamlNodePair, YAML::NodeType::Map>
         template <typename KeyT>
         const YamlNode operator[](KeyT&& key) const
         {
-            return { YAML::Node::operator[](std::forward<KeyT>(key)), _fileName };
+            return {YAML::Node::operator[](std::forward<KeyT>(key)), _fileName};
+        }
+
+        template <typename KeyT>
+        YamlNode operator[](KeyT&& key)
+        {
+            return {YAML::Node::operator[](std::forward<KeyT>(key)), _fileName};
         }
 
         template <typename KeyT>
