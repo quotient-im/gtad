@@ -337,7 +337,8 @@ Body Analyzer::analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
             packedType = addSchema(move(bodySchema));
         else
             // No parents, non-empty - unpack the schema to body properties
-            return FlatSchema(bodySchema); // Slicing is ok because no parents
+            // NOLINTNEXTLINE(cppcoreguidelines-slicing): no parents to lose
+            return FlatSchema(bodySchema);
     }
     if (auto&& v = makeVarDecl(move(packedType), name, location,
                                move(description), required)) {
