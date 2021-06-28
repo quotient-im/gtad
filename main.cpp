@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
     QCoreApplication app(argc, argv);
     QCoreApplication::setOrganizationName("Quotient");
     QCoreApplication::setApplicationName("GTAD");
-    QCoreApplication::setApplicationVersion("0.7");
+    QCoreApplication::setApplicationVersion("0.8");
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QCoreApplication::translate("main",
