@@ -1,5 +1,5 @@
 language: cpp
-dist: bionic
+dist: focal
 
 git:
   depth: false
@@ -13,22 +13,17 @@ matrix:
         packages:
         - qt5-default
         - qtmultimedia5-dev
-        - g++-8
+  - os: linux
+    compiler: clang
+    addons:
+      apt:
+        packages:
+        - qt5-default
+        - qtmultimedia5
+        - clang-10
+        - libstdc++-10
     env:
-      [ OVERRIDES="CC=gcc-8 CXX=g++-8" ]
-    # Clang 8 is not tested due to std::filesystem linking nightmare
-    # Clang 9 + libstdc++ 9.1 should be fine but the latter not available in
-    # bionic without PPAs
-#  - os: linux
-#    compiler: clang
-#    addons:
-#      apt:
-#        packages:
-#        - qt5-default
-#        - clang-9
-#        - libstdc++-9
-#    env:
-#      [ OVERRIDES="CC=clang-9 CXX=clang++-9 CPPFLAGS=-stdlib=libstdc++" ]
+      [ OVERRIDES="CC=clang-10 CXX=clang++-10 CPPFLAGS=-stdlib=libstdc++" ]
   - os: osx
     osx_image: xcode11.4
     addons:
