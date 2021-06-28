@@ -277,7 +277,8 @@ static inline const auto JSONSchema = "json-schema"s;
 
 struct Model {
     using string = std::string;
-    using imports_type = std::unordered_set<string>;
+    /// Map from the included path (in API description) to the import renderer
+    using imports_type = std::unordered_map<string, string>;
     using schemas_type = std::vector<ObjectSchema>;
 
     string apiSpec;

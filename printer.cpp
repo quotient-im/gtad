@@ -164,6 +164,11 @@ inline object wrap(T val)
     return object {{ "_", move(val) }};
 }
 
+inline object wrap(const filesystem::path& p)
+{
+    return wrap(p.string());
+}
+
 template <typename ObjT, typename ContT, typename FnT>
 void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
 {
@@ -171,14 +176,14 @@ void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
         return; // Don't even bother to add the empty list
 
     target[name + '?'] = true;
-    auto mList = km::list(source.size());
-    auto mIt = mList.begin();
-    for (auto it = source.begin(); it != source.end();)
-    {
-        *mIt = wrap(convert(*it));
-        mIt->set("_join", ++it != source.end());
-        mIt->set("hasMore", it != source.end()); // Swagger compatibility
-        ++mIt;
+    km::list mList;
+    auto it = source.begin();
+    for (bool hasMore = it != source.end(); hasMore;) {
+        auto elementObj = wrap(convert(*it));
+        hasMore = ++it != source.end();
+        elementObj.emplace("_join", hasMore);
+        elementObj.emplace("hasMore", hasMore); // Swagger compatibility
+        mList.emplace_back(move(elementObj));
     }
     target[name] = mList;
 }
@@ -186,8 +191,7 @@ void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
 template <typename ObjT, typename ContT>
 void setList(ObjT& target, const string& name, const ContT& source)
 {
-    setList(target, name, source,
-        [](const typename ContT::value_type& v) { return v; });
+    setList(target, name, source, [](auto element) { return element; });
 }
 
 template <typename ModelT>
@@ -344,17 +348,21 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
     contextData.set("filenameBase", filePathBase.filename().string());
     contextData.set("basePathWithoutHost", model.basePath);
     contextData.set("basePath", model.hostAddress + model.basePath);
-    // FIXME: remove hardwired logic
-    setList(contextData, "imports", model.imports, [this](string import) {
-        if (import.empty())
-            cerr << "Warning:"
-                    " empty import, the emitted code will likely be invalid"
-                 << endl;
-
-        if (!startsWith(import, _leftQuote) && import.front() != '<')
-            import = _leftQuote + import + _rightQuote;
-        return import;
-    });
+    setList(contextData, "imports", model.imports,
+            [this](const pair<string, string>& import) -> string {
+                if (import.first.empty() || import.second.empty()) {
+                    cerr << "Warning: empty import, the emitted code will "
+                            "likely be invalid"
+                         << endl;
+                    return {};
+                }
+                object importData {{"_", import.first}};
+                setList(importData, "segments", fspath(import.first));
+                // This is where the import as collected from the API
+                // description is actually transformed to the language-specific
+                // import target (such as a C++ header file)
+                return makeMustache(import.second).render(importData);
+            });
 
     // Unnamed schemas are only saved in the model to enable inlining
     // but cannot be used to emit valid code (not in C++ at least).

@@ -584,7 +584,7 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle)
     const auto fullPathBase = makeModelKey(fullPath.string());
     const auto [mIt, unseen] = _allModels.try_emplace(fullPathBase);
     auto& model = mIt->second;
-    const pair result {cref(model), _translator.mapImport(fullPathBase)};
+    const pair result {cref(model), _translator.outputBaseDir() / fullPathBase};
 
     // If there is a matching model just return it
     auto modelRole = InAndOut;

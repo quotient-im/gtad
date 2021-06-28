@@ -180,15 +180,14 @@ void Model::addSchema(ObjectSchema&& schema)
 
 void Model::addImportsFrom(const TypeUsage& type)
 {
+    const auto renderer = type.attributes.at("_importRenderer");
     const auto singleTypeImport = type.attributes.find("imports");
     if (singleTypeImport != type.attributes.end())
-        imports.insert(singleTypeImport->second);
+        imports.emplace(singleTypeImport->second, renderer);
     const auto typeImportsIt = type.lists.find("imports");
     if (typeImportsIt != type.lists.end())
-    {
-        const auto& typeImports = typeImportsIt->second;
-        imports.insert(typeImports.begin(), typeImports.end());
-    }
+        for (auto&& import : typeImportsIt->second)
+            imports.emplace(import, renderer);
 }
 
 void Model::clear()

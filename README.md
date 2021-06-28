@@ -291,15 +291,25 @@ In the above,
   the purpose of proper rendering you will likely need to pass (and use in
   your Mustache templates) additional information about the mapped type -
   e.g., whether the type is copyable, whether it should be wrapped up in
-  another type in case a parameter is optional, or which import - a file for
-  `#include`, in C/C++ - should be added). To address that, GTAD has a concept
-  of _type attributes_: every type can have an arbitrary number of "attributes"
-  with arbitrary (except `type`) names, modeled as string-to-string or
-  string-to-list mappings. `imports` is an example of a string-to-list mapping.
-  At the moment GTAD special-cases this attribute: in addition to just passing
-  it along with the type name, it adds its contents to a "global" (per input
-  file) deduplicated set, in order to allow painless generation of `#include`
-  blocks in C/C++ code. This will be made more generic in the future.
+  another type in case a parameter is optional, or which import - for C/C++
+  it's a file for `#include` - should be added). To address that, GTAD has
+  a concept of _type attributes_: every type can have an arbitrary number of
+  "attributes" with arbitrary (except `type`) names, modeled as string-to-string
+  or string-to-list mappings. `imports` is an example of a string-to-list
+  mapping.
+  
+  At the moment GTAD special-cases `imports`: in addition to just passing this
+  attribute along with the type name, it adds its contents to a "global" (per
+  input file) deduplicated set, to simplify generation of import/include
+  blocks. Since some of imports come from `$ref` keys in API descriptions
+  (see below), GTAD also translates the original `$ref` path to a form
+  suitable to import the respective data structure in the target language.
+  Before GTAD 0.8, that was really hardcoded to C/C++; GTAD used the first
+  extension in a given (`data` or `api`) subsection of `templates` to append
+  to the relative path and added quotes to paths that didn't have it.
+  GTAD 0.8 introduced a concept of _import renderers_, Mustache templates
+  that allow some basic configuration of the import transformation. This is
+  discussed in a dedicated section below.
 
 - `+set/+on` statement allows you to apply type attributes to several mappings
   at once:
@@ -459,6 +469,40 @@ the following non-standard _types_/_formats_ in the GTAD configuration file
     std::variant<{{#types}}{{_}}{{#_join}}, {{/_join}}{{/types}}>
     imports: <variant>
   ```
+
+##### Import renderers
+
+Since GTAD 0.8, it is possible (and, actually, necessary) to define the way
+imports will look in generated files. An import renderer is called in
+the context where a given import is stored in two forms: in complete but
+possibly half-baked (we'll get to that in a minute) form (in `{{_}}` - think of
+an element inside the `{{imports}}` Mustache list), and in a split form, as
+a Mustache list of path components comprising it (in `{{#segments}}` list).
+To give an example, if the original import was `events/event_loader.h`,
+the Mustache context would be:
+```yaml
+{{_}}: 'events/event_loader.h' # without quotes
+{{#segments}}: [ 'events', 'event_loader.h' ]
+```
+For simple cases when an import is provided verbatim in `gtad.yaml`, the default
+import renderer - that looks like `{{_}}` - works just fine. However, when it
+comes to imports produced from `$ref` nodes in the API description, `{{_}}` will
+store something like `csapi/definitions/filter` (base output directory and the
+path _stem_ - that is, a path to a file without its extension. To convert that
+to something usable in C/C++, one needs to override the import renderer by
+supplying `_importRenderer` type attribute - for example:
+```yaml
+types:
+- +set:
+    _importRenderer: '"{{#segments}}{{_}}{{#_join}}/{{/_join}}{{/segments}}.h"'
+  +on:
+  - $ref:
+    - # ...
+```
+As of GTAD 0.8, the context in which import renderers run is extremely limited;
+in particular, none of constants and partials defined in the `mustache` section
+of the configuration file are not observed by import renderers. This may change
+in the future, if found necessary.
 
 ##### Advanced type mapping configuration
 

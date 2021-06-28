@@ -278,19 +278,6 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
 
 Translator::~Translator() = default;
 
-string Translator::mapImport(const string& importBaseName) const
-{
-    // This code makes quite a few assumptions as yet:
-    // 1. That an import name is actually a file path (rather than some
-    //    language entity like in Python or Java).
-    auto result = outputBaseDir() / importBaseName;
-    // 2. That the imported file's extension (.h in C/C++) is
-    //    the first on the list, and that only data models can be imported.
-    if (!_dataTemplates.empty())
-        result += _dataTemplates.front().first;
-    return result.string();
-}
-
 Translator::output_config_t Translator::outputConfig(const path& filePathBase,
                                                      const Model& model) const
 {
@@ -329,9 +316,11 @@ TypeUsage Translator::mapType(const string& swaggerType,
             }
 conclusion:
     // Fallback chain: baseName, swaggerFormat, swaggerType
-    tu.baseName = baseName.empty() ? swaggerFormat.empty() ?
-                                     swaggerType : swaggerFormat
-                                   : baseName;
+    tu.baseName = baseName.empty()
+                      ? swaggerFormat.empty() ? swaggerType : swaggerFormat
+                      : baseName;
+    if (auto& renderer = tu.attributes["_importRenderer"]; renderer.empty())
+        renderer = "{{_}}"; // Just render the import as is
     return tu;
 }
 

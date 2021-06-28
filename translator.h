@@ -47,8 +47,6 @@ public:
 
     [[nodiscard]] output_config_t outputConfig(const path& filePathBase,
                                                const Model& model) const;
-
-    [[nodiscard]] string mapImport(const string& importBaseName) const;
     [[nodiscard]] TypeUsage mapType(const string& swaggerType,
                                     const string& swaggerFormat = {},
                                     const string& baseName = {}) const;
