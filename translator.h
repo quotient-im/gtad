@@ -25,14 +25,17 @@
 
 class Printer;
 
+enum class Verbosity { Quiet = 0, Basic, Debug };
+
 class Translator
 {
 public:
     using string = std::string;
     using path = std::filesystem::path;
-    using output_config_t = std::vector<std::pair<path,string>>;
+    using output_config_t = std::vector<std::pair<path, string>>;
 
-    Translator(const path& configFilePath, path outputDirPath);
+    Translator(const path& configFilePath, path outputDirPath,
+               Verbosity verbosity);
     ~Translator();
 
     [[nodiscard]] const pair_vector_t<string>& substitutions() const
@@ -54,6 +57,7 @@ public:
                                        bool required) const;
 
 private:
+    Verbosity _verbosity;
     pair_vector_t<string> _substitutions;
     pair_vector_t<string> _identifiers;
     /// In JSON/YAML, the below looks like:

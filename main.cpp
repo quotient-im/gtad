@@ -56,6 +56,11 @@ int main(int argc, char* argv[])
         "role", "io");
     parser.addOption(schemaRoleOption);
 
+    QCommandLineOption messagesRoleOption("messages",
+        QCoreApplication::translate("main",
+            "Configure the verbosity, one of: quiet, basic, and debug"),
+        "verbosity", "basic");
+
     parser.addPositionalArgument("files",
         QCoreApplication::translate("main",
             "Files or directories with API definition in Swagger format."
@@ -68,8 +73,13 @@ int main(int argc, char* argv[])
         using namespace std;
         namespace fs = filesystem;
 
-        Translator translator{parser.value(configPathOption).toStdString(),
-                              parser.value(outputDirOption).toStdString()};
+        const auto& verbosityArg = parser.value(messagesRoleOption);
+        const auto verbosity = verbosityArg == "quiet"   ? Verbosity::Quiet
+                               : verbosityArg == "debug" ? Verbosity::Debug
+                                                         : Verbosity::Basic;
+        Translator translator {parser.value(configPathOption).toStdString(),
+                               parser.value(outputDirOption).toStdString(),
+                               verbosity};
 
         vector<fs::path> paths, exclusions;
         const auto& pathArgs = parser.positionalArguments();

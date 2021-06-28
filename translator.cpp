@@ -169,8 +169,9 @@ pair_vector_t<string> loadStringMap(const YamlMap& yaml)
     return stringMap;
 }
 
-Translator::Translator(const path& configFilePath, path outputDirPath)
-    : _outputDirPath(move(outputDirPath))
+Translator::Translator(const path& configFilePath, path outputDirPath,
+                       Verbosity verbosity)
+    : _verbosity(verbosity), _outputDirPath(move(outputDirPath))
 {
     cout << "Using config file at " << configFilePath << endl;
     const auto configY = YamlMap::loadFromFile(configFilePath);
@@ -186,6 +187,34 @@ Translator::Translator(const path& configFilePath, path outputDirPath)
             _typesMap.emplace_back(name,
                 parseTypeEntry(typeYaml, commonAttrsYaml));
         });
+
+    if (_verbosity == Verbosity::Debug)
+        for (const auto& t : _typesMap) {
+            clog << "Type " << t.first << ":" << endl;
+            for (const auto& f : t.second) {
+                clog << "  Format " << (f.first.empty() ? "(none)" : f.first)
+                     << ":" << endl
+                     << "    mapped to "
+                     << (!f.second.name.empty() ? f.second.name : "(none)")
+                     << endl;
+
+                if (!f.second.attributes.empty()) {
+                    clog << "    attributes:" << endl;
+                    for (const auto& a : f.second.attributes)
+                        clog << "      " << a.first << " -> " << a.second
+                             << endl;
+                } else
+                    clog << "    no attributes" << endl;
+
+                if (!f.second.lists.empty()) {
+                    clog << "    lists:" << endl;
+                    for (const auto& l : f.second.lists)
+                        clog << "      " << l.first
+                             << " (entries: " << l.second.size() << ")" << endl;
+                } else
+                    clog << "    no lists" << endl;
+            }
+        }
 
     Printer::context_type env;
     using namespace kainjow::mustache;
