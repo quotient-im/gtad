@@ -19,11 +19,12 @@ matrix:
       apt:
         packages:
         - qt5-default
-        - qtmultimedia5
+        - qtmultimedia5-dev
         - clang-10
+        - clang-format-10
         - libstdc++-10
     env:
-      [ OVERRIDES="CC=clang-10 CXX=clang++-10 CPPFLAGS=-stdlib=libstdc++" ]
+      [ OVERRIDES="CC=clang-10 CXX=clang++-10" ]
   - os: osx
     osx_image: xcode11.4
     addons:
