@@ -96,8 +96,21 @@ auto parseEntries(const YamlSequence& entriesYaml, const FnT& inserter,
             case 2:
                 if (typesBlockYaml["+on"] && typesBlockYaml["+set"])
                 {
+                    // #56: merge into the outer common attributes
+                    // YamlMap constructors shallow-copy but we need a
+                    // one-level-deep copy here to revert to the previous set
+                    // after returning from recursion
+                    YamlMap newCommonAttributesYaml;
+                    // Instead of specialising struct convert<>, simply cast
+                    // to YAML::Node that already has a specialisation
+                    for (const auto& a : commonAttributesYaml)
+                        newCommonAttributesYaml.force_insert(
+                            static_cast<const YAML::Node&>(a.first),
+                            static_cast<const YAML::Node&>(a.second));
+                    for (const auto& a : typesBlockYaml.get("+set").asMap())
+                        newCommonAttributesYaml[a.first.as<string>()] = a.second;
                     parseEntries(typesBlockYaml.get("+on").asSequence(),
-                                 inserter, typesBlockYaml.get("+set").asMap());
+                                 inserter, newCommonAttributesYaml);
                     break;
                 }
                 [[fallthrough]];
