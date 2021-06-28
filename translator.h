@@ -39,14 +39,8 @@ public:
     {
         return _substitutions;
     }
-    [[nodiscard]] const path& outputBaseDir() const
-    {
-        return _outputDirPath;
-    }
-    [[nodiscard]] Printer& printer() const
-    {
-        return *_printer;
-    }
+    [[nodiscard]] const path& outputBaseDir() const { return _outputDirPath; }
+    [[nodiscard]] Printer& printer() const { return *_printer; }
 
     [[nodiscard]] output_config_t outputConfig(const path& filePathBase,
                                                const Model& model) const;

@@ -35,7 +35,7 @@ int main(int argc, char* argv[])
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QCoreApplication::translate("main",
-        "Client-server API source files generator"));
+        "Matrix API source files generator"));
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -51,13 +51,15 @@ int main(int argc, char* argv[])
 
     QCommandLineOption schemaRoleOption("role",
         QCoreApplication::translate("main",
-            "For JSON Schema, generate code assuming <role>, one of: "
-            "i (input), o (output); all other values mean both directions"),
+            "For JSON Schema, generate code assuming <role>, one of:"
+            " i (input), o (output); all other values mean both directions"),
         "role", "io");
     parser.addOption(schemaRoleOption);
 
     parser.addPositionalArgument("files",
-        QCoreApplication::translate("main", "Files or directories with API definition in Swagger format. Append a hyphen to exclude a file/directory."),
+        QCoreApplication::translate("main",
+            "Files or directories with API definition in Swagger format."
+            " Append a hyphen to exclude a file/directory."),
         "files...");
 
     parser.process(app);
@@ -70,7 +72,8 @@ int main(int argc, char* argv[])
                               parser.value(outputDirOption).toStdString()};
 
         vector<fs::path> paths, exclusions;
-        for (const auto& path: parser.positionalArguments()) {
+        const auto& pathArgs = parser.positionalArguments();
+        for (const auto& path: pathArgs) {
             if (path.endsWith('-'))
                 exclusions.emplace_back(path.left(path.size() - 1).toStdString());
             else

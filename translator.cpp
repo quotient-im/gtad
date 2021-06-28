@@ -80,7 +80,7 @@ auto parseEntries(const YamlSequence& entriesYaml, const FnT& inserter,
     -> enable_if_t<is_void_v<decltype(
         inserter(string(), YamlNode(), YamlMap()))>>
 {
-    for (const YamlMap typesBlockYaml: entriesYaml)
+    for (const YamlMap typesBlockYaml: entriesYaml) // clazy:exclude=range-loop
     {
         switch (typesBlockYaml.size())
         {
@@ -100,7 +100,7 @@ auto parseEntries(const YamlSequence& entriesYaml, const FnT& inserter,
                                  inserter, typesBlockYaml.get("+set").asMap());
                     break;
                 }
-                // FALLTHROUGH
+                [[fallthrough]];
             default:
                 throw YamlException(typesBlockYaml,
                         "Too many entries in the map, check indentation");
