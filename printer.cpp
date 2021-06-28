@@ -124,13 +124,13 @@ Printer::Printer(context_type&& contextData, fspath inputBasePath,
     using km::renderer;
     // Enriching the context with "My Mustache library"
     _contextData.set("_cap", lambda2 {
-        [](const string& s, const renderer& render)
+        [](const string& s, renderer render)
         {
             return capitalizedCopy(render(s, false));
         }
     });
     _contextData.set("_toupper", lambda2 {
-        [](string s, const renderer& render) {
+        [](string s, renderer render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
                       [] (char c) { return toupper(c, locale::classic()); });
@@ -138,7 +138,7 @@ Printer::Printer(context_type&& contextData, fspath inputBasePath,
         }
     });
     _contextData.set("_tolower", lambda2 {
-        [](string s, const renderer& render) {
+        [](string s, renderer render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
                       [] (char c) { return tolower(c, locale::classic()); });
