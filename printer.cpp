@@ -45,12 +45,12 @@ inline string safeString(const Printer::context_type& data, const string& key,
 
 // While C++20 is not around
 
-inline bool startsWith(const string_view& s, const string_view& ss)
+inline bool startsWith(const string_view s, const string_view ss)
 {
     return s.size() >= ss.size() && equal (ss.begin(), ss.end(), s.begin());
 }
 
-inline bool endsWith(const string_view& s, const string_view& ss)
+inline bool endsWith(const string_view s, const string_view ss)
 {
     return s.size() >= ss.size() && equal(ss.rbegin(), ss.rend(), s.rbegin());
 }
