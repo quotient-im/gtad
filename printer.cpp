@@ -55,7 +55,7 @@ inline bool endsWith(const string_view s, const string_view ss)
     return s.size() >= ss.size() && equal(ss.rbegin(), ss.rend(), s.rbegin());
 }
 
-Printer::template_type Printer::makeMustache(const string& tmpl) const
+inline Printer::template_type Printer::makeMustache(const string& tmpl) const
 {
     km::mustache mstch{
         _delimiter.empty() ? tmpl : "{{=" + _delimiter + "=}}" + tmpl};
@@ -106,6 +106,43 @@ class GtadContext : public km::context<string>
         Printer::fspath inputBasePath;
         mutable unordered_map<string, data> filePartialsCache;
 };
+
+template <typename StringT>
+class ContextOverlay {
+public:
+    ContextOverlay(km::context<StringT>& context,
+                   const km::basic_object<StringT>& overlayObj)
+        : _context(context)
+        , overlay(overlayObj)
+    {
+        _context.push(&overlay);
+    }
+    ContextOverlay(const ContextOverlay&) = delete;
+    ContextOverlay(ContextOverlay&&) = delete;
+    void operator=(const ContextOverlay&) = delete;
+    void operator=(ContextOverlay&&) = delete;
+    ~ContextOverlay()
+    {
+        _context.pop();
+    }
+
+private:
+    km::context<StringT>& _context;
+    km::basic_data<StringT> overlay;
+};
+template <typename StringT>
+ContextOverlay(km::context<StringT>& context,
+               const km::basic_object<StringT>& overlayObj)
+    -> ContextOverlay<StringT>;
+
+template <typename StringT>
+inline auto renderWithOverlay(const km::basic_mustache<StringT>& tmpl,
+                              km::context<StringT>& ctx,
+                              const km::basic_object<StringT>& overlay)
+{
+    ContextOverlay ctxOverlay(ctx, overlay);
+    return tmpl.render(ctx);
+}
 
 Printer::Printer(context_type&& contextObj, fspath inputBasePath,
                  const fspath& outFilesListPath, string delimiter,
@@ -245,19 +282,12 @@ object Printer::renderType(const TypeUsage& tu) const
         qualifiedValues.emplace(to_string(i), mParamType["qualifiedName"]);
     }
 
-    km::data valuesData {values}, qualifiedValuesData {qualifiedValues};
     GtadContext context {_inputBasePath, &_contextData};
-    context.push(&valuesData);
-    const auto renderedName = _typeRenderer.render(context);
-    context.pop();
-    context.push(&qualifiedValuesData);
-    const auto renderedQualifiedName = _typeRenderer.render(context);
-    context.pop();
-
-    return { { "name", renderedName }
-           , { "qualifiedName", renderedQualifiedName }
-           , { "baseName", tu.baseName }
-    };
+    return {{"name", renderWithOverlay(_typeRenderer, context, values)}
+           ,{"qualifiedName",
+             renderWithOverlay(_typeRenderer, context, qualifiedValues)}
+           ,{"baseName", tu.baseName}
+           };
 }
 
 object Printer::dumpField(const VarDecl& field) const
@@ -381,11 +411,8 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
                 // This is where the import as collected from the API
                 // description is actually transformed to the language-specific
                 // import target (such as a C++ header file)
-                km::data d {importContextObj};
-                context.push(&d);
-                const auto renderedImport = tmplIt->second.render(context);
-                context.pop();
-                return renderedImport;
+                return renderWithOverlay(tmplIt->second, context,
+                                         importContextObj);
             });
 
     // Unnamed schemas are only saved in the model to enable inlining
@@ -509,8 +536,7 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
         return;
     }
 
-    km::data payload {payloadObj};
-    context.push(&payload);
+    ContextOverlay overlay(context, payloadObj);
     for (const auto& [fPath, fTemplate]:
          _translator.outputConfig(filePathBase, model)) {
         ofstream ofs{fPath};
