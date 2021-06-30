@@ -108,12 +108,13 @@ class GtadContext : public km::context<string>
 };
 
 Printer::Printer(context_type&& contextObj, fspath inputBasePath,
-                 const fspath& outFilesListPath, const Translator& translator)
+                 const fspath& outFilesListPath, string delimiter,
+                 const Translator& translator)
     : _translator(translator)
     , _contextData(contextObj)
-    , _delimiter(safeString(contextObj, "_delimiter"))
-    , _typeRenderer(makeMustache(
-          safeString(contextObj, "_typeRenderer", "{{>name}}")))
+    , _delimiter(move(delimiter))
+    , _typeRenderer(
+          makeMustache(safeString(contextObj, "_typeRenderer", "{{>name}}")))
     , _leftQuote(safeString(contextObj, "_leftQuote",
                             safeString(contextObj, "_quote", "\"")))
     , _rightQuote(safeString(contextObj, "_rightQuote",

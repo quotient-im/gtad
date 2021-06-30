@@ -499,10 +499,8 @@ types:
   - $ref:
     - # ...
 ```
-As of GTAD 0.8, the context in which import renderers run is extremely limited;
-in particular, none of constants and partials defined in the `mustache` section
-of the configuration file are not observed by import renderers. This may change
-in the future, if found necessary.
+You can use Mustache constants and partials defined in `gtad.yaml` within
+import renderers.
 
 ##### Advanced type mapping configuration
 
@@ -591,6 +589,20 @@ Auxiliary tag types include a `{{!comment}}` tag and delimiter reassignment
 
 As of GTAD 0.7, the printer configuration is stored in the top-level
 `mustache` node and includes the following parts:
+
+##### `delimiter`
+Since GTAD 0.8, Mustache delimiters can be reassigned to a different pair. This
+may be necessary to comfortably work with languages like Julia that use braces
+for template specialisation (see #42). The value must be a string, with the
+opening and closing sequences separated by a whitespace; e.g.:
+`delimiter: '%| |%'
+replaces `{{` with `%|` and `}}` with `|%`.
+
+P.S. Previous versions accepted `_delimiter` under `constants` - unfortunately,
+     it never could practically serve the intended purpose is it had to be
+     defined in the beginning of every single Mustache snippet (file, constant
+     or partial). Due to a significant change in behavior, the old location
+     is _not_ supported any more.
 
 ##### `constants`
 This is a string-to-string map that forms a part of the context for the Mustache

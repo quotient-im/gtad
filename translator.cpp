@@ -272,6 +272,7 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
 
     _printer = make_unique<Printer>(move(env), configFilePath.parent_path(),
                                     mustacheYaml["outFilesList"].as<string>(""),
+                                    mustacheYaml["delimiter"].as<string>(""),
                                     *this);
 }
 

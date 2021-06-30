@@ -19,7 +19,8 @@ public:
     using fspath = std::filesystem::path;
 
     Printer(context_type&& contextObj, fspath inputBasePath,
-            const fspath& outFilesListPath, const Translator& translator);
+            const fspath& outFilesListPath, string delimiter,
+            const Translator& translator);
     Printer(Printer&& p) = default;
 
     Printer::template_type makeMustache(const string& tmpl) const;
