@@ -112,23 +112,13 @@ class ContextOverlay {
 public:
     ContextOverlay(km::context<StringT>& context,
                    const km::basic_object<StringT>& overlayObj)
-        : _context(context)
-        , overlay(overlayObj)
-    {
-        _context.push(&overlay);
-    }
-    ContextOverlay(const ContextOverlay&) = delete;
-    ContextOverlay(ContextOverlay&&) = delete;
-    void operator=(const ContextOverlay&) = delete;
-    void operator=(ContextOverlay&&) = delete;
-    ~ContextOverlay()
-    {
-        _context.pop();
-    }
+        : overlay(overlayObj), ctx(context), ctxPusher(ctx, &overlay)
+    {}
 
 private:
-    km::context<StringT>& _context;
     km::basic_data<StringT> overlay;
+    km::context_internal<StringT> ctx;
+    km::context_pusher<StringT> ctxPusher;
 };
 template <typename StringT>
 ContextOverlay(km::context<StringT>& context,
