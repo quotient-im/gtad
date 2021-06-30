@@ -30,15 +30,15 @@ namespace km = kainjow::mustache;
 using km::object;
 using km::partial;
 
-inline string safeString(const Printer::context_type& data, const string& key,
-                         string defaultValue = {})
+inline string safeString(const Printer::context_type& contextObj,
+                         const string& key, string defaultValue = {})
 {
-    if (const auto* value = data.get(key))
-    {
-        if (value->is_string())
-            return value->string_value();
-        if (value->is_partial())
-            return value->partial_value()();
+    if (const auto it = contextObj.find(key); it != contextObj.end()) {
+        const auto& value = it->second;
+        if (value.is_string())
+            return value.string_value();
+        if (value.is_partial())
+            return value.partial_value()();
     }
     return defaultValue;
 }
@@ -70,7 +70,7 @@ class GtadContext : public km::context<string>
 
         GtadContext(Printer::fspath inputBasePath, const data* d)
             : context(d), inputBasePath(move(inputBasePath))
-        { }
+        {}
 
         const data* get_partial(const string& name) const override
         {
@@ -107,29 +107,29 @@ class GtadContext : public km::context<string>
         mutable unordered_map<string, data> filePartialsCache;
 };
 
-Printer::Printer(context_type&& contextData, fspath inputBasePath,
+Printer::Printer(context_type&& contextObj, fspath inputBasePath,
                  const fspath& outFilesListPath, const Translator& translator)
     : _translator(translator)
-    , _contextData(std::move(contextData))
-    , _delimiter(safeString(_contextData, "_delimiter"))
+    , _contextData(contextObj)
+    , _delimiter(safeString(contextObj, "_delimiter"))
     , _typeRenderer(makeMustache(
-          safeString(_contextData, "_typeRenderer", "{{>name}}")))
-    , _leftQuote(safeString(_contextData, "_leftQuote",
-                            safeString(_contextData, "_quote", "\"")))
-    , _rightQuote(safeString(_contextData, "_rightQuote",
-                             safeString(_contextData, "_quote", "\"")))
+          safeString(contextObj, "_typeRenderer", "{{>name}}")))
+    , _leftQuote(safeString(contextObj, "_leftQuote",
+                            safeString(contextObj, "_quote", "\"")))
+    , _rightQuote(safeString(contextObj, "_rightQuote",
+                             safeString(contextObj, "_quote", "\"")))
     , _inputBasePath(move(inputBasePath))
 {
     using km::lambda2;
     using km::renderer;
     // Enriching the context with "My Mustache library"
-    _contextData.set("_cap", lambda2 {
+    contextObj.emplace("_cap", lambda2 {
         [](const string& s, renderer render)
         {
             return capitalizedCopy(render(s, false));
         }
     });
-    _contextData.set("_toupper", lambda2 {
+    contextObj.emplace("_toupper", lambda2 {
         [](string s, renderer render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
@@ -137,7 +137,7 @@ Printer::Printer(context_type&& contextData, fspath inputBasePath,
             return s;
         }
     });
-    _contextData.set("_tolower", lambda2 {
+    contextObj.emplace("_tolower", lambda2 {
         [](string s, renderer render) {
             s = render(s, false);
             transform(s.begin(), s.end(), s.begin(),
@@ -244,8 +244,17 @@ object Printer::renderType(const TypeUsage& tu) const
         qualifiedValues.emplace(to_string(i), mParamType["qualifiedName"]);
     }
 
-    return { { "name", _typeRenderer.render(values) }
-           , { "qualifiedName", _typeRenderer.render(qualifiedValues) }
+    km::data valuesData {values}, qualifiedValuesData {qualifiedValues};
+    GtadContext context {_inputBasePath, &_contextData};
+    context.push(&valuesData);
+    const auto renderedName = _typeRenderer.render(context);
+    context.pop();
+    context.push(&qualifiedValuesData);
+    const auto renderedQualifiedName = _typeRenderer.render(context);
+    context.pop();
+
+    return { { "name", renderedName }
+           , { "qualifiedName", renderedQualifiedName }
            , { "baseName", tu.baseName }
     };
 }
@@ -344,24 +353,38 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
         return;
     }
 
-    auto contextData = _contextData;
-    contextData.set("filenameBase", filePathBase.filename().string());
-    contextData.set("basePathWithoutHost", model.basePath);
-    contextData.set("basePath", model.hostAddress + model.basePath);
-    setList(contextData, "imports", model.imports,
-            [this](const pair<string, string>& import) -> string {
+    GtadContext context{_inputBasePath, &_contextData};
+
+    object payloadObj {{"filenameBase", filePathBase.filename().string()}
+                      ,{"basePathWithoutHost", model.basePath}
+                      ,{"basePath", model.hostAddress + model.basePath}
+                      };
+    setList(payloadObj, "imports", model.imports,
+            [this, &context](const pair<string, string>& import) -> string {
                 if (import.first.empty() || import.second.empty()) {
                     cerr << "Warning: empty import, the emitted code will "
                             "likely be invalid"
                          << endl;
                     return {};
                 }
-                object importData {{"_", import.first}};
-                setList(importData, "segments", fspath(import.first));
+                static unordered_map<string, template_type> tmplCache {};
+                auto tmplIt = tmplCache.find(import.second);
+                if (tmplIt == tmplCache.end())
+                    tmplIt =
+                        tmplCache
+                            .emplace(import.second, makeMustache(import.second))
+                            .first;
+
+                object importContextObj {{"_", import.first}};
+                setList(importContextObj, "segments", fspath(import.first));
                 // This is where the import as collected from the API
                 // description is actually transformed to the language-specific
                 // import target (such as a C++ header file)
-                return makeMustache(import.second).render(importData);
+                km::data d {importContextObj};
+                context.push(&d);
+                const auto renderedImport = tmplIt->second.render(context);
+                context.pop();
+                return renderedImport;
             });
 
     // Unnamed schemas are only saved in the model to enable inlining
@@ -373,11 +396,11 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
 
     auto&& mAllTypes = dumpAllTypes(namedSchemas); // Back-comp w/swagger
     if (!mAllTypes.empty())
-        contextData.set("allModels", mAllTypes);
+        payloadObj.emplace("allModels", mAllTypes);
 
     auto&& mTypes = dumpTypes(namedSchemas);
     if (!mTypes.empty())
-        contextData.set("models", mTypes);
+        payloadObj.emplace("models", mTypes);
 
     object mOperations;
     if (!model.callClasses.empty()) {
@@ -476,7 +499,7 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
             mOperations.emplace("classname", "NOT_IMPLEMENTED");
             mOperations.emplace("consumesNonJson?", globalConsumesNonJson);
             mOperations.emplace("producesNonJson?", globalProducesNonJson);
-            contextData.set("operations", mOperations);
+            payloadObj.emplace("operations", mOperations);
         }
     }
     if (mTypes.empty() && mOperations.empty()) {
@@ -485,6 +508,8 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
         return;
     }
 
+    km::data payload {payloadObj};
+    context.push(&payload);
     for (const auto& [fPath, fTemplate]:
          _translator.outputConfig(filePathBase, model)) {
         ofstream ofs{fPath};
@@ -492,9 +517,8 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
             throw Exception(fPath.string() + ": Couldn't open for writing");
 
         cout << "Emitting " << fPath.string() << endl;
-        GtadContext c{_inputBasePath, &contextData};
         auto fullTemplate = makeMustache(fTemplate);
-        fullTemplate.render(c, ofs);
+        fullTemplate.render(context, ofs);
         if (fullTemplate.error_message().empty())
             _outFilesList << fPath.string() << endl;
         else

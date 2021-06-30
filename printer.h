@@ -11,14 +11,14 @@ class Translator;
 
 class Printer {
 public:
-    using context_type = kainjow::mustache::data;
+    using context_type = kainjow::mustache::object;
     using template_type = kainjow::mustache::mustache;
     using templates_type = std::vector<std::pair<template_type, template_type>>;
     using m_object_type = kainjow::mustache::object;
     using string = std::string;
     using fspath = std::filesystem::path;
 
-    Printer(context_type&& contextData, fspath inputBasePath,
+    Printer(context_type&& contextObj, fspath inputBasePath,
             const fspath& outFilesListPath, const Translator& translator);
     Printer(Printer&& p) = default;
 
@@ -27,7 +27,7 @@ public:
 
 private:
     const Translator& _translator;
-    context_type _contextData;
+    kainjow::mustache::data _contextData;
     string _delimiter;
     template_type _typeRenderer;
     string _leftQuote;

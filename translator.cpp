@@ -238,25 +238,24 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
         const auto pName = p.first.as<string>();
         if (p.second.IsScalar())
         {
-            env.set(pName, p.second.as<string>());
+            env.emplace(pName, p.second.as<string>());
             continue;
         }
         const auto pDefinition = p.second.asMap().front();
         const auto pType = pDefinition.first.as<string>();
         const YamlNode defaultVal = pDefinition.second;
         if (pType == "set")
-            env.set(pName, { data::type::list });
+            env.emplace(pName, data::type::list);
         else if (pType == "bool")
-            env.set(pName, { defaultVal.as<bool>() });
+            env.emplace(pName, defaultVal.as<bool>());
         else
-            env.set(pName, { defaultVal.as<string>() });
+            env.emplace(pName, defaultVal.as<string>());
     }
     const auto& partialsYaml = mustacheYaml["partials"].asMap();
     for (const auto& p: partialsYaml)
     {
-        env.set(p.first.as<string>(),
-                partial { [s = p.second.as<string>()] { return s; } });
-
+        env.emplace(p.first.as<string>(),
+                    partial {[s = p.second.as<string>()] { return s; }});
     }
 
     const auto& templatesYaml = mustacheYaml["templates"].asMap();
