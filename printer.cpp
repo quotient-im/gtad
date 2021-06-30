@@ -149,11 +149,36 @@ inline auto renderWithOverlay(const km::basic_mustache<StringT>& tmpl,
     return tmpl.render(ctx);
 }
 
+/// Enrich the context with "My Mustache library"
+inline Printer::context_type addLibrary(Printer::context_type contextObj)
+{
+    using km::lambda2;
+    using km::renderer;
+    contextObj.emplace("_cap", lambda2 {[](const string& s, renderer render) {
+                           return capitalizedCopy(render(s, false));
+                       }});
+    contextObj.emplace("_toupper", lambda2 {[](string s, renderer render) {
+                           s = render(s, false);
+                           transform(s.begin(), s.end(), s.begin(), [](char c) {
+                               return toupper(c, locale::classic());
+                           });
+                           return s;
+                       }});
+    contextObj.emplace("_tolower", lambda2 {[](string s, renderer render) {
+                           s = render(s, false);
+                           transform(s.begin(), s.end(), s.begin(), [](char c) {
+                               return tolower(c, locale::classic());
+                           });
+                           return s;
+                       }});
+    return contextObj;
+}
+
 Printer::Printer(context_type&& contextObj, fspath inputBasePath,
                  const fspath& outFilesListPath, string delimiter,
                  const Translator& translator)
     : _translator(translator)
-    , _contextData(contextObj)
+    , _contextData(addLibrary(contextObj))
     , _delimiter(move(delimiter))
     , _typeRenderer(
           makeMustache(safeString(contextObj, "_typeRenderer", "{{>name}}")))
@@ -163,31 +188,6 @@ Printer::Printer(context_type&& contextObj, fspath inputBasePath,
                              safeString(contextObj, "_quote", "\"")))
     , _inputBasePath(move(inputBasePath))
 {
-    using km::lambda2;
-    using km::renderer;
-    // Enriching the context with "My Mustache library"
-    contextObj.emplace("_cap", lambda2 {
-        [](const string& s, renderer render)
-        {
-            return capitalizedCopy(render(s, false));
-        }
-    });
-    contextObj.emplace("_toupper", lambda2 {
-        [](string s, renderer render) {
-            s = render(s, false);
-            transform(s.begin(), s.end(), s.begin(),
-                      [] (char c) { return toupper(c, locale::classic()); });
-            return s;
-        }
-    });
-    contextObj.emplace("_tolower", lambda2 {
-        [](string s, renderer render) {
-            s = render(s, false);
-            transform(s.begin(), s.end(), s.begin(),
-                      [] (char c) { return tolower(c, locale::classic()); });
-            return s;
-        }
-    });
     if (!outFilesListPath.empty())
     {
         _outFilesList.open(_translator.outputBaseDir() / outFilesListPath);
