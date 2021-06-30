@@ -232,6 +232,7 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
     Printer::context_type env;
     using namespace kainjow::mustache;
     const auto& mustacheYaml = configY["mustache"].asMap();
+    const auto& delimiter = mustacheYaml["delimiter"].as<string>("");
     const auto& envYaml = mustacheYaml["constants"].asMap();
     for (const auto& p: envYaml)
     {
@@ -253,10 +254,8 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
     }
     const auto& partialsYaml = mustacheYaml["partials"].asMap();
     for (const auto& p: partialsYaml)
-    {
         env.emplace(p.first.as<string>(),
-                    partial {[s = p.second.as<string>()] { return s; }});
-    }
+                    makePartial(p.second.as<string>(), delimiter));
 
     const auto& templatesYaml = mustacheYaml["templates"].asMap();
     for (auto [templates, nodeName]:
@@ -272,8 +271,7 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
 
     _printer = make_unique<Printer>(move(env), configFilePath.parent_path(),
                                     mustacheYaml["outFilesList"].as<string>(""),
-                                    mustacheYaml["delimiter"].as<string>(""),
-                                    *this);
+                                    delimiter, *this);
 }
 
 Translator::~Translator() = default;

@@ -9,6 +9,9 @@
 
 class Translator;
 
+kainjow::mustache::partial makePartial(std::string s,
+                                       const std::string& delimiter);
+
 class Printer {
 public:
     using context_type = kainjow::mustache::object;

@@ -55,10 +55,22 @@ inline bool endsWith(const string_view s, const string_view ss)
     return s.size() >= ss.size() && equal(ss.rbegin(), ss.rend(), s.rbegin());
 }
 
+inline auto assignDelimiter(const string& delimiter, string tmpl)
+{
+    if (!delimiter.empty())
+        tmpl.insert(0, "{{=" + delimiter + "=}}");
+    return tmpl;
+}
+
+km::partial makePartial(string s, const string& delimiter)
+{
+    return km::partial {
+        [tmpl = assignDelimiter(delimiter, move(s))] { return tmpl; }};
+}
+
 inline Printer::template_type Printer::makeMustache(const string& tmpl) const
 {
-    km::mustache mstch{
-        _delimiter.empty() ? tmpl : "{{=" + _delimiter + "=}}" + tmpl};
+    km::mustache mstch {assignDelimiter(_delimiter, tmpl)};
     mstch.set_custom_escape([](string s) { return s; });
     return mstch;
 }
@@ -68,8 +80,11 @@ class GtadContext : public km::context<string>
     public:
         using data = km::data;
 
-        GtadContext(Printer::fspath inputBasePath, const data* d)
-            : context(d), inputBasePath(move(inputBasePath))
+        GtadContext(Printer::fspath inputBasePath, string delimiter,
+                    const data* d)
+            : context(d)
+            , inputBasePath(move(inputBasePath))
+            , delimiter(move(delimiter))
         {}
 
         const data* get_partial(const string& name) const override
@@ -96,14 +111,14 @@ class GtadContext : public km::context<string>
 
             string fileContents;
             getline(ifs, fileContents, '\0'); // Won't work on files with NULs
-            return &filePartialsCache.insert(
-                        make_pair(name,
-                            partial([fileContents] { return fileContents; })))
-                    .first->second;
+            return &filePartialsCache
+                        .emplace(name, makePartial(move(fileContents), delimiter))
+                        .first->second;
         }
 
     private:
         Printer::fspath inputBasePath;
+        string delimiter;
         mutable unordered_map<string, data> filePartialsCache;
 };
 
@@ -272,7 +287,7 @@ object Printer::renderType(const TypeUsage& tu) const
         qualifiedValues.emplace(to_string(i), mParamType["qualifiedName"]);
     }
 
-    GtadContext context {_inputBasePath, &_contextData};
+    GtadContext context {_inputBasePath, _delimiter, &_contextData};
     return {{"name", renderWithOverlay(_typeRenderer, context, values)}
            ,{"qualifiedName",
              renderWithOverlay(_typeRenderer, context, qualifiedValues)}
@@ -374,7 +389,7 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
         return;
     }
 
-    GtadContext context{_inputBasePath, &_contextData};
+    GtadContext context{_inputBasePath, _delimiter, &_contextData};
 
     object payloadObj {{"filenameBase", filePathBase.filename().string()}
                       ,{"basePathWithoutHost", model.basePath}
