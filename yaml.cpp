@@ -25,8 +25,6 @@
 
 using Node = YAML::Node;
 using NodeType = YAML::NodeType;
-using std::cerr;
-using std::endl;
 using std::string;
 
 // Follows the YAML::NodeType::value enum; if that enum changes, this has
