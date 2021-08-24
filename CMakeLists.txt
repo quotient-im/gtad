@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.8) # Older ones don't know about C++17
 
-project(gtad VERSION 0.7 LANGUAGES CXX)
+project(gtad VERSION 0.8 LANGUAGES CXX)
 
 include(CheckCXXCompilerFlag)
 
