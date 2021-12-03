@@ -44,6 +44,8 @@ in the future).
   Visual C++ 2017 15.7 (Windows), or newer
 - any build system that works with CMake and/or qmake should be fine:
   GNU Make, ninja (any platform), NMake, jom (Windows) are known to work.
+- for the actual invocation - clang-format in your PATH or CLANG_FORMAT variable
+  having a full path to clang-format.
 
 #### Linux
 Just install things from the list above using your preferred package manager.
@@ -125,6 +127,16 @@ The options are:
   to process. A hyphen appended to the filename means that the file must be 
   skipped (allows to select a directory with files and then explicitly disable
   some files in it).
+
+Since version 0.9 GTAD uses clang-format at the last stage of files generation
+to format the emitted files. For that to work, a binary that can be called
+as `clang-format` (that is, `clang-format` for POSIX systems and
+`clang-format.exe` for Windows) should reside in `PATH`. Alternatively, you can
+pass the full path in the `CLANG_FORMAT` environment variable. While the target
+format is normally specified in a `.clang-format` file, you can override that
+by passing Clang-format command-line options in `CLANG_FORMAT_ARGS` - notably,
+if you prefer to skip formatting for whatever reason, you can set
+`CLANG_FORMAT_ARGS="-n"` (dry-run mode) before invoking GTAD.
 
 #### Dealing with referenced files
 
@@ -657,18 +669,18 @@ be entirely overwritten on every GTAD run.
 
 Mustache does not know anything about the target language and only does minimal
 work to collapse/eliminate linebreaks (basically - if there's nothing on the
-line except Mustache tags the extra linebreak will be eliminated). This becomes
-quite a problem if you try to get the nicely formatted text directly from GTAD.
-To save effort on repositioning Mustache tags desperately in order to get
-the formatting right it's much more labour-efficient to feed GTAD output to
-clang-format or a similar code formatter (libQuotient does that in
-`CMakeLists.txt`). If you still need some way to eliminate extra linebreaks,
-note that the ending `}}` of any tag can be put on a new line. Hence,
-the minimal way to consume a nasty linebreak is to just put a Mustache comment
-as follows:
+line except Mustache tags the extra linebreak will be eliminated). To relieve
+the developer from having to position Mustache tags in a very specific way
+only to get the formatting right GTAD 0.9 calls clang-format on the generated
+files as the final stage (GTAD 0.8 and before did not do that but it was
+still possible to achieve the same effect by calling clang-format after GTAD
+- libQuotient used to do that in its CMakeLists.txt, in particular). If you
+still need some way to eliminate extra linebreaks not removed by clang-format
+note that the ending `}}` of any tag can be put on a new line. The minimal
+way to consume a nasty linebreak is to just put a Mustache comment as follows:
 ```handlebars
-(a lot of text, I really want to break it {{!
-}}in two lines but only in the template)
+{{!
+}}
 ```
 
 TODO: more tips and tricks
