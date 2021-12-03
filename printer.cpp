@@ -559,6 +559,7 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
         } else
             clog << fPath << ": " << fullTemplate.error_message() << endl;
     }
+    cout << "Formatting files" << endl;
     using namespace std::literals;
     const char* clangFormatPath = getenv("CLANG_FORMAT");
     string clangFormatCommand {clangFormatPath ? clangFormatPath
