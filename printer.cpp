@@ -542,18 +542,31 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
     }
 
     ContextOverlay overlay(context, payloadObj);
+    string filesToFormat;
     for (const auto& [fPath, fTemplate]:
          _translator.outputConfig(filePathBase, model)) {
+        const auto& fPathString = fPath.string();
         ofstream ofs{fPath};
         if (!ofs.good())
-            throw Exception(fPath.string() + ": Couldn't open for writing");
+            throw Exception(fPathString + ": Couldn't open for writing");
 
-        cout << "Emitting " << fPath.string() << endl;
+        cout << "Emitting " << fPathString << endl;
         auto fullTemplate = makeMustache(fTemplate);
         fullTemplate.render(context, ofs);
-        if (fullTemplate.error_message().empty())
-            _outFilesList << fPath.string() << endl;
-        else
+        if (fullTemplate.error_message().empty()) {
+            _outFilesList << fPathString << endl;
+            filesToFormat += ' ' + fPathString;
+        } else
             clog << fPath << ": " << fullTemplate.error_message() << endl;
     }
+    using namespace std::literals;
+    const char* clangFormatPath = getenv("CLANG_FORMAT");
+    string clangFormatCommand {clangFormatPath ? clangFormatPath
+                                               : "clang-format"sv};
+    clangFormatCommand += " -i -sort-includes"sv;
+    const char* clangFormatArgs = getenv("CLANG_FORMAT_ARGS");
+    if (clangFormatArgs)
+        clangFormatCommand += clangFormatArgs;
+    clangFormatCommand += filesToFormat;
+    system(clangFormatCommand.c_str());
 }
