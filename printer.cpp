@@ -382,11 +382,12 @@ bool dumpContentTypes(object& target, const string& keyName, vector<string> type
     return hasNonJson;
 }
 
-void Printer::print(const fspath& filePathBase, const Model& model) const
+vector<string> Printer::print(const fspath& filePathBase,
+                              const Model& model) const
 {
     if (model.empty()) {
         clog << "Empty model, no files will be emitted" << endl;
-        return;
+        return {};
     }
 
     GtadContext context{_inputBasePath, _delimiter, &_contextData};
@@ -538,11 +539,11 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
     if (mTypes.empty() && mOperations.empty()) {
         clog << "Warning: no emittable contents found in the model for "
              << filePathBase << ".*" << endl;
-        return;
+        return {};
     }
 
     ContextOverlay overlay(context, payloadObj);
-    string filesToFormat;
+    vector<string> emittedFilenames;
     for (const auto& [fPath, fTemplate]:
          _translator.outputConfig(filePathBase, model)) {
         const auto& fPathString = fPath.string();
@@ -555,19 +556,9 @@ void Printer::print(const fspath& filePathBase, const Model& model) const
         fullTemplate.render(context, ofs);
         if (fullTemplate.error_message().empty()) {
             _outFilesList << fPathString << endl;
-            filesToFormat += ' ' + fPathString;
+            emittedFilenames.push_back(fPathString);
         } else
             clog << fPath << ": " << fullTemplate.error_message() << endl;
     }
-    cout << "Formatting files" << endl;
-    using namespace std::literals;
-    const char* clangFormatPath = getenv("CLANG_FORMAT");
-    string clangFormatCommand {clangFormatPath ? clangFormatPath
-                                               : "clang-format"sv};
-    clangFormatCommand += " -i -sort-includes"sv;
-    const char* clangFormatArgs = getenv("CLANG_FORMAT_ARGS");
-    if (clangFormatArgs)
-        clangFormatCommand += clangFormatArgs;
-    clangFormatCommand += filesToFormat;
-    system(clangFormatCommand.c_str());
+    return emittedFilenames;
 }

@@ -27,7 +27,8 @@ public:
     Printer(Printer&& p) = default;
 
     Printer::template_type makeMustache(const string& tmpl) const;
-    void print(const fspath& filePathBase, const Model& model) const;
+    std::vector<std::string> print(const fspath& filePathBase,
+                                   const Model& model) const;
 
 private:
     const Translator& _translator;

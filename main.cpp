@@ -112,6 +112,17 @@ int main(int argc, char* argv[])
                     a.loadModel(fName.string(), role);
             }
         }
+
+        using namespace literals;
+        const char* clangFormatPath = getenv("CLANG_FORMAT");
+        string clangFormatCommand {clangFormatPath ? clangFormatPath
+                                                   : "clang-format"sv};
+        clangFormatCommand += " -i -sort-includes"sv;
+        const char* clangFormatArgs = getenv("CLANG_FORMAT_ARGS");
+        if (clangFormatArgs)
+            clangFormatCommand += clangFormatArgs;
+
+        size_t filesCounter = 0;
         for (const auto& [pathBase, model]: Analyzer::allModels()) {
             if (model.empty() || model.trivial())
                 continue;
@@ -123,8 +134,13 @@ int main(int argc, char* argv[])
             if (!fs::exists(targetDir))
                 throw Exception{"Cannot create output directory "
                                 + targetDir.string()};
-            translator.printer().print(pathBase, model);
+            const auto fileNames = translator.printer().print(pathBase, model);
+            for (const auto& fName : fileNames)
+                clangFormatCommand += ' ' + fName;
+            filesCounter += fileNames.size();
         }
+        cout << "Formatting " << filesCounter << " files\n";
+        system(clangFormatCommand.c_str());
     }
     catch (Exception& e)
     {
