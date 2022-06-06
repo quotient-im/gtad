@@ -97,12 +97,10 @@ private:
                 string description, bool required = false,
                 string defaultValue = {}) const;
 
-    template <typename... ArgTs>
-    void addVarDecl(VarDecls& varList, ArgTs&&... varDeclArgs) const
-    {
-        if (auto&& v = makeVarDecl(std::forward<ArgTs>(varDeclArgs)...))
-            varList.emplace_back(*v);
-    }
+    void addVarDecl(VarDecls& varList, VarDecl&& v) const;
+    void addVarDecl(VarDecls& varList, TypeUsage type, const string& baseName,
+                    const Identifier& scope, string description,
+                    bool required = false, string defaultValue = {}) const;
 
     [[nodiscard]] auto logOffset() const
     {

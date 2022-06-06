@@ -214,10 +214,12 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
             if (!innerSchema.description.empty())
                 schema.description = innerSchema.description;
             for (auto&& f: innerSchema.fields) {
+                // Re-map the identifier name using the current schema as scope
+                // (f has been produced with innerSchema as scope)
                 f.name =
                     _translator.mapIdentifier(f.baseName, &schema, f.required);
                 if (!f.name.empty())
-                    schema.fields.emplace_back(move(f));
+                    addVarDecl(schema.fields, move(f));
             }
 
             if (innerSchema.hasPropertyMap()) {
@@ -265,7 +267,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
                                        return baseName == n.as<string>();
                                    });
             addVarDecl(schema.fields, analyzeTypeUsage(property.second),
-                       move(baseName), schema,
+                       baseName, schema,
                        property.second["description"].as<string>(""), required,
                        property.second["default"].as<string>(""));
         }
@@ -386,8 +388,6 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
                     cout << logOffset() << "The main schema from " << refPath;
                 cout << " will be inlined" << endl;
 
-                // merge() doesn't work because imports have to be copied
-                // from the constant refModel
                 currentModel().imports.insert(refModel.imports.begin(),
                                               refModel.imports.end());
                 // If the model is non-trivial the main schema may depend
@@ -429,8 +429,32 @@ optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
         return {}; // A signal to skip the variable
 
     currentModel().addImportsFrom(type);
-    return VarDecl{std::move(type),   move(id), baseName,
-                   move(description), required, move(defaultValue)};
+    return VarDecl {move(type),        move(id), baseName,
+                    move(description), required, move(defaultValue)};
+}
+
+void Analyzer::addVarDecl(VarDecls &varList, VarDecl &&v) const
+{
+    varList.erase(remove_if(varList.begin(), varList.end(),
+                            [&v, this](const VarDecl& vv) {
+                                if (v.name != vv.name)
+                                    return false;
+                                cout << logOffset() << "Re-defining field "
+                                     << vv << endl;
+                                return true;
+                            }),
+                  varList.end());
+    varList.emplace_back(v);
+}
+
+void Analyzer::addVarDecl(VarDecls& varList, TypeUsage type,
+                          const string& baseName, const Identifier& scope,
+                          string description, bool required,
+                          string defaultValue) const
+{
+    if (auto&& v = makeVarDecl(move(type), baseName, scope, move(description),
+                               required, move(defaultValue)))
+        addVarDecl(varList, move(*v));
 }
 
 inline auto makeModelKey(const string& filePath)
