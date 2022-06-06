@@ -478,7 +478,7 @@ the following non-standard _types_/_formats_ in the GTAD configuration file
   e.g. mapping to C++17 `std::variant<>` might look like:
   ```yaml
   variant:
-    std::variant<{{#types}}{{_}}{{#_join}}, {{/_join}}{{/types}}>
+    type: std::variant<{{#types}}{{_}}{{#_join}}, {{/_join}}{{/types}}>
     imports: <variant>
   ```
 
