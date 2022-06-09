@@ -53,7 +53,7 @@ struct Identifier
     InOut role = InAndOut;
     /// Always empty for Calls as they cannot be scoped (as yet)
     const Call* call = nullptr;
-    // NB: When Calls do get scoped, the scope will likely be a namespace
+    // NB: When Calls get scoped, the scope will likely be a namespace
     // so the above field will become const Identifier* or smth
 
     [[nodiscard]] std::string qualifiedName() const;
@@ -285,6 +285,7 @@ struct Model {
     /// Spec version liberally encoded in an int, e.g. 20 for Swagger 2.0
     /// or 201909 for JSON Schema 2019-09
     int apiSpecVersion = 0;
+    bool inlineMainSchema = false;
 
     imports_type imports;
     schemas_type types;
@@ -299,7 +300,10 @@ struct Model {
     void addSchema(ObjectSchema&& schema);
     void addImportsFrom(const TypeUsage& type);
 
-    [[nodiscard]] bool empty() const { return callClasses.empty() && types.empty(); }
+    [[nodiscard]] bool empty() const
+    {
+        return callClasses.empty() && types.empty();
+    }
     [[nodiscard]] bool trivial() const
     {
         return callClasses.empty() &&

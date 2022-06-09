@@ -73,7 +73,8 @@ private:
     [[nodiscard]] const Call* currentCall() const { return currentScope().call; }
 
     [[nodiscard]] std::pair<const Model&, fspath>
-    loadDependency(const string& relPath, const string& overrideTitle);
+    loadDependency(const string& relPath, const string& overrideTitle,
+                   bool inlined = false);
     void fillDataModel(Model& m, const YamlNode& yaml, const fspath &filename);
 
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node,

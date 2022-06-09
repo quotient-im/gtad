@@ -428,6 +428,9 @@ vector<string> Printer::print(const fspath& filePathBase,
         if (!schema.name.empty())
             namedSchemas.emplace_back(schema);
 
+    if (model.inlineMainSchema)
+        namedSchemas.pop_back();
+
     auto&& mAllTypes = dumpAllTypes(namedSchemas); // Back-comp w/swagger
     if (!mAllTypes.empty())
         payloadObj.emplace("allModels", mAllTypes);
@@ -537,8 +540,9 @@ vector<string> Printer::print(const fspath& filePathBase,
         }
     }
     if (mTypes.empty() && mOperations.empty()) {
-        clog << "Warning: no emittable contents found in the model for "
-             << filePathBase << ".*" << endl;
+        if (!model.inlineMainSchema)
+            clog << "Warning: no emittable contents found in the model for "
+                 << filePathBase << ".*" << endl;
         return {};
     }
 

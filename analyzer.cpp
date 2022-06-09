@@ -366,40 +366,37 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
         const auto titleIt = tu.attributes.find("title");
         const auto& overrideTitle =
             titleIt != tu.attributes.cend() ? titleIt->second : string();
-        auto&& [refModel, importPath] = loadDependency(refPath, overrideTitle);
+        // Take the configuration override into account
+        if (auto inlineAttrIt = tu.attributes.find("_inline");
+            inlineAttrIt != tu.attributes.end() && inlineAttrIt->second == "true")
+            refsStrategy = InlineRefs;
+        auto&& [refModel, importPath] =
+            loadDependency(refPath, overrideTitle, refsStrategy == InlineRefs);
         if (refModel.types.empty())
             throw Exception(refPath + " has no schemas");
 
         tu.addImport(importPath.string());
         auto&& refSchema = refModel.types.back();
 
-        // Take the configuration override into account
-        if (auto inlineAttrIt = tu.attributes.find("_inline");
-            inlineAttrIt != tu.attributes.end() && inlineAttrIt->second == "true")
-            refsStrategy = InlineRefs;
         if (refsStrategy == InlineRefs || refModel.trivial()) {
-            if (!refSchema.hasParents()
-                || !(!refSchema.fields.empty() || refSchema.hasPropertyMap()))
-            {
-                if (refModel.trivial())
-                    cout << logOffset() << "The model at " << refPath
-                         << " is trivial (see the mapping above) and";
-                else
-                    cout << logOffset() << "The main schema from " << refPath;
-                cout << " will be inlined" << endl;
+            if (refModel.trivial())
+                cout << logOffset() << "The model at " << refPath
+                     << " is trivial (see the mapping above) and";
+            else
+                cout << logOffset() << "The main schema from " << refPath;
+            cout << " will be inlined" << endl;
 
-                currentModel().imports.insert(refModel.imports.begin(),
-                                              refModel.imports.end());
-                // If the model is non-trivial the main schema may depend
-                // on stuff in dependent types; instead of trying to figure out
-                // actually needed dependencies, just add the whole import
-                // even though the model is inlined.
-                if (refModel.types.size() > 1)
-                    currentModel().addImportsFrom(tu); // One import actually
-                return refSchema;
+            currentModel().imports.insert(refModel.imports.begin(),
+                                          refModel.imports.end());
+            // If the model is non-trivial the inlined main schema likely
+            // depends on other definitions from the same file; but it's
+            // not always practical to inline dependencies as well
+            if (refModel.types.size() > 1) {
+                cout << "The dependencies will still be imported from "
+                     << importPath << endl;
+                currentModel().addImportsFrom(tu); // One import actually
             }
-            cout << logOffset()
-                 << "Inlining suppressed due to model complexity" << endl;
+            return refSchema;
         }
         tu.name = refSchema.name;
         tu.baseName = tu.name.empty() ? refPath : tu.name;
@@ -602,7 +599,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 }
 
 pair<const Model&, fs::path>
-Analyzer::loadDependency(const string& relPath, const string& overrideTitle)
+Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
+                         bool inlined)
 {
     const auto& fullPath = context().fileDir / relPath;
     const auto fullPathBase = makeModelKey(fullPath.string());
@@ -648,8 +646,15 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle)
     ContextOverlay _modelContext(*this, fullPath.parent_path(), &model,
                                  Identifier{{}, modelRole});
     fillDataModel(model, yaml, fspath(fullPathBase).filename());
+    auto& mainSchema = model.types.back();
     if (!overrideTitle.empty() && !model.types.empty())
-        model.types.back().name = overrideTitle;
+        mainSchema.name = overrideTitle;
+    if (mainSchema.hasParents()
+        && (!mainSchema.fields.empty() || mainSchema.hasPropertyMap()))
+        cout << logOffset() << "Inlining suppressed due to model complexity"
+             << endl;
+    else
+        model.inlineMainSchema = (unseen || model.inlineMainSchema) && inlined;
     return result;
 }
 
