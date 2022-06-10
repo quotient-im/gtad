@@ -297,6 +297,8 @@ struct Model {
 
     Call& addCall(Path path, string verb, string operationId, bool needsToken);
     void addSchema(ObjectSchema&& schema);
+    void addImportsFrom(const ObjectSchema& type);
+    void addImportsFrom(const FlatSchema& type);
     void addImportsFrom(const TypeUsage& type);
 
     [[nodiscard]] bool empty() const

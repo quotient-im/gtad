@@ -205,11 +205,10 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
             // NB: If the schema is loaded from $ref, it ends up in
             // innerSchema.parentType; its name won't be in innerSchema.name
             if (!innerSchema.name.empty())
-                name = innerSchema.name; // FIXME: not always correct
-            for (const auto& parentType: innerSchema.parentTypes) {
-                currentModel().addImportsFrom(parentType);
-                schema.parentTypes.emplace_back(parentType);
-            }
+                name = innerSchema.name;
+            std::copy(innerSchema.parentTypes.begin(),
+                      innerSchema.parentTypes.end(),
+                      std::back_inserter(schema.parentTypes));
             if (!innerSchema.description.empty())
                 schema.description = innerSchema.description;
             for (auto&& f: innerSchema.fields) {
@@ -332,18 +331,21 @@ Body Analyzer::analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
             // An empty schema for _request_ means a freeform object
             required = false;
             packedType = _translator.mapType("object");
-        } else if (bodySchema.trivial())
+        } else if (bodySchema.trivial()) {
             // If the schema consists of a single parent type, inline that type
             packedType = bodySchema.parentTypes.front();
-        else if (bodySchema.hasParents())
+            currentModel().addImportsFrom(packedType);
+        } else if (bodySchema.hasParents()) {
             // If the schema is complex (=with both parents and properties),
             // add a definition for it and make a single parameter with
             // the type of the schema.
             packedType = addSchema(move(bodySchema));
-        else
+        } else {
             // No parents, non-empty - unpack the schema to body properties
+            currentModel().addImportsFrom(bodySchema);
             // NOLINTNEXTLINE(cppcoreguidelines-slicing): no parents to lose
-            return FlatSchema(bodySchema);
+            return FlatSchema {bodySchema};
+        }
     }
     if (auto&& v = makeVarDecl(move(packedType), name, location,
                                move(description), required)) {
@@ -402,7 +404,6 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
         }
         tu.name = refSchema.name;
         tu.baseName = tu.name.empty() ? refPath : tu.name;
-        currentModel().addImportsFrom(tu);
     }
     cout << logOffset() << "Resolved $ref: " << refPath << " to type usage "
          << tu.name << endl;
@@ -427,7 +428,6 @@ optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
     if (id.empty())
         return {}; // Skip the variable
 
-    currentModel().addImportsFrom(type);
     return VarDecl {move(type),        move(id), baseName,
                     move(description), required, move(defaultValue)};
 }

@@ -17,22 +17,8 @@ TypeUsage::TypeUsage(const ObjectSchema& schema)
 
 TypeUsage TypeUsage::specialize(vector<TypeUsage>&& params) const
 {
-    TypeUsage tu = *this;
-    for (auto&& paramType: params)
-    {
-        tu.paramTypes.emplace_back(paramType);
-
-        auto& tuImports = tu.lists["imports"];
-        const auto singleInnerImport = paramType.attributes.find("imports");
-        if (singleInnerImport != paramType.attributes.end())
-            tuImports.push_back(singleInnerImport->second);
-        const auto innerImports = paramType.lists.find("imports");
-        if (innerImports != paramType.lists.end())
-            tuImports.insert(tuImports.end(),
-                             innerImports->second.begin(),
-                             innerImports->second.end());
-    }
-
+    auto tu = *this;
+    tu.paramTypes = params;
     return tu;
 }
 
@@ -171,11 +157,23 @@ void Model::addSchema(ObjectSchema&& schema)
     if (dupIt != types.end())
         return;
 
-    for (const auto& pt: schema.parentTypes)
-        addImportsFrom(pt);
-    if (!schema.propertyMap.type.empty())
-        addImportsFrom(schema.propertyMap.type);
+    addImportsFrom(schema);
     types.emplace_back(move(schema));
+}
+
+void Model::addImportsFrom(const ObjectSchema& s)
+{
+    for (const auto& pt : s.parentTypes)
+        addImportsFrom(pt);
+    addImportsFrom(static_cast<const FlatSchema&>(s));
+}
+
+void Model::addImportsFrom(const FlatSchema& s)
+{
+    for (const auto& f : s.fields)
+        addImportsFrom(f.type);
+    if (!s.propertyMap.type.empty())
+        addImportsFrom(s.propertyMap.type);
 }
 
 void Model::addImportsFrom(const TypeUsage& type)
@@ -188,6 +186,8 @@ void Model::addImportsFrom(const TypeUsage& type)
     if (typeImportsIt != type.lists.end())
         for (auto&& import : typeImportsIt->second)
             imports.emplace(import, renderer);
+    for (const auto& paramType : type.paramTypes)
+        addImportsFrom(paramType);
 }
 
 void Model::clear()
