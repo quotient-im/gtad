@@ -79,16 +79,13 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
     auto yamlType = yamlTypeNode.as<string>("object");
     if (yamlType == "array")
     {
-        if (auto yamlElemType = node["items"].asMap())
-            if (!yamlElemType.empty())
-            {
-                auto&& elemType = analyzeTypeUsage(yamlElemType, TopLevel);
-                const auto& protoType =
-                    _translator.mapType("array", elemType.baseName,
-                                        camelCase(node["title"].as<string>(
-                                            elemType.baseName + "[]")));
-                return protoType.specialize({move(elemType)});
-            }
+        if (auto yamlElemType = node["items"].asMap(); !yamlElemType.empty()) {
+            auto&& elemType = analyzeTypeUsage(yamlElemType, TopLevel);
+            const auto& protoType = _translator.mapType(
+                "array", elemType.baseName,
+                camelCase(node["title"].as<string>(elemType.baseName + "[]")));
+            return protoType.specialize({move(elemType)});
+        }
 
         return _translator.mapType("array");
     }
@@ -112,8 +109,8 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
         // Also, a nameless non-empty schema is now treated as a generic
         // mapType("object"). TODO, low priority: ad-hoc typing (via tuples?)
     }
-    auto tu = _translator.mapType(yamlType, node["format"].as<string>(""));
-    if (!tu.empty())
+    if (const auto tu = _translator.mapType(yamlType, node["format"].as<string>(""));
+        !tu.empty())
         return tu;
 
     throw YamlException(node, "Unknown type: " + yamlType);
@@ -155,7 +152,7 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes)
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
                                      RefsStrategy refsStrategy)
 {
-    if (auto yamlRef = yamlSchema["$ref"]) {
+    if (const auto yamlRef = yamlSchema["$ref"]) {
         // https://tools.ietf.org/html/draft-pbryan-zyp-json-ref-03#section-3
         if (yamlSchema.size() > 1)
             clog << yamlSchema.location() << ": Warning: "
@@ -164,9 +161,9 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
         return resolveRef(yamlRef.as<string>(), refsStrategy);
     }
 
-    auto schema = yamlSchema["type"].as<string>("object") == "object"
-                      ? analyzeObject(yamlSchema, refsStrategy)
-                      : makeEphemeralSchema(analyzeTypeUsage(yamlSchema));
+    const auto schema = yamlSchema["type"].as<string>("object") == "object"
+                            ? analyzeObject(yamlSchema, refsStrategy)
+                            : makeEphemeralSchema(analyzeTypeUsage(yamlSchema));
 
     if (!schema.empty()) {
         cout << logOffset() << yamlSchema.location() << ": schema for "
@@ -203,8 +200,10 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
         schema.parentTypes.emplace_back(analyzeMultitype(yamlOneOf));
 
     if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
-        for (const auto& yamlEntry: yamlAllOf) {
+        for (const auto& yamlEntry : yamlAllOf) {
             auto&& innerSchema = analyzeSchema(yamlEntry, refsStrategy);
+            // NB: If the schema is loaded from $ref, it ends up in
+            // innerSchema.parentType; its name won't be in innerSchema.name
             if (!innerSchema.name.empty())
                 name = innerSchema.name; // FIXME: not always correct
             for (const auto& parentType: innerSchema.parentTypes) {
@@ -238,6 +237,9 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
 
     name = yamlSchema["title"].as<string>(name);
 
+    // Last resort: pick the name from the parent (i.e. $ref'ed) schema but only
+    // if the current schema is trivial (i.e. has no extra fields on top of
+    // what $ref'ed schema defines).
     if (name.empty() && schema.trivial())
         name = schema.parentTypes.back().name;
     if (!name.empty()) {
@@ -417,13 +419,13 @@ ObjectSchema Analyzer::makeEphemeralSchema(TypeUsage&& tu) const
 }
 
 optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
-                              const Identifier& scope,
-                              string description, bool required,
-                              string defaultValue) const
+                                        const Identifier& scope,
+                                        string description, bool required,
+                                        string defaultValue) const
 {
     auto&& id = _translator.mapIdentifier(baseName, &scope, required);
     if (id.empty())
-        return {}; // A signal to skip the variable
+        return {}; // Skip the variable
 
     currentModel().addImportsFrom(type);
     return VarDecl {move(type),        move(id), baseName,

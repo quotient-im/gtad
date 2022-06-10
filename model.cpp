@@ -12,7 +12,7 @@ string Identifier::qualifiedName() const
 }
 
 TypeUsage::TypeUsage(const ObjectSchema& schema)
-    : Identifier(schema), baseName(schema.name)
+    : Identifier(static_cast<const Identifier&>(schema)), baseName(schema.name)
 { }
 
 TypeUsage TypeUsage::specialize(vector<TypeUsage>&& params) const
@@ -70,7 +70,7 @@ string camelCase(string s)
     return s;
 }
 
-string withoutSuffix(const string& path, const string_view& suffix)
+string withoutSuffix(const string& path, string_view suffix)
 {
     return path.substr(0, path.find(suffix, path.size() - suffix.size()));
 }
@@ -112,7 +112,7 @@ Path::Path(string path)
     }
 }
 
-const array<string, 3> Call::ParamGroups{{"path"s, "query"s, "header"s}};
+const array<string, 3> Call::ParamGroups {{"path"s, "query"s, "header"s}};
 
 auto getParamsBlockIndex(const string& name)
 {

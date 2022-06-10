@@ -28,8 +28,7 @@
 
 std::string capitalizedCopy(std::string s);
 std::string camelCase(std::string s);
-std::string withoutSuffix(const std::string& path,
-                          const std::string_view& suffix);
+std::string withoutSuffix(const std::string& path, std::string_view suffix);
 
 enum InOut : unsigned char { InAndOut = 0, OnlyIn, OnlyOut };
 
@@ -65,10 +64,10 @@ struct TypeUsage : Identifier
 {
     using imports_type = std::vector<std::string>;
 
-    std::string baseName; //< As used in the API definition
+    std::string baseName; ///< As used in the API definition
     std::unordered_map<std::string, std::string> attributes;
     std::unordered_map<std::string, std::vector<std::string>> lists;
-    std::vector<TypeUsage> paramTypes; //< Parameter types for type templates
+    std::vector<TypeUsage> paramTypes; ///< Parameter types for type templates
 
     TypeUsage() = default;
     explicit TypeUsage(std::string typeName) : Identifier{move(typeName)} { }
@@ -98,15 +97,15 @@ struct TypeUsage : Identifier
 struct VarDecl : Identifier {
     using string = std::string;
     TypeUsage type;
-    string baseName; //< Identifier as used in the API
+    string baseName; ///< Identifier as used in the API
     string description;
     bool required = false;
     string defaultValue;
 
     VarDecl() = default;
-    VarDecl(TypeUsage type, string name, string baseName, string description,
+    VarDecl(TypeUsage type, string varName, string baseName, string description,
             bool required = false, string defaultValue = {})
-        : Identifier{move(name)}, type(std::move(type))
+        : Identifier{move(varName)}, type(std::move(type))
         , baseName(move(baseName)), description(move(description))
         , required(required), defaultValue(move(defaultValue))
     {}

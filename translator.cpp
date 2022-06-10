@@ -294,11 +294,10 @@ TypeUsage Translator::mapType(const string& swaggerType,
                               const string& baseName) const
 {
     TypeUsage tu;
-    for (const auto& swTypePair: _typesMap)
-        if (swTypePair.first == swaggerType)
-            for (const auto& swFormatPair: swTypePair.second)
+    for (const auto& [swType, swFormats]: _typesMap)
+        if (swType == swaggerType)
+            for (const auto& [swFormat, mappedType]: swFormats)
             {
-                const auto& swFormat = swFormatPair.first;
                 if (swFormat == swaggerFormat ||
                     (!swFormat.empty() && swFormat.front() == '/' &&
                      regex_search(swaggerFormat,
@@ -308,7 +307,7 @@ TypeUsage Translator::mapType(const string& swaggerType,
                     // TypeUsage should become a handle to an instance of
                     // a newly-made TypeDefinition type that would own all
                     // the stuff TypeUsage now has, except paramTypes
-                    tu = swFormatPair.second;
+                    tu = mappedType;
                     goto conclusion;
                 }
             }

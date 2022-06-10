@@ -69,16 +69,11 @@ class iterator_base
         iterator_base<V> operator++(int) { return { _impl++, _fileName }; }
 
         template <typename IterT>
-        bool operator==(const IterT& rhs)
+        bool operator==(const IterT& rhs) const
         {
             return _impl == rhs._impl &&
                 ((_fileName && rhs._fileName && *_fileName == *rhs._fileName) ||
                     (!_fileName && !rhs._fileName));
-        }
-        template <typename IterT>
-        bool operator!=(const IterT& rhs)
-        {
-            return !(*this == rhs);
         }
 
         value_type operator*() const { return value_type(*_impl, _fileName); }

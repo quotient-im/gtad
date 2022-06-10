@@ -43,18 +43,6 @@ inline string safeString(const Printer::context_type& contextObj,
     return defaultValue;
 }
 
-// While C++20 is not around
-
-inline bool startsWith(const string_view s, const string_view ss)
-{
-    return s.size() >= ss.size() && equal (ss.begin(), ss.end(), s.begin());
-}
-
-inline bool endsWith(const string_view s, const string_view ss)
-{
-    return s.size() >= ss.size() && equal(ss.rbegin(), ss.rend(), s.rbegin());
-}
-
 inline auto assignDelimiter(const string& delimiter, string tmpl)
 {
     if (!delimiter.empty())
@@ -377,7 +365,8 @@ bool dumpContentTypes(object& target, const string& keyName, vector<string> type
 {
     setList(target, keyName, types);
     const bool hasNonJson =
-            !all_of(types.begin(), types.end(), bind(endsWith, _1, "/json"));
+        !all_of(types.begin(), types.end(),
+                [](const string& s) { return s.ends_with("/json"); });
     target.emplace(keyName + "NonJson?", hasNonJson);
     return hasNonJson;
 }
@@ -405,12 +394,10 @@ vector<string> Printer::print(const fspath& filePathBase,
                     return {};
                 }
                 static unordered_map<string, template_type> tmplCache {};
-                auto tmplIt = tmplCache.find(import.second);
-                if (tmplIt == tmplCache.end())
-                    tmplIt =
-                        tmplCache
-                            .emplace(import.second, makeMustache(import.second))
-                            .first;
+                const auto tmplIt =
+                    tmplCache
+                        .try_emplace(import.second, makeMustache(import.second))
+                        .first;
 
                 object importContextObj {{"_", import.first}};
                 setList(importContextObj, "segments", fspath(import.first));
@@ -460,9 +447,11 @@ vector<string> Printer::print(const fspath& filePathBase,
             globalProducesNonJson |=
                 dumpContentTypes(mCall, "produces", call.producedContentTypes);
             mCall.emplace("producesImage?",
-                        all_of(call.producedContentTypes.begin(),
-                               call.producedContentTypes.end(),
-                               bind(startsWith, _1, "image/")));
+                          all_of(call.producedContentTypes.begin(),
+                                 call.producedContentTypes.end(),
+                                 [](const string& s) {
+                                     return s.starts_with("image/");
+                                 }));
 
             auto&& mCallTypes = dumpTypes(model.types, &call);
             if (!mCallTypes.empty())
@@ -547,9 +536,10 @@ vector<string> Printer::print(const fspath& filePathBase,
     }
 
     ContextOverlay overlay(context, payloadObj);
+    const auto outputs = _translator.outputConfig(filePathBase, model);
     vector<string> emittedFilenames;
-    for (const auto& [fPath, fTemplate]:
-         _translator.outputConfig(filePathBase, model)) {
+    emittedFilenames.reserve(outputs.size());
+    for (const auto& [fPath, fTemplate]: outputs) {
         const auto& fPathString = fPath.string();
         ofstream ofs{fPath};
         if (!ofs.good())

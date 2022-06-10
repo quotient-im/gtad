@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8) # Older ones don't know about C++17
+cmake_minimum_required(VERSION 3.12) # Older ones don't know about C++20
 
 project(gtad VERSION 0.9 LANGUAGES CXX)
 
@@ -13,7 +13,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "MinSizeRel" "RelWithDebInfo")
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 # Setup command line parameters for the compiler and linker
 if (MSVC)
@@ -65,11 +65,6 @@ list(APPEND SRCS
 
 add_executable(${CMAKE_PROJECT_NAME} ${SRCS})
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE yaml-cpp/include)
-if (CMAKE_CXX_COMPILER_ID STREQUAL GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.1)
-    set(std_fs_lib "stdc++fs")
-elseif(CMAKE_CXX_COMPILER_ID EQUAL Clang AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
-    set(std_fs_lib "c++fs")
-endif()
 target_link_libraries(${CMAKE_PROJECT_NAME} Qt5::Core yaml-cpp ${std_fs_lib})
 
 install(TARGETS ${CMAKE_PROJECT_NAME}
