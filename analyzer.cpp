@@ -196,10 +196,28 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
     // in oneOf or $ref'ed in allOf).
     string name;
 
+    // To check for substitions, calculate the name without resolving
+    // references first, to avoid generating unused schemas.
+
+    auto yamlAllOf = yamlSchema["allOf"].asSequence();
+    if (yamlAllOf)
+        for (const auto& yamlEntry : yamlAllOf) {
+            name = yamlEntry["title"].as<string>(name);
+        }
+
+    name = yamlSchema["title"].as<string>(name);
+
+    if (!name.empty()) {
+        // Now that we have a good idea of the schema identity we can check if
+        // the configuration has anything to substitute this schema with.
+        if (auto&& tu = _translator.mapType("schema", name); !tu.empty())
+            return makeEphemeralSchema(move(tu));
+    }
+
     if (auto yamlOneOf = yamlSchema["oneOf"].asSequence())
         schema.parentTypes.emplace_back(analyzeMultitype(yamlOneOf));
 
-    if (auto yamlAllOf = yamlSchema["allOf"].asSequence())
+    if (yamlAllOf)
         for (const auto& yamlEntry : yamlAllOf) {
             auto&& innerSchema = analyzeSchema(yamlEntry, refsStrategy);
             // NB: If the schema is loaded from $ref, it ends up in
@@ -234,21 +252,14 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
             }
         }
 
-    name = yamlSchema["title"].as<string>(name);
-
     // Last resort: pick the name from the parent (i.e. $ref'ed) schema but only
     // if the current schema is trivial (i.e. has no extra fields on top of
     // what $ref'ed schema defines).
     if (name.empty() && schema.trivial())
         name = schema.parentTypes.back().name;
-    if (!name.empty()) {
-        // Now that we have a good idea of the schema identity we can check if
-        // the configuration has anything to substitute this schema with.
-        if (auto&& tu = _translator.mapType("schema", name); !tu.empty())
-            return makeEphemeralSchema(move(tu));
 
+    if (!name.empty())
         name = _translator.mapIdentifier(name, &currentScope(), false);
-    }
 
     auto properties = yamlSchema["properties"].asMap();
     auto additionalProperties = yamlSchema["additionalProperties"];
