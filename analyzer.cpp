@@ -37,7 +37,7 @@ private:
 
 public:
     ContextOverlay(Analyzer& a, fs::path newFileDir, Model* newModel,
-                   Identifier newScope = {})
+                   Identifier newScope)
         : _analyzer(a)
         , _prevContext(_analyzer._context)
         , _thisContext{std::move(newFileDir), newModel, move(newScope)}
@@ -45,10 +45,11 @@ public:
         _analyzer._context = &_thisContext;
         ++_analyzer._indent;
     }
-    template <typename... ArgTs>
-    ContextOverlay(Analyzer& a, ArgTs&&... scopeArgs)
-        : ContextOverlay(a, a.context().fileDir, a.context().model,
-                         {std::forward<ArgTs>(scopeArgs)...})
+    ContextOverlay(Analyzer& a, fs::path newFileDir, Model* newModel, InOut role)
+        : ContextOverlay(a, std::move(newFileDir), newModel, {{}, role})
+    {}
+    ContextOverlay(Analyzer& a, Identifier newScope)
+        : ContextOverlay(a, a.context().fileDir, a.context().model, newScope)
     { }
     ~ContextOverlay()
     {
@@ -484,13 +485,14 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
     cout << "Loading from " << filePath << endl;
     const auto yaml =
         YamlMap::loadFromFile(_baseDir / filePath, _translator.substitutions());
-    if (_allModels.count(filePath) > 0) {
+    if (_allModels.contains(filePath)) {
         clog << "Warning: the model has been loaded from " << filePath
              << " but will be reloaded again" << endl;
         _allModels.erase(filePath);
     }
     auto&& model = _allModels[makeModelKey(filePath)];
-    ContextOverlay _modelContext(*this, fspath(filePath).parent_path(), &model);
+    ContextOverlay _modelContext(*this, fspath(filePath).parent_path(), &model,
+                                 inOut);
 
     // Detect which file we have: API description or data definition
     if (!yaml["paths"]) {
@@ -555,7 +557,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 for (const YamlMap yamlParam: yamlParams) {
                     const auto& name = yamlParam.get("name").as<string>();
 
-                    ContextOverlay _inContext(*this, name, OnlyIn, &call);
+                    ContextOverlay _inContext(*this, {name, OnlyIn, &call});
 
                     auto&& in = yamlParam.get("in").as<string>();
                     auto required = yamlParam["required"].as<bool>(false);
@@ -588,8 +590,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 if (const auto yamlResponse = yamlResponses["200"].asMap()) {
                     Response response{
                         "200", yamlResponse.get("description").as<string>()};
-                    ContextOverlay _outContext(*this, response.code, OnlyOut,
-                                               &call);
+                    ContextOverlay _outContext(*this,
+                                               {response.code, OnlyOut, &call});
                     if (auto yamlHeaders = yamlResponse["headers"])
                         for (const auto& yamlHeader: yamlHeaders.asMap())
                             addVarDecl(response.headers,
@@ -657,7 +659,7 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
     const auto yaml =
         YamlMap::loadFromFile(_baseDir / fullPath, _translator.substitutions());
     ContextOverlay _modelContext(*this, fullPath.parent_path(), &model,
-                                 Identifier{{}, modelRole});
+                                 modelRole);
     fillDataModel(model, yaml, fspath(fullPathBase).filename());
     auto& mainSchema = model.types.back();
     if (!overrideTitle.empty() && !model.types.empty())
