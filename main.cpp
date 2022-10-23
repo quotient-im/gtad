@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
         for(const auto& path: paths) {
             auto ftype = fs::status(path).type();
             if (ftype == fs::file_type::regular)
-                Analyzer{translator}.loadModel(path.string(), role);
+                Analyzer{translator, path.parent_path()}.loadModel(path.filename().string(), role);
 
             if (ftype != fs::file_type::directory)
                 continue;
