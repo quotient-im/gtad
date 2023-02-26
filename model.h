@@ -28,7 +28,6 @@
 
 std::string capitalizedCopy(std::string s);
 std::string camelCase(std::string s);
-std::string withoutSuffix(const std::string& path, std::string_view suffix);
 
 enum InOut : unsigned char { InAndOut = 0, OnlyIn, OnlyOut };
 

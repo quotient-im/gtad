@@ -35,7 +35,7 @@ class Analyzer
 public:
     using string = std::string;
     using fspath = std::filesystem::path;
-    using models_t = std::unordered_map<string, Model>;
+    using models_t = std::unordered_map<fspath, Model>;
 
     explicit Analyzer(const Translator& translator, fspath basePath = {});
 
@@ -72,6 +72,7 @@ private:
     [[nodiscard]] InOut currentRole() const { return currentScope().role; }
     [[nodiscard]] const Call* currentCall() const { return currentScope().call; }
 
+    [[nodiscard]] fspath makeModelKey(const fspath& sourcePath);
     [[nodiscard]] std::pair<const Model&, fspath>
     loadDependency(const string& relPath, const string& overrideTitle,
                    bool inlined = false);

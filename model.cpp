@@ -56,11 +56,6 @@ string camelCase(string s)
     return s;
 }
 
-string withoutSuffix(const string& path, string_view suffix)
-{
-    return path.substr(0, path.find(suffix, path.size() - suffix.size()));
-}
-
 string VarDecl::toString(bool withDefault) const
 {
     auto result = type.name + " " + name;

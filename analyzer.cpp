@@ -471,9 +471,15 @@ void Analyzer::addVarDecl(VarDecls& varList, TypeUsage type,
         addVarDecl(varList, std::move(*v));
 }
 
-inline auto makeModelKey(const string& filePath)
+inline string withoutSuffix(const string& path, string_view suffix)
 {
-    return withoutSuffix(filePath, ".yaml");
+    return path.substr(0, path.find(suffix, path.size() - suffix.size()));
+}
+
+inline fs::path Analyzer::makeModelKey(const fs::path& sourcePath)
+{
+    return (_translator.outputBaseDir() / withoutSuffix(sourcePath, ".yaml"))
+        .lexically_normal();
 }
 
 vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
@@ -623,10 +629,10 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
                          bool inlined)
 {
     const auto& fullPath = context().fileDir / relPath;
-    const auto fullPathBase = makeModelKey(fullPath.string());
-    const auto [mIt, unseen] = _allModels.try_emplace(fullPathBase);
+    const auto stem = makeModelKey(fullPath);
+    const auto [mIt, unseen] = _allModels.try_emplace(stem);
     auto& model = mIt->second;
-    const pair result {cref(model), _translator.outputBaseDir() / fullPathBase};
+    const pair result {cref(model), stem};
 
     // If there is a matching model just return it
     auto modelRole = InAndOut;
@@ -665,7 +671,7 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
         YamlMap::loadFromFile(_baseDir / fullPath, _translator.substitutions());
     ContextOverlay _modelContext(*this, fullPath.parent_path(), &model,
                                  modelRole);
-    fillDataModel(model, yaml, fspath(fullPathBase).filename());
+    fillDataModel(model, yaml, stem.filename());
     auto& mainSchema = model.types.back();
     if (!overrideTitle.empty() && !model.types.empty())
         mainSchema.name = overrideTitle;

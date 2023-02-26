@@ -271,16 +271,14 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
 
 Translator::~Translator() = default;
 
-Translator::output_config_t Translator::outputConfig(const path& filePathBase,
+Translator::output_config_t Translator::outputConfig(const path& fileStem,
                                                      const Model& model) const
 {
-    const auto fNameBase = outputBaseDir() / filePathBase;
-
     const auto& srcConfig =
         model.apiSpec == ApiSpec::JSONSchema ? _dataTemplates : _apiTemplates;
     output_config_t result;
     for (const auto& [fExtension, fTemplate]: srcConfig)
-        result.emplace_back(path(fNameBase) += fExtension, fTemplate);
+        result.emplace_back(path(fileStem) += fExtension, fTemplate);
     return result;
 }
 

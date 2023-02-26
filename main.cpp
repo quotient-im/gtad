@@ -123,18 +123,17 @@ int main(int argc, char* argv[])
             clangFormatCommand += clangFormatArgs;
 
         size_t filesCounter = 0;
-        for (const auto& [pathBase, model]: Analyzer::allModels()) {
+        for (const auto& [stem, model]: Analyzer::allModels()) {
             if (model.empty() || model.trivial())
                 continue;
 
-            auto targetDir = (translator.outputBaseDir() / pathBase)
-                                 .parent_path()
-                                 .lexically_normal();
+            const auto targetDir = stem.parent_path();
             fs::create_directories(targetDir);
             if (!fs::exists(targetDir))
-                throw Exception{"Cannot create output directory "
-                                + targetDir.string()};
-            const auto fileNames = translator.printer().print(pathBase, model);
+                throw Exception {"Cannot create output directory "
+                                 + targetDir.string()};
+
+            const auto fileNames = translator.printer().print(stem, model);
             for (const auto& fName : fileNames)
                 clangFormatCommand += ' ' + fName;
             filesCounter += fileNames.size();

@@ -45,7 +45,7 @@ public:
     [[nodiscard]] const path& outputBaseDir() const { return _outputDirPath; }
     [[nodiscard]] Printer& printer() const { return *_printer; }
 
-    [[nodiscard]] output_config_t outputConfig(const path& filePathBase,
+    [[nodiscard]] output_config_t outputConfig(const path& fileStem,
                                                const Model& model) const;
     [[nodiscard]] TypeUsage mapType(const string& swaggerType,
                                     const string& swaggerFormat = {},
