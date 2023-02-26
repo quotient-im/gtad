@@ -259,12 +259,9 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
     for (auto [templates, nodeName] :
          {pair {&_dataTemplates, "data"}, {&_apiTemplates, "api"}})
         if (auto extToTemplatesYaml = templatesYaml[nodeName].asMap()) {
-            templates->resize(extToTemplatesYaml.size());
-            transform(extToTemplatesYaml.begin(), extToTemplatesYaml.end(),
-                      templates->begin(), [](const YamlNodePair& p) {
-                          return make_pair(p.first.as<string>(),
-                                           p.second.as<string>());
-                      });
+            for (auto extToTemplateYaml : extToTemplatesYaml)
+                templates->emplace_back(extToTemplateYaml.first.as<string>(),
+                                        extToTemplateYaml.second.as<string>());
         }
 
     _printer = make_unique<Printer>(std::move(env), configFilePath.parent_path(),
