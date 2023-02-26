@@ -93,7 +93,7 @@ class YamlNode : public YAML::Node
     public:
         YamlNode() = default;
         YamlNode(const YAML::Node& rhs, std::shared_ptr<std::string> fileName)
-            : Node(rhs), _fileName(move(fileName)) { }
+            : Node(rhs), _fileName(std::move(fileName)) { }
 
         std::string fileName() const { return *_fileName; }
 
@@ -131,9 +131,9 @@ class YamlNode : public YAML::Node
 
 struct YamlException : Exception
 {
-    explicit YamlException(const YamlNode& node, std::string msg) noexcept
-        : Exception(node.location() + ": " + move(msg))
-    { }
+        explicit YamlException(const YamlNode& node, std::string msg) noexcept
+            : Exception(node.location() + ": " + std::move(msg))
+        {}
 };
 
 template <typename ValueT, YAML::NodeType::value NodeTypeV>

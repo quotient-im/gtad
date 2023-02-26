@@ -53,7 +53,7 @@ inline auto assignDelimiter(const string& delimiter, string tmpl)
 km::partial makePartial(string s, const string& delimiter)
 {
     return km::partial {
-        [tmpl = assignDelimiter(delimiter, move(s))] { return tmpl; }};
+        [tmpl = assignDelimiter(delimiter, std::move(s))] { return tmpl; }};
 }
 
 inline Printer::template_type Printer::makeMustache(const string& tmpl) const
@@ -71,8 +71,8 @@ class GtadContext : public km::context<string>
         GtadContext(Printer::fspath inputBasePath, string delimiter,
                     const data* d)
             : context(d)
-            , inputBasePath(move(inputBasePath))
-            , delimiter(move(delimiter))
+            , inputBasePath(std::move(inputBasePath))
+            , delimiter(std::move(delimiter))
         {}
 
         const data* get_partial(const string& name) const override
@@ -100,7 +100,8 @@ class GtadContext : public km::context<string>
             string fileContents;
             getline(ifs, fileContents, '\0'); // Won't work on files with NULs
             return &filePartialsCache
-                        .emplace(name, makePartial(move(fileContents), delimiter))
+                        .emplace(name,
+                                 makePartial(std::move(fileContents), delimiter))
                         .first->second;
         }
 
@@ -167,14 +168,14 @@ Printer::Printer(context_type&& contextObj, fspath inputBasePath,
                  const Translator& translator)
     : _translator(translator)
     , _contextData(addLibrary(contextObj))
-    , _delimiter(move(delimiter))
+    , _delimiter(std::move(delimiter))
     , _typeRenderer(
           makeMustache(safeString(contextObj, "_typeRenderer", "{{>name}}")))
     , _leftQuote(safeString(contextObj, "_leftQuote",
                             safeString(contextObj, "_quote", "\"")))
     , _rightQuote(safeString(contextObj, "_rightQuote",
                              safeString(contextObj, "_quote", "\"")))
-    , _inputBasePath(move(inputBasePath))
+    , _inputBasePath(std::move(inputBasePath))
 {
     if (!outFilesListPath.empty())
     {
@@ -192,7 +193,7 @@ inline object wrap(object o)
 template <typename T>
 inline object wrap(T val)
 {
-    return object {{ "_", move(val) }};
+    return object {{ "_", std::move(val) }};
 }
 
 inline object wrap(const filesystem::path& p)
@@ -214,7 +215,7 @@ void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
         hasMore = ++it != source.end();
         elementObj.emplace("_join", hasMore);
         elementObj.emplace("hasMore", hasMore); // Swagger compatibility
-        mList.emplace_back(move(elementObj));
+        mList.emplace_back(std::move(elementObj));
     }
     target[name] = mList;
 }
@@ -309,7 +310,7 @@ object Printer::dumpField(const VarDecl& field) const
         km::list mAttrValue;
         for (const auto& i: listAttr.second)
             mAttrValue.emplace_back(i);
-        fieldDef.emplace(listAttr.first, move(mAttrValue));
+        fieldDef.emplace(listAttr.first, std::move(mAttrValue));
     }
     return fieldDef;
 }

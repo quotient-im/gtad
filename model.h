@@ -70,7 +70,9 @@ struct TypeUsage : Identifier
     std::vector<TypeUsage> paramTypes; ///< Parameter types for type templates
 
     TypeUsage() = default;
-    explicit TypeUsage(std::string typeName) : Identifier{move(typeName)} { }
+    explicit TypeUsage(std::string typeName)
+        : Identifier {std::move(typeName)}
+    {}
     explicit TypeUsage(const ObjectSchema& schema);
 
     [[nodiscard]] TypeUsage specialize(std::vector<TypeUsage>&& params) const;
@@ -79,7 +81,7 @@ struct TypeUsage : Identifier
 
     void addImport(imports_type::value_type importName)
     {
-        lists["imports"].emplace_back(move(importName));
+        lists["imports"].emplace_back(std::move(importName));
     }
 
     [[nodiscard]] bool operator==(const TypeUsage& other) const
@@ -105,9 +107,9 @@ struct VarDecl : Identifier {
     VarDecl() = default;
     VarDecl(TypeUsage type, string varName, string baseName, string description,
             bool required = false, string defaultValue = {})
-        : Identifier{move(varName)}, type(std::move(type))
-        , baseName(move(baseName)), description(move(description))
-        , required(required), defaultValue(move(defaultValue))
+        : Identifier{std::move(varName)}, type(std::move(type))
+        , baseName(std::move(baseName)), description(std::move(description))
+        , required(required), defaultValue(std::move(defaultValue))
     {}
 
     [[nodiscard]] std::string toString(bool withDefault = false) const;
@@ -134,7 +136,7 @@ struct ObjectSchema : FlatSchema {
 
     explicit ObjectSchema(InOut inOut, const Call* scope = nullptr,
                           std::string description = {})
-        : FlatSchema(inOut, scope), description(move(description))
+        : FlatSchema(inOut, scope), description(std::move(description))
     { }
 
     [[nodiscard]] bool empty() const
@@ -209,7 +211,7 @@ struct Path : public std::string
 struct Response
 {
     explicit Response(std::string code, std::string description = {}) :
-        code(move(code)), description(move(description))
+        code(std::move(code)), description(std::move(description))
     { }
     std::string code;
     std::string description;
@@ -231,8 +233,8 @@ struct Call : Identifier {
 
     Call(Path callPath, string callVerb, string callName,
          bool callNeedsSecurity)
-        : Identifier{move(callName)}, path(move(callPath))
-        , verb(move(callVerb)), needsSecurity(callNeedsSecurity)
+        : Identifier{std::move(callName)}, path(std::move(callPath))
+        , verb(std::move(callVerb)), needsSecurity(callNeedsSecurity)
     { }
     ~Call() = default;
     Call(Call&) = delete;

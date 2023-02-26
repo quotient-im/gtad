@@ -28,26 +28,24 @@ using namespace std;
 
 void addTypeAttributes(TypeUsage& typeUsage, const YamlMap& attributesMap)
 {
-    for (const auto& attr: attributesMap)
-    {
+    for (const auto& attr : attributesMap) {
         auto attrName = attr.first.as<string>();
         if (attrName == "type")
             continue;
-        switch (attr.second.Type())
-        {
-            case YAML::NodeType::Null:
-                typeUsage.attributes.emplace(move(attrName), string{});
-                break;
-            case YAML::NodeType::Scalar:
-                typeUsage.attributes.emplace(move(attrName),
-                                             attr.second.as<string>());
-                break;
-            case YAML::NodeType::Sequence:
-                if (const auto& seq = attr.second.asSequence())
-                    typeUsage.lists.emplace(move(attrName), seq.asStrings());
-                break;
-            default:
-                throw YamlException(attr.second, "Malformed attribute");
+        switch (attr.second.Type()) {
+        case YAML::NodeType::Null:
+            typeUsage.attributes.emplace(std::move(attrName), string {});
+            break;
+        case YAML::NodeType::Scalar:
+            typeUsage.attributes.emplace(std::move(attrName),
+                                         attr.second.as<string>());
+            break;
+        case YAML::NodeType::Sequence:
+            if (const auto& seq = attr.second.asSequence())
+                typeUsage.lists.emplace(std::move(attrName), seq.asStrings());
+            break;
+        default:
+            throw YamlException(attr.second, "Malformed attribute");
         }
     }
 }
@@ -147,7 +145,7 @@ pair_vector_t<TypeUsage> parseTypeEntry(const YamlNode& targetTypeYaml,
                     {
                         formatName.pop_back();
                     }
-                    targetTypes.emplace_back(move(formatName),
+                    targetTypes.emplace_back(std::move(formatName),
                         parseTargetType(typeYaml, commonAttrsYaml));
                 }, commonAttributesYaml);
             return targetTypes;
@@ -184,7 +182,7 @@ pair_vector_t<string> loadStringMap(const YamlMap& yaml)
 
 Translator::Translator(const path& configFilePath, path outputDirPath,
                        Verbosity verbosity)
-    : _verbosity(verbosity), _outputDirPath(move(outputDirPath))
+    : _verbosity(verbosity), _outputDirPath(std::move(outputDirPath))
 {
     cout << "Using config file at " << configFilePath << endl;
     const auto configY = YamlMap::loadFromFile(configFilePath);
@@ -258,8 +256,8 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
                     makePartial(p.second.as<string>(), delimiter));
 
     const auto& templatesYaml = mustacheYaml["templates"].asMap();
-    for (auto [templates, nodeName]:
-         { pair{ &_dataTemplates, "data" }, { &_apiTemplates, "api" } })
+    for (auto [templates, nodeName] :
+         {pair {&_dataTemplates, "data"}, {&_apiTemplates, "api"}})
         if (auto extToTemplatesYaml = templatesYaml[nodeName].asMap()) {
             templates->resize(extToTemplatesYaml.size());
             transform(extToTemplatesYaml.begin(), extToTemplatesYaml.end(),
@@ -269,7 +267,7 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
                       });
         }
 
-    _printer = make_unique<Printer>(move(env), configFilePath.parent_path(),
+    _printer = make_unique<Printer>(std::move(env), configFilePath.parent_path(),
                                     mustacheYaml["outFilesList"].as<string>(""),
                                     delimiter, *this);
 }

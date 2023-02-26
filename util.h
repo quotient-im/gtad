@@ -28,7 +28,7 @@ std::string readFile(const std::string& fileName);
 
 struct Exception
 {
-    explicit Exception(std::string msg) noexcept : message(move(msg)) { }
+    explicit Exception(std::string msg) noexcept : message(std::move(msg)) { }
     Exception(Exception&& e) noexcept : message(std::move(e.message)) { }
     Exception& operator=(Exception&&) = delete;
     std::string message;

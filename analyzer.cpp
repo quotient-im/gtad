@@ -40,7 +40,7 @@ public:
                    Identifier newScope)
         : _analyzer(a)
         , _prevContext(_analyzer._context)
-        , _thisContext{std::move(newFileDir), newModel, move(newScope)}
+        , _thisContext{std::move(newFileDir), newModel, std::move(newScope)}
     {
         _analyzer._context = &_thisContext;
         ++_analyzer._indent;
@@ -61,7 +61,7 @@ public:
 Analyzer::models_t Analyzer::_allModels {};
 
 Analyzer::Analyzer(const Translator& translator, fspath basePath)
-    : _baseDir(move(basePath))
+    : _baseDir(std::move(basePath))
     , _translator(translator)
 {
     if (!fs::is_directory(_baseDir))
@@ -85,7 +85,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
             const auto& protoType = _translator.mapType(
                 "array", elemType.baseName,
                 camelCase(node["title"].as<string>(elemType.baseName + "[]")));
-            return protoType.specialize({move(elemType)});
+            return protoType.specialize({std::move(elemType)});
         }
 
         return _translator.mapType("array");
@@ -104,7 +104,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
             return schema.parentTypes.front();
 
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
-            return addSchema(move(schema)); // Wrap the schema in a TypeUsage
+            return addSchema(std::move(schema)); // Wrap `schema` in a TypeUsage
 
         // An OnlyIn empty object is schemaless but existing, mapType("object")
         // Also, a nameless non-empty schema is now treated as a generic
@@ -124,7 +124,7 @@ TypeUsage Analyzer::addSchema(ObjectSchema&& schema)
     auto tu = _translator.mapType("schema", schema.name);
     tu.name = schema.name;
     tu.call = schema.call;
-    currentModel().addSchema(move(schema));
+    currentModel().addSchema(std::move(schema));
     return tu;
 }
 
@@ -147,7 +147,7 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes)
     const auto& protoType = _translator.mapType("variant", baseTypes, baseTypes);
     cout << logOffset() << "Using " << protoType.qualifiedName()
          << " for a multitype: " << baseTypes << endl;
-    return protoType.specialize(move(tus));
+    return protoType.specialize(std::move(tus));
 }
 
 ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
@@ -212,7 +212,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
         // Now that we have a good idea of the schema identity we can check if
         // the configuration has anything to substitute this schema with.
         if (auto&& tu = _translator.mapType("schema", name); !tu.empty())
-            return makeEphemeralSchema(move(tu));
+            return makeEphemeralSchema(std::move(tu));
     }
 
     if (auto yamlOneOf = yamlSchema["oneOf"].asSequence())
@@ -236,7 +236,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
                 f.name =
                     _translator.mapIdentifier(f.baseName, &schema, f.required);
                 if (!f.name.empty())
-                    addVarDecl(schema.fields, move(f));
+                    addVarDecl(schema.fields, std::move(f));
             }
 
             if (innerSchema.hasPropertyMap()) {
@@ -249,7 +249,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
                 pm.name = _translator.mapIdentifier(pm.baseName, &schema,
                                                     pm.required);
                 if (!pm.name.empty())
-                    schema.propertyMap = move(pm);
+                    schema.propertyMap = std::move(pm);
             }
         }
 
@@ -294,7 +294,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
             const auto& protoType =
                 _translator.mapType("map", elemType.baseName,
                                     "string->" + elemType.baseName);
-            tu = protoType.specialize({move(elemType)});
+            tu = protoType.specialize({std::move(elemType)});
             description = additionalProperties["description"].as<string>("");
             break;
         }
@@ -309,10 +309,10 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
 
         if (!tu.empty()) {
             if (schema.empty())
-                return makeEphemeralSchema(move(tu));
+                return makeEphemeralSchema(std::move(tu));
 
-            if (auto&& v = makeVarDecl(move(tu), "additionalProperties", schema,
-                                       move(description)))
+            if (auto&& v = makeVarDecl(std::move(tu), "additionalProperties",
+                                       schema, std::move(description)))
                 schema.propertyMap = *v;
         }
     }
@@ -351,7 +351,7 @@ Body Analyzer::analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
             // If the schema is complex (=with both parents and properties),
             // add a definition for it and make a single parameter with
             // the type of the schema.
-            packedType = addSchema(move(bodySchema));
+            packedType = addSchema(std::move(bodySchema));
         } else {
             // No parents, non-empty - unpack the schema to body properties
             currentModel().addImportsFrom(bodySchema);
@@ -359,8 +359,9 @@ Body Analyzer::analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
             return FlatSchema {bodySchema};
         }
     }
-    if (auto&& v = makeVarDecl(move(packedType), name, location,
-                               move(description), required)) {
+    if (auto&& v = makeVarDecl(std::move(packedType), name, location,
+                               std::move(description), required))
+    {
         cout << logOffset() << yamlSchema.location() << ": substituting the "
              << location << " schema with a '" << v->type.qualifiedName() << ' '
              << v->name << "' parameter" << endl;
@@ -420,14 +421,14 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
     cout << logOffset() << "Resolved $ref: " << refPath << " to type usage "
          << tu.name << endl;
 
-    return makeEphemeralSchema(move(tu));
+    return makeEphemeralSchema(std::move(tu));
 }
 
 ObjectSchema Analyzer::makeEphemeralSchema(TypeUsage&& tu) const
 {
     ObjectSchema result{currentRole()};
     if (!tu.empty())
-        result.parentTypes.emplace_back(move(tu));
+        result.parentTypes.emplace_back(std::move(tu));
     return result;
 }
 
@@ -440,8 +441,9 @@ optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
     if (id.empty())
         return {}; // Skip the variable
 
-    return VarDecl {move(type),        move(id), baseName,
-                    move(description), required, move(defaultValue)};
+    return VarDecl {std::move(type), std::move(id),
+                    baseName,        std::move(description),
+                    required,        std::move(defaultValue)};
 }
 
 void Analyzer::addVarDecl(VarDecls &varList, VarDecl &&v) const
@@ -463,9 +465,10 @@ void Analyzer::addVarDecl(VarDecls& varList, TypeUsage type,
                           string description, bool required,
                           string defaultValue) const
 {
-    if (auto&& v = makeVarDecl(move(type), baseName, scope, move(description),
-                               required, move(defaultValue)))
-        addVarDecl(varList, move(*v));
+    if (auto&& v = makeVarDecl(std::move(type), baseName, scope,
+                               std::move(description), required,
+                               std::move(defaultValue)))
+        addVarDecl(varList, std::move(*v));
 }
 
 inline auto makeModelKey(const string& filePath)
@@ -532,7 +535,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                      << ": Found operation " << operationId
                      << " (" << path << ", " << verb << ')' << endl;
 
-                Call& call = model.addCall(path, move(verb), move(operationId),
+                Call& call = model.addCall(path, std::move(verb),
+                                           std::move(operationId),
                                            needsSecurity);
 
                 if (auto&& yamlSummary = yamlCall["summary"])
@@ -578,13 +582,14 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                     if (in != "body") {
                         addVarDecl(call.getParamsBlock(in),
                                    analyzeTypeUsage(yamlParam, TopLevel),
-                                   name, call, move(description), required,
+                                   name, call, std::move(description), required,
                                    yamlParam["default"].as<string>(""));
                         continue;
                     }
 
                     call.body = analyzeBodySchema(yamlParam.get("schema"), name,
-                                                  move(description), required);
+                                                  std::move(description),
+                                                  required);
                 }
                 const auto yamlResponses = yamlCall.get("responses").asMap();
                 if (const auto yamlResponse = yamlResponses["200"].asMap()) {
@@ -604,7 +609,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                                                           response.description,
                                                           false);
 
-                    call.responses.emplace_back(move(response));
+                    call.responses.emplace_back(std::move(response));
                 }
             }
         } catch (ModelException& me) {
@@ -681,5 +686,5 @@ void Analyzer::fillDataModel(Model& m, const YamlNode& yaml,
     auto&& s = analyzeSchema(yaml);
     if (s.name.empty())
         s.name = camelCase(filename.string());
-    m.addSchema(move(s));
+    m.addSchema(std::move(s));
 }

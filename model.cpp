@@ -70,7 +70,7 @@ string VarDecl::toString(bool withDefault) const
 }
 
 Path::Path(string path)
-    : string(move(path))
+    : string(std::move(path))
 {
     if (empty())
         throw ModelException("Path cannot be empty");
@@ -142,7 +142,8 @@ Call& Model::addCall(Path path, string verb, string operationId, bool needsToken
     if (callClasses.empty())
         callClasses.emplace_back();
     auto& cc = callClasses.back();
-    cc.calls.emplace_back(move(path), move(verb), move(operationId), needsToken);
+    cc.calls.emplace_back(std::move(path), std::move(verb),
+                          std::move(operationId), needsToken);
     return cc.calls.back();
 }
 
@@ -158,7 +159,7 @@ void Model::addSchema(ObjectSchema&& schema)
         return;
 
     addImportsFrom(schema);
-    types.emplace_back(move(schema));
+    types.emplace_back(std::move(schema));
 }
 
 void Model::addImportsFrom(const ObjectSchema& s)
