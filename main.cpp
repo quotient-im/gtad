@@ -127,7 +127,7 @@ int main(int argc, char* argv[])
             if (model.empty() || model.trivial())
                 continue;
 
-            const auto targetDir = stem.parent_path();
+            const auto targetDir = fs::path(stem).parent_path();
             fs::create_directories(targetDir);
             if (!fs::exists(targetDir))
                 throw Exception {"Cannot create output directory "

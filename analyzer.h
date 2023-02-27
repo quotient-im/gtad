@@ -35,7 +35,11 @@ class Analyzer
 public:
     using string = std::string;
     using fspath = std::filesystem::path;
-    using models_t = std::unordered_map<fspath, Model>;
+    // Using string instead of fspath here because of
+    // https://cplusplus.github.io/LWG/issue3657
+    // TODO: switch string to fspath once the oldest supported libstdc++ has
+    //       std::hash<std::filesystem::path>
+    using models_t = std::unordered_map<string, Model>;
 
     explicit Analyzer(const Translator& translator, fspath basePath = {});
 
