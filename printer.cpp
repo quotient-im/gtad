@@ -321,6 +321,13 @@ void Printer::addList(object& target, const string& name,
     setList(target, name, properties, bind(&Printer::dumpField, this, _1));
 }
 
+auto copyPartitionedByRequired(std::vector<VarDecl> vars)
+{
+    std::stable_partition(vars.begin(), vars.end(),
+                          [](const VarDecl& v) { return v.required; });
+    return vars;
+}
+
 object Printer::dumpAllTypes(const Model::schemas_type& types) const
 {
     object mModels;
@@ -339,7 +346,7 @@ object Printer::dumpAllTypes(const Model::schemas_type& types) const
             }
             setList(mType, "parents", type.parentTypes,
                     bind(&Printer::renderType, this, _1));
-            setList(mType, "vars", type.fields,
+            setList(mType, "vars", copyPartitionedByRequired(type.fields),
                 [this](const VarDecl& f) {
                     object fieldDef = dumpField(f);
                     fieldDef["name"] = f.name;
@@ -464,7 +471,8 @@ vector<string> Printer::print(const fspath& filePathBase,
                                : _leftQuote + s + _rightQuote;
                     });
 
-            addList(mCall, "allParams", call.collateParams());
+            addList(mCall, "allParams",
+                    copyPartitionedByRequired(call.collateParams()));
             for (size_t i = 0; i < Call::ParamGroups.size(); ++i)
                 addList(mCall, Call::ParamGroups[i] + "Params",
                         call.params[i]);

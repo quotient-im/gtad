@@ -126,9 +126,6 @@ Call::params_type Call::collateParams() const
             allCollated.emplace_back(packed);
         },
         [](monostate) {});
-
-    stable_partition(allCollated.begin(), allCollated.end(),
-                     [] (const VarDecl& v) { return v.required; });
     return allCollated;
 }
 
