@@ -72,11 +72,9 @@ TypeUsage parseTargetType(const YamlNode& yamlTypeNode,
     return tu;
 }
 
-template <typename FnT>
-auto parseEntries(const YamlSequence& entriesYaml, const FnT& inserter,
+void parseEntries(const YamlSequence& entriesYaml,
+                  const std::invocable<string, YamlNode, YamlMap> auto& inserter,
                   const YamlMap& commonAttributesYaml = {})
-    -> enable_if_t<is_void_v<decltype(
-        inserter(string(), YamlNode(), YamlMap()))>>
 {
     for (const YamlMap typesBlockYaml: entriesYaml) // clazy:exclude=range-loop
     {
