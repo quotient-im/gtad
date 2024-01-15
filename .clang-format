@@ -14,26 +14,33 @@
 # to borrow from the WebKit style. The values for such settings try to but
 # are not guaranteed to coincide with the latest version of the WebKit style.
 
+# This file assumes ClangFormat 16 or newer
+
 ---
 Language: Cpp
 BasedOnStyle: WebKit
 #AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
-#AlignConsecutiveMacros: false
-#AlignConsecutiveAssignments: false
-#AlignConsecutiveDeclarations: false
+AlignArrayOfStructures: Left # As of ClangFormat 14, Left doesn't work well
+#AlignConsecutiveMacros: None
+#AlignConsecutiveAssignments: None
+#AlignConsecutiveDeclarations: None
+#AlignConsecutiveShortCaseStatements: # ClangFormat 17
+#  Enabled:         true
+#  AcrossEmptyLines: false
+#  AcrossComments:  true
+#  AlignCaseColons: false
 AlignEscapedNewlines: Left
-AlignOperands: true # 'Align' since ClangFormat 11 
+AlignOperands: Align
 #AlignTrailingComments: false
 #AllowAllArgumentsOnNextLine: true
-#AllowAllConstructorInitializersOnNextLine: true
 #AllowAllParametersOfDeclarationOnNextLine: true
-#AllowShortEnumsOnASingleLine: true
 #AllowShortBlocksOnASingleLine: Empty
-#AllowShortCaseLabelsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: true
+#AllowShortEnumsOnASingleLine: true
 #AllowShortFunctionsOnASingleLine: All
-#AllowShortLambdasOnASingleLine: All
 #AllowShortIfStatementsOnASingleLine: Never
+#AllowShortLambdasOnASingleLine: All
 #AllowShortLoopsOnASingleLine: false
 #AlwaysBreakAfterDefinitionReturnType: None # deprecated
 #AlwaysBreakAfterReturnType: None
@@ -41,38 +48,44 @@ AlignOperands: true # 'Align' since ClangFormat 11
 AlwaysBreakTemplateDeclarations: Yes
 #BinPackArguments: true
 #BinPackParameters: true
+#BitFieldColonSpacing: Both
 BraceWrapping:
-  AfterCaseLabel:  false
-  AfterClass:      false
+#  AfterCaseLabel:  false
+#  AfterClass:      false
   AfterControlStatement: MultiLine
-  AfterEnum:       false
+#  AfterEnum:       false
+#  AfterExternBlock: false
   AfterFunction:   true
-  AfterNamespace:  false
-  AfterStruct:     false
-  AfterUnion:      false
-  AfterExternBlock: false
-  BeforeCatch:     false
-  BeforeElse:      false
-  IndentBraces:    false
+#  AfterNamespace:  false
+#  AfterStruct:     false
+#  AfterUnion:      false
+#  BeforeCatch:     false
+#  BeforeElse:      false
+#  BeforeLambdaBody: false # 'true' blows up lambdas vertically, even if they become _very_ readable
+#  BeforeWhile:     false
+#  IndentBraces:    false
   SplitEmptyFunction: false
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
+#BreakAfterAttributes: Never # Leave might be more prudent
+#BreakArrays:     true # JSON only
 BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeConceptDeclarations: Allowed
 BreakBeforeBraces: Custom
-#BreakBeforeInheritanceComma: false
-#BreakInheritanceList: BeforeColon
 #BreakBeforeTernaryOperators: true
-#BreakConstructorInitializersBeforeComma: false # deprecated?
 #BreakConstructorInitializers: BeforeComma
+#BreakInheritanceList: BeforeColon
 #BreakStringLiterals: true
-ColumnLimit: 80
+ColumnLimit: 100
+CommentPragmas:  '^ clazy:exclude=| NOLINT'
 #CompactNamespaces: false
-#ConstructorInitializerAllOnOneLineOrOnePerLine: false
 #ConstructorInitializerIndentWidth: 4
 #ContinuationIndentWidth: 4
 Cpp11BracedListStyle: true
-#DeriveLineEnding: true
 #DerivePointerAlignment: false
+#EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock
+#ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: true
 IncludeBlocks: Regroup
 IncludeCategories:
@@ -80,61 +93,100 @@ IncludeCategories:
     Priority: 24
   - Regex:    '^<'
     Priority: 32
-  - Regex:    '"csapi/'
-    Priority: 2
-  - Regex:    '"(events|jobs)/'
-    Priority: 4
-  - Regex:    '.*'
-    Priority: 1
 IncludeIsMainRegex: '(_test)?$'
 #IncludeIsMainSourceRegex: ''
+#IndentAccessModifiers: false
+#IndentCaseBlocks: false
 #IndentCaseLabels: false
+#IndentExternBlock: AfterExternBlock
 IndentGotoLabels: false
 IndentPPDirectives: AfterHash
+#IndentRequiresClause: true
 #IndentWidth: 4
 #IndentWrappedFunctionNames: false
+#InsertBraces:    false
+InsertNewlineAtEOF: true
+IntegerLiteralSeparator:
+  Binary:          4
+  Decimal:         3
+  Hex:             4
 KeepEmptyLinesAtTheStartOfBlocks: false
+#KeepEmptyLinesAtEOF: false # ClangFormat 17
+#LambdaBodyIndentation: Signature
+#LineEnding:      DeriveLF
 #MacroBlockBegin: ''
 #MacroBlockEnd:   ''
 #MaxEmptyLinesToKeep: 1
 #NamespaceIndentation: Inner
-PenaltyBreakAssignment: 10
-PenaltyBreakBeforeFirstCallParameter: 70
-PenaltyBreakComment: 45
+#PackConstructorInitializers: BinPack
+#PenaltyBreakAssignment: 10
+#PenaltyBreakBeforeFirstCallParameter: 70
+#PenaltyBreakComment: 45
 #PenaltyBreakFirstLessLess: 120
-PenaltyBreakString: 200
+#PenaltyBreakOpenParenthesis: 0
+#PenaltyBreakString: 200
 #PenaltyBreakTemplateDeclaration: 10
-PenaltyExcessCharacter: 20
-PenaltyReturnTypeOnItsOwnLine: 60
+#PenaltyExcessCharacter: 30
+#PenaltyIndentedWhitespace: 0
+#PenaltyReturnTypeOnItsOwnLine: 200
 #PointerAlignment: Left
+#PPIndentWidth: -1
+#QualifierAlignment: Leave # See a warning in the docs; non-default reformats whole files
+QualifierOrder: ['friend', 'static','constexpr','inline', 'const', 'volatile', 'type']
+#ReferenceAlignment: Pointer
 #ReflowComments: true
-#SortIncludes: true
-#SortUsingDeclarations: true
+RemoveBracesLLVM: true # Note the warning in the docs, might better be false
+#RemoveParentheses: Leave # ClangFormat 17
+#RemoveSemicolon: false # Note the warning in the docs
+RequiresClausePosition: WithPreceding
+#RequiresExpressionIndentation: OuterScope
+SeparateDefinitionBlocks: Always
+ShortNamespaceLines: 20
+#SortIncludes: CaseSensitive
+#SortUsingDeclarations: LexicographicNumeric
 #SpaceAfterCStyleCast: false
 #SpaceAfterLogicalNot: false
 #SpaceAfterTemplateKeyword: true
+SpaceAroundPointerQualifiers: After
 #SpaceBeforeAssignmentOperators: true
-#SpaceBeforeCpp11BracedList: true
+#SpaceBeforeCaseColon: false
+SpaceBeforeCpp11BracedList: false
 #SpaceBeforeCtorInitializerColon: true
 #SpaceBeforeInheritanceColon: true
 #SpaceBeforeParens: ControlStatements
+#SpaceBeforeParensOptions:
+#  AfterControlStatements: true
+#  AfterForeachMacros: true
+#  AfterFunctionDefinitionName: false
+#  AfterFunctionDeclarationName: false
+#  AfterIfMacros:   true
+#  AfterOverloadedOperator: false
+#  AfterRequiresInClause: true
+#  AfterRequiresInExpression: false
+#  BeforeNonEmptyParentheses: false
 #SpaceBeforeRangeBasedForLoopColon: true
+#SpaceBeforeSquareBrackets: false
 SpaceInEmptyBlock: false
 #SpaceInEmptyParentheses: false
 #SpacesBeforeTrailingComments: 1
-#SpacesInAngles:  false
+#SpacesInAngles: Never
 #SpacesInConditionalStatement: false
-#SpacesInContainerLiterals: true
+SpacesInContainerLiterals: false
 #SpacesInCStyleCastParentheses: false
+#SpacesInLineCommentPrefix:
+#  Minimum:         1
+#  Maximum:         -1
 #SpacesInParentheses: false
 #SpacesInSquareBrackets: false
-#SpaceBeforeSquareBrackets: false
-Standard: c++17
+Standard: c++20
+StatementAttributeLikeMacros:
+  - Q_EMIT
+  - emit
 StatementMacros:
   - Q_UNUSED
   - QT_REQUIRE_VERSION
 TabWidth: 4
-#UseCRLF: false
 #UseTab: Never
+#WhitespaceSensitiveMacros: [] # Whatever's the default, not using it
 ...
 
