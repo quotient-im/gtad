@@ -132,7 +132,6 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 #PointerAlignment: Left
 #PPIndentWidth: -1
 #QualifierAlignment: Leave # See a warning in the docs; non-default reformats whole files
-QualifierOrder: ['friend', 'static','constexpr','inline', 'const', 'volatile', 'type']
 #ReferenceAlignment: Pointer
 #ReflowComments: true
 RemoveBracesLLVM: true # Note the warning in the docs, might better be false
