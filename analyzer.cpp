@@ -77,14 +77,14 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
     if (yamlTypeNode && yamlTypeNode.IsSequence())
         return analyzeMultitype(yamlTypeNode.asSequence());
 
-    auto yamlType = yamlTypeNode.as<string>("object");
+    auto yamlType = yamlTypeNode.tryAs<string>("object");
     if (yamlType == "array")
     {
         if (auto yamlElemType = node["items"].asMap(); !yamlElemType.empty()) {
             auto&& elemType = analyzeTypeUsage(yamlElemType, TopLevel);
             const auto& protoType = _translator.mapType(
                 "array", elemType.baseName,
-                camelCase(node["title"].as<string>(elemType.baseName + "[]")));
+                camelCase(node["title"].tryAs<string>(elemType.baseName + "[]")));
             return protoType.specialize({std::move(elemType)});
         }
 
@@ -110,7 +110,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
         // Also, a nameless non-empty schema is now treated as a generic
         // mapType("object"). TODO, low priority: ad-hoc typing (via tuples?)
     }
-    if (const auto tu = _translator.mapType(yamlType, node["format"].as<string>(""));
+    if (const auto tu = _translator.mapType(yamlType, node["format"].tryAs<string>());
         !tu.empty())
         return tu;
 
@@ -162,7 +162,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
         return resolveRef(yamlRef.as<string>(), refsStrategy);
     }
 
-    const auto schema = yamlSchema["type"].as<string>("object") == "object"
+    const auto schema = yamlSchema["type"].tryAs<string>("object") == "object"
                             ? analyzeObject(yamlSchema, refsStrategy)
                             : makeEphemeralSchema(analyzeTypeUsage(yamlSchema));
 
@@ -188,8 +188,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
 ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
                                      RefsStrategy refsStrategy)
 {
-    ObjectSchema schema{currentRole(), currentCall(),
-                        yamlSchema["description"].as<string>("")};
+    ObjectSchema schema{currentRole(), currentCall(), yamlSchema["description"].tryAs<string>()};
 
     // The name is taken from: the schema's "title" property; failing that,
     // the _inline_ schema(s) "title" in allOf (with the last one winning,
@@ -206,7 +205,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
             name = yamlEntry["title"].as<string>(name);
         }
 
-    name = yamlSchema["title"].as<string>(name);
+    name = yamlSchema["title"].tryAs<string>(name);
 
     if (!name.empty()) {
         // Now that we have a good idea of the schema identity we can check if
@@ -326,7 +325,7 @@ Body Analyzer::analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
         throw YamlException(yamlSchema,
                 "Internal error, role must be either OnlyIn or OnlyOut");
 
-    const Identifier location {"", currentRole(), currentCall() };
+    const Identifier location{{}, currentRole(), currentCall()};
     auto packedType = _translator.mapType("schema", location.qualifiedName());
     if (packedType.empty()) {
         auto&& bodySchema = analyzeSchema(yamlSchema);
@@ -485,15 +484,14 @@ inline fs::path Analyzer::makeModelKey(const fs::path& sourcePath)
 vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
 {
     if (auto yamlTypes = yaml[keyName].asSequence())
-        return yamlTypes.asStrings();
+        return asStrings(yamlTypes);
     return {};
 }
 
 const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 {
     cout << "Loading from " << filePath << endl;
-    const auto yaml =
-        YamlMap::loadFromFile(_baseDir / filePath, _translator.substitutions());
+    const auto yaml = loadYamlFromFile(_baseDir / filePath, _translator.substitutions());
     if (_allModels.contains(filePath)) {
         clog << "Warning: the model has been loaded from " << filePath
              << " but will be reloaded again" << endl;
@@ -504,7 +502,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                                  inOut);
 
     // Detect which file we have: API description or data definition
-    if (!yaml["paths"]) {
+    const auto paths = yaml["paths"s].asMap();
+    if (!paths) {
         // XXX: this branch is yet unused; one day it will load event schemas
         fillDataModel(model, yaml, fspath(filePath).filename());
         return model;
@@ -512,7 +511,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 
     // The rest is exclusive to API descriptions
     const auto paths = yaml.get("paths", true).asMap();
-    if (yaml["swagger"].as<string>("") != "2.0")
+    if (yaml["swagger"].tryAs<string>() != "2.0")
         throw Exception(
                 "This software only supports swagger version 2.0 for now");
 
@@ -521,14 +520,14 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 
     auto defaultConsumed = loadContentTypes(yaml, "consumes");
     auto defaultProduced = loadContentTypes(yaml, "produces");
-    model.hostAddress = yaml["host"].as<string>("");
-    model.basePath = yaml["basePath"].as<string>("");
+    model.hostAddress = yaml["host"].tryAs<string>();
+    model.basePath = yaml["basePath"].tryAs<string>();
 
-    for (const YamlNodePair& yaml_path: paths)
+    for (const auto& yaml_path: paths)
         try {
             const Path path { yaml_path.first.as<string>() };
 
-            for (const YamlNodePair& yaml_call_pair: yaml_path.second.asMap()) {
+            for (const auto& yaml_call_pair: yaml_path.second.asMap()) {
                 auto verb = yaml_call_pair.first.as<string>();
                 const YamlMap yamlCall { yaml_call_pair.second };
                 auto operationId = yamlCall.get("operationId").as<string>();
@@ -550,10 +549,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 if (auto&& yamlDescription = yamlCall["description"])
                     call.description = yamlDescription.as<string>();
                 if (YamlMap yamlExternalDocs = yamlCall["externalDocs"])
-                    call.externalDocs = {
-                        yamlExternalDocs["description"].as<string>(""),
-                        yamlExternalDocs.get("url").as<string>("")
-                    };
+                    call.externalDocs = {yamlExternalDocs["description"].tryAs<string>(),
+                                         yamlExternalDocs.get("url").tryAs<string>()};
                 call.consumedContentTypes =
                         loadContentTypes(yamlCall, "consumes");
                 if (call.consumedContentTypes.empty())
@@ -570,7 +567,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                     ContextOverlay _inContext(*this, {name, OnlyIn, &call});
 
                     auto&& in = yamlParam.get("in").as<string>();
-                    auto required = yamlParam["required"].as<bool>(false);
+                    auto required = yamlParam["required"].tryAs<bool>();
                     if (!required && in == "path") {
                         cout << logOffset() << yamlParam.location()
                         	 << ": warning: '" << name
@@ -583,13 +580,12 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 //                        cout << "  At " << p.first.location() << ": "
 //                                        << p.first.as<string>() << endl;
 
-                    auto&& description =
-                        yamlParam["description"].as<string>("");
+                    auto&& description = yamlParam["description"].tryAs<string>();
                     if (in != "body") {
                         addVarDecl(call.getParamsBlock(in),
                                    analyzeTypeUsage(yamlParam, TopLevel),
                                    name, call, std::move(description), required,
-                                   yamlParam["default"].as<string>(""));
+                                   yamlParam["default"].tryAs<string>());
                         continue;
                     }
 
@@ -667,8 +663,7 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
 
     cout << logOffset() << "Loading data schema from " << relPath
          << " with role " << modelRole << endl;
-    const auto yaml =
-        YamlMap::loadFromFile(_baseDir / fullPath, _translator.substitutions());
+    const auto yaml = loadYamlFromFile(_baseDir / fullPath, _translator.substitutions());
     ContextOverlay _modelContext(*this, fullPath.parent_path(), &model,
                                  modelRole);
     fillDataModel(model, yaml, stem.filename());

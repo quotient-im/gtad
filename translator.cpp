@@ -42,7 +42,7 @@ void addTypeAttributes(TypeUsage& typeUsage, const YamlMap& attributesMap)
             break;
         case YAML::NodeType::Sequence:
             if (const auto& seq = attr.second.asSequence())
-                typeUsage.lists.emplace(std::move(attrName), seq.asStrings());
+                typeUsage.lists.emplace(std::move(attrName), asStrings(seq));
             break;
         default:
             throw YamlException(attr.second, "Malformed attribute");
@@ -59,7 +59,7 @@ TypeUsage parseTargetType(const YamlNode& yamlTypeNode)
         return TypeUsage(yamlTypeNode.as<string>());
 
     const auto yamlTypeMap = yamlTypeNode.asMap();
-    TypeUsage typeUsage { yamlTypeMap["type"].as<string>("") };
+    TypeUsage typeUsage { yamlTypeMap["type"].tryAs<string>() };
     addTypeAttributes(typeUsage, yamlTypeMap);
     return typeUsage;
 }
@@ -183,7 +183,7 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
     : _verbosity(verbosity), _outputDirPath(std::move(outputDirPath))
 {
     cout << "Using config file at " << configFilePath << endl;
-    const auto configY = YamlMap::loadFromFile(configFilePath);
+    const auto configY = loadYamlFromFile(configFilePath);
 
     const auto& analyzerYaml = configY["analyzer"].asMap();
     _substitutions = loadStringMap(analyzerYaml["subst"].asMap());
@@ -228,7 +228,7 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
     Printer::context_type env;
     using namespace kainjow::mustache;
     const auto& mustacheYaml = configY["mustache"].asMap();
-    const auto& delimiter = mustacheYaml["delimiter"].as<string>("");
+    const auto& delimiter = mustacheYaml["delimiter"].tryAs<string>();
     const auto& envYaml = mustacheYaml["constants"].asMap();
     for (const auto& p: envYaml)
     {
@@ -263,7 +263,7 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
         }
 
     _printer = make_unique<Printer>(std::move(env), configFilePath.parent_path(),
-                                    mustacheYaml["outFilesList"].as<string>(""),
+                                    mustacheYaml["outFilesList"].tryAs<string>(),
                                     delimiter, *this);
 }
 

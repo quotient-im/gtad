@@ -26,48 +26,31 @@
 using Node = YAML::Node;
 using NodeType = YAML::NodeType;
 using std::string;
+using namespace std::string_literals;
 
+namespace {
 // Follows the YAML::NodeType::value enum; if that enum changes, this has
 // to be changed too (but it probably would only change if YAML standard is updated).
-static string const typenames[] {
-    "Undefined", "Null", "Scalar", "Sequence", "Map"
-};
-
-YamlSequence YamlNode::asSequence() const
-{
-    return YamlSequence(*this);
+constexpr std::array typenames{"Undefined"s, "Null"s, "Scalar"s, "Sequence"s, "Map"s};
 }
 
-YamlMap YamlNode::asMap() const
-{
-    return YamlMap(*this);
-}
+YamlSequence YamlNode::asSequence() const { return {*this}; }
+
+YamlMap YamlNode::asMap() const { return {*this}; }
 
 void YamlNode::checkType(NodeType::value checkedType) const
 {
     if (Type() == checkedType)
         return;
 
-    throw YamlException(*this,
-            "The node has a wrong type (expected " + typenames[checkedType] +
-            ", got " + typenames[Type()] + ")");
+    throw YamlException(*this, "The node has a wrong type (expected " + typenames[checkedType]
+                                   + ", got " + typenames[Type()] + ")");
 }
 
-YamlNode YamlSequence::get(size_t subnodeIdx, bool allowNonexistent) const
+std::vector<string> asStrings(const YamlSequence& seq)
 {
-    auto subnode = (*this)[subnodeIdx];
-    if (allowNonexistent || subnode.IsDefined())
-        return subnode;
-
-    throw YamlException(*this,
-            "subnode #" + std::to_string(subnodeIdx) + " is undefined");
-}
-
-std::vector<string> YamlSequence::asStrings() const
-{
-    std::vector<string> listVals { size() };
-    transform(begin(), end(), listVals.begin(),
-              std::mem_fn(&YamlNode::as<string>));
+    std::vector<string> listVals { seq.size() };
+    transform(seq.begin(), seq.end(), listVals.begin(), std::mem_fn(&YamlNode::as<string>));
     return listVals;
 }
 
@@ -78,7 +61,7 @@ YAML::Node makeNodeFromFile(const string& fileName,
         if (replacePairs.empty())
             return YAML::LoadFile(fileName);
 
-        string fileContents = readFile(fileName);
+        auto fileContents = readFile(fileName);
         if (fileContents.empty())
             throw YAML::BadFile(fileName);
         for (const auto& subst: replacePairs)
@@ -92,8 +75,8 @@ YAML::Node makeNodeFromFile(const string& fileName,
     }
 }
 
-YamlMap YamlMap::loadFromFile(const std::filesystem::path& fileName,
-                              const pair_vector_t<std::string>& replacePairs)
+YamlMap loadYamlFromFile(const std::filesystem::path& fileName,
+                         const pair_vector_t<std::string>& replacePairs)
 {
     return YamlNode(makeNodeFromFile(fileName.string(), replacePairs),
                     std::make_shared<string>(fileName.string()));

@@ -35,13 +35,12 @@ in the future).
   - [macOS 10.15 SDK or later is needed](https://developer.apple.com/documentation/xcode_release_notes/xcode_11_release_notes)
     due to `std::filesystem` dependency
 - a Git client to check out this repo
-- Qt 5 (either Open Source or Commercial), version 5.7 or higher (eventually
-  will be phased out)
-- CMake 3.8 or newer (from your package management system or
+- Qt 6 (either Open Source or Commercial)
+- CMake 3.20 or newer (from your package management system or
   [the official website](https://cmake.org/download/))
-- a C++ toolchain with C++17 support _including File system library_ - this means
-  GCC 8 (Windows, Linux, OSX), Clang 7 (Linux), Xcode 11 (macOS 10.15) or
-  Visual C++ 2017 15.7 (Windows), or newer
+- a C++ toolchain with solid C++20 support (concepts and `std::source_location`,
+  in particular), that is: GCC 12 (Windows, Linux, OSX), Clang 14 (Linux),
+  Xcode 15 (macOS 13), Visual C++ 19.30 (aka VS 2022 17.0), or newer
 - any build system that works with CMake and/or qmake should be fine:
   GNU Make, ninja (any platform), NMake, jom (Windows) are known to work.
 - for the actual invocation - clang-format in your PATH or CLANG_FORMAT variable

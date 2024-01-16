@@ -68,8 +68,8 @@ class iterator_base
         iterator_base<V>& operator++() { ++_impl; return *this; }
         iterator_base<V> operator++(int) { return { _impl++, _fileName }; }
 
-        template <typename IterT>
-        bool operator==(const IterT& rhs) const
+        template <typename VV>
+        bool operator==(const iterator_base<VV>& rhs) const
         {
             return _impl == rhs._impl &&
                 ((_fileName && rhs._fileName && *_fileName == *rhs._fileName) ||
@@ -85,8 +85,13 @@ class iterator_base
         std::shared_ptr<std::string> _fileName;
 };
 
-class YamlMap;
-class YamlSequence;
+template <typename ValueT, YAML::NodeType::value NodeTypeV, typename KeyT>
+class YamlNodeTemplate;
+class YamlNode;
+struct YamlNodePair;
+
+using YamlMap = YamlNodeTemplate<YamlNodePair, YAML::NodeType::Map, std::string_view>;
+using YamlSequence = YamlNodeTemplate<YamlNode, YAML::NodeType::Sequence, size_t>;
 
 class YamlNode : public YAML::Node
 {
@@ -111,8 +116,8 @@ class YamlNode : public YAML::Node
             return YAML::Node::as<T>();
         }
 
-        template <typename T, typename DT>
-        T as(const DT& defaultVal) const
+        template <typename T, typename DT = T>
+        T tryAs(const DT& defaultVal = {}) const
         {
             if (IsDefined())
                 checkType(YAML::NodeType::Scalar);
@@ -120,7 +125,6 @@ class YamlNode : public YAML::Node
         }
 
         YamlMap asMap() const;
-
         YamlSequence asSequence() const;
 
     protected:
@@ -129,18 +133,31 @@ class YamlNode : public YAML::Node
         std::shared_ptr<std::string> _fileName;
 };
 
-struct YamlException : Exception
+struct YamlNodePair : public std::pair<YamlNode, YamlNode>
 {
-        explicit YamlException(const YamlNode& node, std::string msg) noexcept
-            : Exception(node.location() + ": " + std::move(msg))
-        {}
+    YamlNodePair(const YamlNodePair&) = default;
+    YamlNodePair(YamlNodePair&&) = default;
+    YamlNodePair(const std::pair<YAML::Node, YAML::Node>& p,
+             const std::shared_ptr<std::string>& fileName)
+        : pair(YamlNode(p.first, fileName), YamlNode(p.second, fileName))
+    { }
+    ~YamlNodePair() = default;
+    void operator=(const YamlNodePair&) = delete;
+    void operator=(YamlNodePair&&) = delete;
 };
 
-template <typename ValueT, YAML::NodeType::value NodeTypeV>
+struct YamlException : Exception
+{
+    explicit YamlException(const YamlNode& node, std::string_view msg) noexcept
+        : Exception(node.location().append(": ").append(msg))
+    {}
+};
+
+template <typename ValueT, YAML::NodeType::value NodeTypeV, typename KeyT>
 class YamlNodeTemplate : public YamlNode
 {
     protected:
-        using my_type = YamlNodeTemplate<ValueT, NodeTypeV>;
+        using my_type = YamlNodeTemplate<ValueT, NodeTypeV, KeyT>;
 
     public:
         using value_type = ValueT;
@@ -174,82 +191,42 @@ class YamlNodeTemplate : public YamlNode
         }
         iterator end() { return iterator(YAML::Node::end(), _fileName); }
 
+        const YamlNode operator[](KeyT key) const
+        {
+            return { YAML::Node::operator[](key), _fileName };
+        }
+
+        YamlNode operator[](KeyT key)
+        {
+            return {YAML::Node::operator[](key), _fileName};
+        }
+
+        const YamlNode get(KeyT subnodeKey) const
+        {
+            auto subnode = (*this)[subnodeKey];
+            if (subnode.IsDefined())
+                return subnode;
+
+            // Using stringstream to dump subnodeKey whether it's size_t or string_view
+            throw YamlException(
+                *this, (std::stringstream() << "subnode " << subnodeKey << " is undefined").view());
+        }
+
+        template <typename AsT>
+        AsT get(KeyT key) const
+        {
+            return get(key).template as<AsT>();
+        }
+
         value_type front() const
         {
             if (empty())
-                throw YamlException(*this,
-                                    "Trying to get an element from an empty sequence");
+                throw YamlException(*this, "Trying to get an element from an empty container");
             return *begin();
         }
 };
 
-class YamlSequence : public YamlNodeTemplate<YamlNode, YAML::NodeType::Sequence>
-{
-    public:
-        using my_type::YamlNodeTemplate;
+std::vector<std::string> asStrings(const YamlSequence& seq);
 
-        value_type operator[](size_t idx) const
-        {
-            return { YAML::Node::operator[](idx), _fileName };
-        }
-
-        value_type get(size_t subnodeIdx, bool allowNonexistent = false) const;
-
-        value_type back() const
-        {
-            if (empty())
-                throw YamlException(*this,
-                        "Trying to get an element from an empty sequence");
-            return operator[](size() - 1);
-        }
-
-        std::vector<std::string> asStrings() const;
-};
-
-struct YamlNodePair : public std::pair<YamlNode, YamlNode>
-{
-    YamlNodePair(const YamlNodePair&) = default;
-    YamlNodePair(YamlNodePair&&) = default;
-    YamlNodePair(const std::pair<YAML::Node, YAML::Node>& p,
-             const std::shared_ptr<std::string>& fileName)
-        : pair(YamlNode(p.first, fileName), YamlNode(p.second, fileName))
-    { }
-    ~YamlNodePair() = default;
-    void operator=(const YamlNodePair&) = delete;
-    void operator=(YamlNodePair&&) = delete;
-};
-
-class YamlMap : public YamlNodeTemplate<YamlNodePair, YAML::NodeType::Map>
-{
-    public:
-        using key_type = YamlNodePair::first_type;
-        using mapped_type = YamlNodePair::second_type;
-
-        using my_type::YamlNodeTemplate;
-
-        static YamlMap loadFromFile(const std::filesystem::path& fileName,
-            const pair_vector_t<std::string>& replacePairs = {});
-
-        template <typename KeyT>
-        const YamlNode operator[](KeyT&& key) const
-        {
-            return {YAML::Node::operator[](std::forward<KeyT>(key)), _fileName};
-        }
-
-        template <typename KeyT>
-        YamlNode operator[](KeyT&& key)
-        {
-            return {YAML::Node::operator[](std::forward<KeyT>(key)), _fileName};
-        }
-
-        template <typename KeyT>
-        YamlNode get(KeyT&& subnodeKey, bool allowNonexistent = false) const
-        {
-            auto subnode = (*this)[std::forward<KeyT>(subnodeKey)];
-            if (allowNonexistent || subnode.IsDefined())
-                return subnode;
-
-            throw YamlException(*this, std::string(subnodeKey) + " is undefined");
-        }
-};
-
+YamlMap loadYamlFromFile(const std::filesystem::path& fileName,
+                         const pair_vector_t<std::string>& replacePairs = {});

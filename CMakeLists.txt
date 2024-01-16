@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12) # Older ones don't know about C++20
+cmake_minimum_required(VERSION 3.20) # Older ones don't know about C++23
 
 project(gtad VERSION 0.9 LANGUAGES CXX)
 
@@ -13,7 +13,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "MinSizeRel" "RelWithDebInfo")
 endif()
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 # Setup command line parameters for the compiler and linker
 if (MSVC)
@@ -31,13 +31,8 @@ else ()
     endforeach ()
 endif ()
 
-find_package(Qt6 COMPONENTS Core)
-if (Qt6_FOUND)
-    get_filename_component(Qt_Prefix "${Qt6_DIR}/../../../.." ABSOLUTE)
-else()
-    find_package(Qt5 5.15 REQUIRED Core)
-    get_filename_component(Qt_Prefix "${Qt5_DIR}/../../../.." ABSOLUTE)
-endif()
+find_package(Qt6 COMPONENTS Core REQUIRED)
+get_filename_component(Qt_Prefix "${Qt6_DIR}/../../../.." ABSOLUTE)
 set(CMAKE_AUTOMOC OFF)
 
 message( STATUS )

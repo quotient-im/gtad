@@ -18,20 +18,15 @@
 
 #pragma once
 
-#include "translator.h"
 #include "model.h"
+#include "translator.h"
 #include "util.h"
+#include "yaml.h"
 
-#include <stack>
 #include <filesystem>
 #include <optional>
 
-class YamlNode;
-class YamlMap;
-class YamlSequence;
-
-class Analyzer
-{
+class Analyzer {
 public:
     using string = std::string;
     using fspath = std::filesystem::path;
@@ -42,6 +37,10 @@ public:
     using models_t = std::unordered_map<string, Model>;
 
     explicit Analyzer(const Translator& translator, fspath basePath = {});
+    Analyzer(Analyzer&) = delete;
+    Analyzer(Analyzer&&) = delete;
+    void operator=(Analyzer&) = delete;
+    void operator=(Analyzer&&) = delete;
 
     const Model& loadModel(const string& filePath, InOut inOut);
     static const models_t& allModels() { return _allModels; }
@@ -77,18 +76,17 @@ private:
     [[nodiscard]] const Call* currentCall() const { return currentScope().call; }
 
     [[nodiscard]] fspath makeModelKey(const fspath& sourcePath);
-    [[nodiscard]] std::pair<const Model&, fspath>
-    loadDependency(const string& relPath, const string& overrideTitle,
-                   bool inlined = false);
-    void fillDataModel(Model& m, const YamlNode& yaml, const fspath &filename);
+    [[nodiscard]] std::pair<const Model&, fspath> loadDependency(
+        const string& relPath, const string& overrideTitle,
+        bool inlined = false);
+    void fillDataModel(Model& m, const YamlNode& yaml, const fspath& filename);
 
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node,
                                              IsTopLevel isTopLevel = Inner);
     TypeUsage addSchema(ObjectSchema&& schema);
     [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence& yamlTypes);
-    [[nodiscard]] ObjectSchema
-    analyzeSchema(const YamlMap& yamlSchema,
-                  RefsStrategy refsStrategy = ImportRefs);
+    [[nodiscard]] ObjectSchema analyzeSchema(
+        const YamlMap& yamlSchema, RefsStrategy refsStrategy = ImportRefs);
     [[nodiscard]] ObjectSchema analyzeObject(const YamlMap& yamlSchema,
                                              RefsStrategy refsStrategy);
 
@@ -98,18 +96,15 @@ private:
     ObjectSchema resolveRef(const string& refPath, RefsStrategy refsStrategy);
 
     [[nodiscard]] ObjectSchema makeEphemeralSchema(TypeUsage&& tu) const;
-    [[nodiscard]] std::optional<VarDecl>
-    makeVarDecl(TypeUsage type, const string& baseName, const Identifier& scope,
-                string description, bool required = false,
-                string defaultValue = {}) const;
+    [[nodiscard]] std::optional<VarDecl> makeVarDecl(
+        TypeUsage type, const string& baseName, const Identifier& scope,
+        string description, bool required = false,
+        string defaultValue = {}) const;
 
     void addVarDecl(VarDecls& varList, VarDecl&& v) const;
     void addVarDecl(VarDecls& varList, TypeUsage type, const string& baseName,
                     const Identifier& scope, string description,
                     bool required = false, string defaultValue = {}) const;
 
-    [[nodiscard]] auto logOffset() const
-    {
-        return string(_indent * 2, ' ');
-    }
+    [[nodiscard]] auto logOffset() const { return string(_indent * 2, ' '); }
 };

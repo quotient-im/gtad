@@ -22,7 +22,6 @@
 
 #include <array>
 #include <list>
-#include <unordered_set>
 #include <unordered_map>
 #include <variant>
 
@@ -196,7 +195,7 @@ inline auto dispatchVisit(VariantT&& var, VisitorTs&&... visitors)
 
 struct Path : public std::string
 {
-    explicit Path (std::string path);
+    explicit Path(std::string path);
     Path(const Path& other) = default;
     Path& operator=(const Path& other) = default;
     Path(Path&&) = default;
@@ -269,9 +268,9 @@ struct CallClass
 
 namespace ApiSpec {
 using namespace std::string_literals;
-static inline const auto Swagger = "swagger"s;
-static inline const auto JSONSchema = "json-schema"s;
-// static inline const auto OpenAPI3 = "openapi"s;
+static inline constexpr auto Swagger = "swagger"s;
+static inline constexpr auto JSONSchema = "json-schema"s;
+static inline constexpr auto OpenAPI3 = "openapi3"s;
 // static inline const auto RAML = "raml"s;
 }
 
