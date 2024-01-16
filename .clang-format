@@ -118,7 +118,7 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 #MacroBlockEnd:   ''
 #MaxEmptyLinesToKeep: 1
 #NamespaceIndentation: Inner
-#PackConstructorInitializers: BinPack
+PackConstructorInitializers: NextLine
 #PenaltyBreakAssignment: 10
 #PenaltyBreakBeforeFirstCallParameter: 70
 #PenaltyBreakComment: 45
@@ -139,7 +139,7 @@ RemoveBracesLLVM: true # Note the warning in the docs, might better be false
 #RemoveSemicolon: false # Note the warning in the docs
 RequiresClausePosition: WithPreceding
 #RequiresExpressionIndentation: OuterScope
-SeparateDefinitionBlocks: Always
+SeparateDefinitionBlocks: Leave
 ShortNamespaceLines: 20
 #SortIncludes: CaseSensitive
 #SortUsingDeclarations: LexicographicNumeric
