@@ -326,8 +326,8 @@ string Translator::mapIdentifier(const string& baseName,
                                             regex(++pattn.begin(), pattn.end()),
                                             entry.second);
             if (replaced != scopedName) {
-//                cout << "Regex replace: " << scopedName << " -> " << replaced
-//                     << endl;
+                if (_verbosity == Verbosity::Debug)
+                    cout << "Regex replace: " << scopedName << " -> " << replaced << '\n';
                 newName = replaced;
                 break;
             }

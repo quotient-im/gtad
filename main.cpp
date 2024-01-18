@@ -60,6 +60,7 @@ int main(int argc, char* argv[])
         QCoreApplication::translate("main",
             "Configure the verbosity, one of: quiet, basic, and debug"),
         "verbosity", "basic");
+    parser.addOption(messagesRoleOption);
 
     parser.addPositionalArgument("files",
         QCoreApplication::translate("main",
