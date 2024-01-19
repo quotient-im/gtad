@@ -45,7 +45,7 @@ AllowShortCaseLabelsOnASingleLine: true
 #AlwaysBreakAfterDefinitionReturnType: None # deprecated
 #AlwaysBreakAfterReturnType: None
 #AlwaysBreakBeforeMultilineStrings: false
-AlwaysBreakTemplateDeclarations: Yes
+#AlwaysBreakTemplateDeclarations: No # Anything else breaks too aggressively
 #BinPackArguments: true
 #BinPackParameters: true
 #BitFieldColonSpacing: Both
@@ -89,6 +89,10 @@ EmptyLineBeforeAccessModifier: LogicalBlock
 FixNamespaceComments: true
 IncludeBlocks: Regroup
 IncludeCategories:
+  - Regex:    '".+'
+    Priority: 8
+  - Regex:    '^<(yaml-cpp|mustache).+/'
+    Priority: 16
   - Regex:    '^<Qt.+/'
     Priority: 24
   - Regex:    '^<'
@@ -137,7 +141,7 @@ PackConstructorInitializers: NextLine
 RemoveBracesLLVM: true # Note the warning in the docs, might better be false
 #RemoveParentheses: Leave # ClangFormat 17
 #RemoveSemicolon: false # Note the warning in the docs
-RequiresClausePosition: WithPreceding
+RequiresClausePosition: OwnLine
 #RequiresExpressionIndentation: OuterScope
 SeparateDefinitionBlocks: Leave
 ShortNamespaceLines: 20
