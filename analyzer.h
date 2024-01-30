@@ -60,7 +60,6 @@ private:
     size_t _indent = 0;
     friend class ContextOverlay; // defined in analyzer.cpp
 
-    enum IsTopLevel : bool { Inner = false, TopLevel = true };
     enum RefsStrategy : bool { ImportRefs = false, InlineRefs = true };
 
     [[nodiscard]] const Context& context() const
@@ -81,8 +80,7 @@ private:
         bool inlined = false);
     void fillDataModel(Model& m, const YamlMap<>& yaml, const fspath& filename);
 
-    [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap<>& node,
-                                             IsTopLevel isTopLevel = Inner);
+    [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap<>& node);
     TypeUsage addSchema(ObjectSchema&& schema);
     [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence<>& yamlTypes);
     [[nodiscard]] ObjectSchema analyzeSchema(const YamlMap<>& yamlSchema,

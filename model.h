@@ -21,6 +21,8 @@
 #include "util.h"
 
 #include <array>
+#include <cstdint>
+#include <limits>
 #include <list>
 #include <unordered_map>
 #include <variant>
@@ -118,6 +120,8 @@ struct FlatSchema : Identifier {
     explicit FlatSchema(InOut inOut, const Call* scope = nullptr)
         : Identifier{"", inOut, scope}
     { }
+    // uint16_t because that's as much as JSON accepts for integers
+    uint16_t maxProperties = std::numeric_limits<uint16_t>::max();
     VarDecls fields;
     VarDecl propertyMap;
 

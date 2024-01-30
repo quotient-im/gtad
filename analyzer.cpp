@@ -71,7 +71,7 @@ Analyzer::Analyzer(const Translator& translator, fspath basePath)
          << endl;
 }
 
-TypeUsage Analyzer::analyzeTypeUsage(const YamlMap<>& node, IsTopLevel isTopLevel)
+TypeUsage Analyzer::analyzeTypeUsage(const YamlMap<>& node)
 {
     auto yamlTypeNode = node["type"];
 
@@ -94,8 +94,8 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap<>& node, IsTopLevel isTopLeve
     if (yamlType == "object")
     {
         auto schema = analyzeSchema(node);
-        if (isTopLevel && schema.empty() && currentRole() == OnlyOut)
-            return {}; // The type returned by this API is void
+        if (schema.maxProperties == 0)
+            return {}; // 'void'
 
         // If the schema is trivial it is treated as an alias for another type.
         // NB: if the found name or top-level $ref for the schema has any
@@ -212,6 +212,11 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
             return makeEphemeralSchema(std::move(tu));
     }
 
+    yamlSchema.maybeLoad("maxProperties", &schema.maxProperties);
+    // Don't bother parsing parents and properties if the schema is known to be empty
+    if (schema.maxProperties == 0)
+        return schema;
+
     if (auto yamlOneOf = yamlSchema.maybeGet<YamlSequence<>>("oneOf"))
         schema.parentTypes.emplace_back(analyzeMultitype(*yamlOneOf));
 
@@ -324,11 +329,10 @@ Body Analyzer::analyzeBodySchema(const YamlMap<>& yamlSchema, const string& name
 
         // For description of packed vs. unpacked bodies cf. the documentation
         // at Body definition
+        if (bodySchema.maxProperties == 0) // same as at the end of analyzeTypeUsage()
+            return {}; // Empty object, effectively void or monostate
         if (bodySchema.empty()) {
-            if (currentRole() == OnlyOut) // cf. the end of analyzeType() :-/
-                return {}; // An empty schema for _response_ means "ignore body"
-
-            // An empty schema for _request_ means a freeform object
+            // Empty schema without maxProperties: 0 is treated as a freeform object
             required = false;
             packedType = _translator.mapType("object");
         } else if (bodySchema.trivial()) {
@@ -560,9 +564,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 
                     auto&& description = yamlParam.get<string>("description", {});
                     if (in != "body") {
-                        addVarDecl(call.getParamsBlock(in),
-                                   analyzeTypeUsage(yamlParam, TopLevel),
-                                   name, call, std::move(description), required,
+                        addVarDecl(call.getParamsBlock(in), analyzeTypeUsage(yamlParam), name, call,
+                                   std::move(description), required,
                                    yamlParam.get<string>("default", {}));
                         continue;
                     }
@@ -579,9 +582,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                         const ContextOverlay _outContext(*this, {responseCode, OnlyOut, &call});
                         for (const auto& [headerName, headerYaml] :
                              responseData.maybeGet<YamlMap<YamlMap<>>>("headers"))
-                            addVarDecl(response.headers,
-                                       analyzeTypeUsage(headerYaml, TopLevel),
-                                       headerName, call, headerYaml.get<string>("description", {}));
+                            addVarDecl(response.headers, analyzeTypeUsage(headerYaml), headerName,
+                                       call, headerYaml.get<string>("description", {}));
 
                         if (const auto& yamlBody = responseData.maybeGet<YamlMap<>>("schema"))
                             response.body = analyzeBodySchema(*yamlBody, "data"s,
