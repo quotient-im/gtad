@@ -170,7 +170,14 @@ subst_list_t loadStringMap(const YamlMap<>& yaml, string_view key)
         else {
             if (pattern.front() == '/' && pattern.back() == '/')
                 pattern.pop_back();
-            stringMap.emplace_back(pattern, subst.as<string>());
+            if (!subst.IsMap())
+                stringMap.emplace_back(pattern, subst.as<string>());
+            else if (subst.size() != 0) { // empty() would also check IsDefined() - again
+                clog << subst.location()
+                     << ": warning: non-empty maps have no meaning in substitutions\n"
+                     << "(put literal {} to indicate entry removal)\n";
+            } else
+                stringMap.emplace_back(pattern, nullopt);
         }
     }
     return stringMap;
@@ -292,17 +299,23 @@ string Translator::mapIdentifier(string_view baseName, const Identifier* scope, 
     for (const auto& [pattn, subst]: _identifiers)
     {
         if (!pattn.empty() && pattn.front() == '/') {
-            auto&& replaced = regex_replace(scopedName,
-                                            regex(++pattn.begin(), pattn.end()),
-                                            subst);
-            if (replaced != scopedName) {
+            const regex re(++pattn.begin(), pattn.end());
+            if (!subst && regex_search(scopedName, re)) {
+                if (_verbosity == Verbosity::Debug)
+                    cout << "Regex erasure: " << scopedName << "\n";
+                newName = {};
+                break;
+            }
+            if (auto&& replaced = regex_replace(scopedName, re, *subst);
+                replaced != scopedName)
+            {
                 if (_verbosity == Verbosity::Debug)
                     cout << "Regex replace: " << scopedName << " -> " << replaced << '\n';
                 newName = replaced;
                 break;
             }
         } else if (pattn == baseName || pattn == scopedName) {
-            newName = subst;
+            newName = subst.value_or(""s);
             break;
         }
     }

@@ -39,8 +39,8 @@ YAML::Node makeNodeFromFile(const string& fileName, const subst_list_t& replaceP
     auto fileContents = readFile(fileName);
     if (fileContents.empty())
         throw YAML::BadFile(fileName);
-    for (const auto& subst : replacePairs)
-        fileContents = std::regex_replace(fileContents, std::regex(subst.first), subst.second);
+    for (const auto& [pattn, subst] : replacePairs)
+        fileContents = std::regex_replace(fileContents, std::regex(pattn), subst.value_or(""));
     return YAML::Load(fileContents);
 }
 }
