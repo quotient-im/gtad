@@ -385,10 +385,15 @@ vector<string> Printer::print(const fspath& filePathBase,
 
     GtadContext context{_inputBasePath, _delimiter, &_contextData};
 
-    object payloadObj {{"filenameBase", filePathBase.filename().string()}
-                      ,{"basePathWithoutHost", model.basePath}
-                      ,{"basePath", model.hostAddress + model.basePath}
-                      };
+    object payloadObj{
+        {"filenameBase"s, filePathBase.filename().string()}
+    };
+    if (!model.defaultServers.empty()) {
+        // NB: For now, only support one server
+        const auto& firstServer = model.defaultServers.front();
+        payloadObj.emplace("basePathWithoutHost"s, firstServer.basePath());
+        payloadObj.emplace("basePath"s, firstServer.toString());
+    }
     setList(payloadObj, "imports", model.imports,
             [this, &context](const pair<string, string>& import) -> string {
                 if (import.first.empty() || import.second.empty()) {
@@ -448,14 +453,13 @@ vector<string> Printer::print(const fspath& filePathBase,
 
             globalConsumesNonJson |=
                 dumpContentTypes(mCall, "consumes", call.consumedContentTypes);
-            globalProducesNonJson |=
-                dumpContentTypes(mCall, "produces", call.producedContentTypes);
-            mCall.emplace("producesImage?",
-                          all_of(call.producedContentTypes.begin(),
-                                 call.producedContentTypes.end(),
-                                 [](const string& s) {
-                                     return s.starts_with("image/");
-                                 }));
+            if (!call.responses.empty()) {
+                const auto& producedContentTypes = call.responses.front().contentTypes;
+                globalProducesNonJson |= dumpContentTypes(mCall, "produces", producedContentTypes);
+                mCall.emplace("producesImage?",
+                              all_of(producedContentTypes.begin(), producedContentTypes.end(),
+                                     [](const string& s) { return s.starts_with("image/"); }));
+            }
 
             auto&& mCallTypes = dumpTypes(model.types, &call);
             if (!mCallTypes.empty())

@@ -20,6 +20,8 @@
 
 #include "util.h"
 
+#include <QtCore/QUrl>
+
 #include <array>
 #include <cstdint>
 #include <limits>
@@ -194,6 +196,29 @@ inline auto dispatchVisit(VariantT&& var, VisitorTs&&... visitors)
                       std::forward<VariantT>(var));
 }
 
+class Server {
+public:
+    Server(const QString& urlString, std::string description = {})
+        : url(QUrl::fromUserInput(urlString)), desc(std::move(description))
+    {}
+    Server(const std::string& scheme, const std::string& host, const std::string& basePath,
+           std::string description = {})
+        : url(QString::fromStdString(scheme) + QStringLiteral("://") + QString::fromStdString(host)
+              + QString::fromStdString(basePath))
+        , desc(std::move(description))
+    {}
+
+    std::string toString() const { return url.toString().toStdString(); }
+    std::string scheme() const { return url.scheme().toStdString(); }
+    std::string host() const { return url.host().toStdString(); }
+    std::string basePath() const { return url.path().toStdString(); }
+    std::string description() const { return desc; }
+
+private:
+    QUrl url;
+    std::string desc;
+};
+
 struct Path : public std::string
 {
     explicit Path(std::string path);
@@ -205,6 +230,7 @@ struct Path : public std::string
     enum PartKind { Literal, Variable };
     using part_type = std::tuple<size_type /*from*/, size_type /*to*/, PartKind>;
     std::vector<part_type> parts;
+    std::vector<Server> overrideServers;
 };
 
 struct Response
@@ -215,6 +241,7 @@ struct Response
     std::string code;
     std::string description;
     VarDecls headers;
+    std::vector<std::string> contentTypes;
     Body body;
 };
 
@@ -246,6 +273,7 @@ struct Call : Identifier {
     [[nodiscard]] params_type collateParams() const;
 
     Path path;
+    std::vector<Server> serverOverride;
     string verb;
     string summary;
     string description;
@@ -256,7 +284,6 @@ struct Call : Identifier {
     // TODO: Embed proper securityDefinitions representation.
     bool needsSecurity;
 
-    std::vector<string> producedContentTypes;
     std::vector<string> consumedContentTypes;
     std::vector<Response> responses;
 };
@@ -290,8 +317,7 @@ struct Model {
     imports_type imports;
     schemas_type types;
 
-    string hostAddress;
-    string basePath;
+    std::vector<Server> defaultServers;
     std::list<CallClass> callClasses;
 
     void clear();

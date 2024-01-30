@@ -188,7 +188,6 @@ void Model::clear()
     apiSpec.clear();
     imports.clear();
     types.clear();
-    hostAddress.clear();
-    basePath.clear();
+    defaultServers.clear();
     callClasses.clear();
 }

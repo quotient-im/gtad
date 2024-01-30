@@ -21,6 +21,8 @@
 #include "translator.h"
 #include "yaml.h"
 
+#include <QtCore/QUrl>
+
 #include <algorithm>
 #include <iostream>
 
@@ -312,17 +314,31 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
     return schema;
 }
 
-Body Analyzer::analyzeBodySchema(const YamlMap<>& yamlSchema, const string& name,
-                                 string description, bool required)
+Body Analyzer::analyzeBody(const YamlMap<>& contentYaml, string description,
+                           const string& contentType, bool required, std::string_view name)
 {
     if (currentRole() == InAndOut)
-        throw YamlException(yamlSchema,
-                "Internal error, role must be either OnlyIn or OnlyOut");
+        throw YamlException(contentYaml, "Internal error, role must be either OnlyIn or OnlyOut");
+    if (currentModel().apiSpecVersion < 20 || currentModel().apiSpecVersion >= 40)
+        throw YamlException(
+            contentYaml, "Internal error, trying to call analyzeBody on non-OpenAPI description");
 
     const Identifier location{{}, currentRole(), currentCall()};
     auto packedType = _translator.mapType("schema", location.qualifiedName());
     if (packedType.empty()) {
-        auto&& bodySchema = analyzeSchema(yamlSchema);
+        const auto isOldSwagger = context().model->apiSpecVersion < 30;
+        auto&& bodySchema =
+            isOldSwagger ? analyzeSchema(contentYaml) : [this, &contentYaml, &contentType] {
+                // TODO: the below sort of hardwires having `schema` to application/json content
+                //       type; other structured content types (application/yaml, application/xml)
+                //       could certainly have a schema too. Maybe make it configurable via gtad.yaml
+                if (contentType == "application/json") [[likely]]
+                    if (const auto schemaYaml = contentYaml.maybeGet<YamlMap<>>("schema"))
+                        return analyzeSchema(*schemaYaml);
+                // Emulate type definitions used with Swagger 2 so that users don't have
+                // to rewrite their configuration files
+                return makeEphemeralSchema(_translator.mapType("string"s, "binary"s));
+            }();
 
         if (description.empty())
             description = bodySchema.description;
@@ -354,13 +370,12 @@ Body Analyzer::analyzeBodySchema(const YamlMap<>& yamlSchema, const string& name
     if (auto&& v = makeVarDecl(std::move(packedType), name, location,
                                std::move(description), required))
     {
-        cout << logOffset() << yamlSchema.location() << ": substituting the "
-             << location << " schema with a '" << v->type.qualifiedName() << ' '
-             << v->name << "' parameter" << endl;
+        cout << logOffset() << contentYaml.location() << ": substituting the " << location
+             << " body definition with '" << v->type.qualifiedName() << ' ' << v->name << "'\n";
         return *v;
     }
-    cout << logOffset() << yamlSchema.location() << location
-         << " schema has been nullified by configuration" << endl;
+    cout << logOffset() << contentYaml.location() << location
+         << " body definition has been nullified by configuration\n";
     return {};
 }
 
@@ -473,7 +488,20 @@ inline fs::path Analyzer::makeModelKey(const fs::path& sourcePath)
         .lexically_normal();
 }
 
-vector<string> loadContentTypes(const YamlMap<>& yaml, const char* keyName)
+Server resolveOas3Server(const YamlMap<>& yamlServer)
+{
+    auto urlPattern = QString::fromStdString(yamlServer.get<string>("url"));
+    // Replace all {variable} occurrences in `url` with default values taken from the variables
+    // dictionary. The conversions between std::string and QString are unfortunate but make the code
+    // much simpler, and we have to use QUrl anyway, because of its damn good user input parsing.
+    for (const auto& [varName, values] : yamlServer.maybeGet<YamlMap<YamlMap<string>>>("variables"))
+        urlPattern.replace(u'{' + QString::fromStdString(varName) + u'}',
+                           QString::fromStdString(values.get("default")));
+
+    return {urlPattern, yamlServer.get<string>("description", {})};
+}
+
+vector<string> loadSwaggerContentTypes(const YamlMap<>& yaml, const char* keyName)
 {
     if (auto yamlTypes = yaml.maybeGet<YamlSequence<string>>(keyName))
         return {yamlTypes->begin(), yamlTypes->end()};
@@ -503,17 +531,26 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
     }
 
     // The rest is exclusive to API descriptions
-    if (yaml.get<string_view>("swagger", {}) != "2.0")
-        throw Exception(
-                "This software only supports swagger version 2.0 for now");
+    vector<string> defaultConsumed, defaultProduced;
+    const auto isOpenApi3 = yaml.get<string_view>("openapi", {}).starts_with("3.1");
+    if (isOpenApi3) {
+        model.apiSpec = ApiSpec::OpenAPI3;
+        model.apiSpecVersion = 31;
+        for (const auto serverSpec : yaml.maybeGet<YamlSequence<YamlMap<>>>("servers"))
+            model.defaultServers.emplace_back(resolveOas3Server(serverSpec));
+    } else if (yaml.get<string_view>("swagger", {}).starts_with("2.0")) {
+        model.apiSpec = ApiSpec::Swagger;
+        model.apiSpecVersion = 20; // Swagger/OpenAPI 2.0
+        auto schemesYaml = yaml.maybeGet<YamlSequence<string>>("schemes");
+        model.defaultServers.emplace_back(schemesYaml.empty() ? string{} : schemesYaml->front(),
+                                          yaml.get<string>("host", {}),
+                                          yaml.get<string>("basePath", {}));
+        defaultConsumed = loadSwaggerContentTypes(yaml, "consumes");
+        defaultProduced = loadSwaggerContentTypes(yaml, "produces");
+    } else
+        throw Exception("This software only supports Swagger 2.0 or OpenAPI 3.1.x");
 
-    model.apiSpec = ApiSpec::Swagger;
-    model.apiSpecVersion = 20; // Swagger/OpenAPI 2.0
-
-    auto defaultConsumed = loadContentTypes(yaml, "consumes");
-    auto defaultProduced = loadContentTypes(yaml, "produces");
-    model.hostAddress = yaml.get<string>("host", {});
-    model.basePath = yaml.get<string>("basePath", {});
+    // Either Swagger 2 or OpenAPI 3 from here; isOpenApi3 cached which one we have
 
     for (const auto& yaml_path: *paths)
         try {
@@ -537,15 +574,28 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 if (auto&& yamlExternalDocs = yamlCall.maybeGet<YamlMap<string>>("externalDocs"))
                     call.externalDocs = {yamlExternalDocs->get("description", {}),
                                          yamlExternalDocs->get("url")};
+                if (isOpenApi3) {
+                    if (auto&& yamlBody = yamlCall.maybeGet<YamlMap<>>("requestBody")) {
+                        const ContextOverlay _inContext(*this, {"(requestBody)", OnlyIn, &call});
 
-                call.consumedContentTypes =
-                        loadContentTypes(yamlCall, "consumes");
-                if (call.consumedContentTypes.empty())
-                    call.consumedContentTypes = defaultConsumed;
-                call.producedContentTypes =
-                        loadContentTypes(yamlCall, "produces");
-                if (call.producedContentTypes.empty())
-                    call.producedContentTypes = defaultProduced;
+                        if (call.verb == "get" || call.verb == "head" || call.verb == "delete")
+                            clog << logOffset() << yamlBody.location()
+                                 << ": warning: RFC7231 does not allow requestBody in '"
+                                 << call.verb << "' operations\n";
+
+                        // Only one content type in requestBody is supported
+                        const auto& [contentType, contentData] =
+                            yamlBody->get<YamlMap<YamlMap<>>>("content").front();
+                        call.consumedContentTypes.emplace_back(contentType);
+                        call.body =
+                            analyzeBody(contentData, yamlBody->get<string>("description", {}),
+                                        contentType, yamlBody->get<bool>("required", false));
+                    }
+                } else {
+                    call.consumedContentTypes = loadSwaggerContentTypes(yamlCall, "consumes");
+                    if (call.consumedContentTypes.empty())
+                        call.consumedContentTypes = defaultConsumed;
+                }
 
                 const auto yamlParams = yamlCall.maybeGet<YamlSequence<YamlMap<>>>("parameters");
                 for (const auto& yamlParam: yamlParams) {
@@ -563,16 +613,19 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                     }
 
                     auto&& description = yamlParam.get<string>("description", {});
-                    if (in != "body") {
-                        addVarDecl(call.getParamsBlock(in), analyzeTypeUsage(yamlParam), name, call,
+                    if (in == "body") {
+                        if (isOpenApi3)
+                            throw YamlException(
+                                yamlParam, "OpenAPI 3 definitions cannot have 'body' parameters");
+                        call.body =
+                            analyzeBody(yamlParam, std::move(description), {}, required, name);
+                    } else {
+                        const auto& typeYaml =
+                            isOpenApi3 ? yamlParam.get<YamlMap<>>("schema") : yamlParam;
+                        addVarDecl(call.getParamsBlock(in), analyzeTypeUsage(typeYaml), name, call,
                                    std::move(description), required,
-                                   yamlParam.get<string>("default", {}));
-                        continue;
+                                   typeYaml.get<string>("default", {}));
                     }
-
-                    call.body = analyzeBodySchema(yamlParam.get("schema"), name,
-                                                  std::move(description),
-                                                  required);
                 }
                 const auto& yamlResponses = yamlCall.get<YamlMap<YamlMap<>>>("responses");
                 for (const auto& [responseCode, responseData] : yamlResponses)
@@ -582,12 +635,34 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                         const ContextOverlay _outContext(*this, {responseCode, OnlyOut, &call});
                         for (const auto& [headerName, headerYaml] :
                              responseData.maybeGet<YamlMap<YamlMap<>>>("headers"))
-                            addVarDecl(response.headers, analyzeTypeUsage(headerYaml), headerName,
-                                       call, headerYaml.get<string>("description", {}));
+                            addVarDecl(response.headers,
+                                       analyzeTypeUsage(isOpenApi3
+                                                            ? headerYaml.get<YamlMap<>>("schema")
+                                                            : headerYaml),
+                                       headerName, call, headerYaml.get<string>("description", {}));
 
-                        if (const auto& yamlBody = responseData.maybeGet<YamlMap<>>("schema"))
-                            response.body = analyzeBodySchema(*yamlBody, "data"s,
-                                                              response.description, false);
+                        if (isOpenApi3) {
+                            if (const auto& yamlContent =
+                                responseData.maybeGet<YamlMap<YamlMap<>>>("content"))
+                            {
+                                for (const auto& [contentType, contentTypeYaml] : yamlContent) {
+                                    response.contentTypes.emplace_back(contentType);
+                                    if (empty(response.body))
+                                        response.body = analyzeBody(
+                                            contentTypeYaml, response.description, contentType);
+                                    else
+                                        clog << logOffset() << contentTypeYaml.location()
+                                             << ": warning: No support for more than one non-empty "
+                                                "content schema, subsequent schemas will be "
+                                                "skipped\n";
+                                }
+                            }
+                        } else {
+                            response.contentTypes = loadSwaggerContentTypes(yamlCall, "produces");
+                            if (response.contentTypes.empty())
+                                response.contentTypes = defaultProduced;
+                            response.body = analyzeBody(responseData, response.description);
+                        }
 
                         call.responses.emplace_back(std::move(response));
                         break;

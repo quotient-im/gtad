@@ -88,8 +88,9 @@ private:
     [[nodiscard]] ObjectSchema analyzeObject(const YamlMap<>& yamlSchema,
                                              RefsStrategy refsStrategy);
 
-    Body analyzeBodySchema(const YamlMap<>& yamlSchema, const string& name,
-                           string description, bool required = true);
+    Body analyzeBody(const YamlMap<>& contentYaml, string description,
+                     const string& contentType = {}, bool required = false,
+                     std::string_view name = "data");
 
     ObjectSchema resolveRef(const string& refPath, RefsStrategy refsStrategy);
 
