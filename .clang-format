@@ -45,7 +45,7 @@ AllowShortCaseLabelsOnASingleLine: true
 #AlwaysBreakAfterDefinitionReturnType: None # deprecated
 #AlwaysBreakAfterReturnType: None
 #AlwaysBreakBeforeMultilineStrings: false
-#AlwaysBreakTemplateDeclarations: No # Anything else breaks too aggressively
+AlwaysBreakTemplateDeclarations: Yes
 #BinPackArguments: true
 #BinPackParameters: true
 #BitFieldColonSpacing: Both
