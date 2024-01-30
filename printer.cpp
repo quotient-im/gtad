@@ -190,8 +190,7 @@ inline object wrap(object o)
     return o;
 }
 
-template <typename T>
-inline object wrap(T val)
+inline object wrap(auto val)
 {
     return object {{ "_", std::move(val) }};
 }
@@ -201,8 +200,7 @@ inline object wrap(const filesystem::path& p)
     return wrap(p.string());
 }
 
-template <typename ObjT, typename ContT, typename FnT>
-void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
+void setList(auto& target, const string& name, const auto& source, auto convert)
 {
     if (source.empty())
         return; // Don't even bother to add the empty list
@@ -220,14 +218,12 @@ void setList(ObjT& target, const string& name, const ContT& source, FnT convert)
     target[name] = mList;
 }
 
-template <typename ObjT, typename ContT>
-void setList(ObjT& target, const string& name, const ContT& source)
+void setList(auto& target, const string& name, const auto& source)
 {
     setList(target, name, source, [](auto element) { return element; });
 }
 
-template <typename ModelT>
-void dumpDescription(object& target, const ModelT& model)
+void dumpDescription(object& target, const auto& model)
 {
     vector<string> lines{};
     if (!model.description.empty()) {

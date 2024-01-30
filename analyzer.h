@@ -96,10 +96,10 @@ private:
     ObjectSchema resolveRef(const string& refPath, RefsStrategy refsStrategy);
 
     [[nodiscard]] ObjectSchema makeEphemeralSchema(TypeUsage&& tu) const;
-    [[nodiscard]] std::optional<VarDecl> makeVarDecl(
-        TypeUsage type, const string& baseName, const Identifier& scope,
-        string description, bool required = false,
-        string defaultValue = {}) const;
+    [[nodiscard]] std::optional<VarDecl> makeVarDecl(TypeUsage type, std::string_view baseName,
+                                                     const Identifier& scope, string description,
+                                                     bool required = false,
+                                                     string defaultValue = {}) const;
 
     void addVarDecl(VarDecls& varList, VarDecl&& v) const;
     void addVarDecl(VarDecls& varList, TypeUsage type, const string& baseName,

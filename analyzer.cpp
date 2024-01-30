@@ -107,11 +107,11 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap<>& node, IsTopLevel isTopLeve
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
             return addSchema(std::move(schema)); // Wrap `schema` in a TypeUsage
 
-        // An OnlyIn empty object is schemaless but existing, mapType("object")
-        // Also, a nameless non-empty schema is now treated as a generic
-        // mapType("object"). TODO, low priority: ad-hoc typing (via tuples?)
+        // An empty object is schemaless but existing, mapType("object")
+        // Also, a nameless non-empty schema is treated as a generic
+        // mapType("object") for now. TODO, low priority: ad-hoc typing (via tuples?)
     }
-    if (const auto tu = _translator.mapType(yamlType, node.get<string>("format", {}));
+    if (const auto tu = _translator.mapType(yamlType, node.get<string_view>("format", {}));
         !tu.empty())
         return tu;
 
@@ -277,12 +277,13 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
         string description;
         switch (additionalProperties->Type()) {
         case YAML::NodeType::Map: {
-            auto elemType = analyzeTypeUsage(additionalProperties->as<YamlMap<>>());
+            const auto propertiesMap = additionalProperties->as<YamlMap<>>();
+            auto elemType = analyzeTypeUsage(propertiesMap);
             const auto& protoType =
                 _translator.mapType("map", elemType.baseName,
                                     "string->" + elemType.baseName);
             tu = protoType.specialize({std::move(elemType)});
-            description = (*additionalProperties)["description"].as<string>("");
+            description = propertiesMap.get<string>("description", {});
             break;
         }
         case YAML::NodeType::Scalar: // Generic map
@@ -419,7 +420,7 @@ ObjectSchema Analyzer::makeEphemeralSchema(TypeUsage&& tu) const
     return result;
 }
 
-optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
+optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, string_view baseName,
                                         const Identifier& scope,
                                         string description, bool required,
                                         string defaultValue) const
@@ -428,9 +429,8 @@ optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, const string& baseName,
     if (id.empty())
         return {}; // Skip the variable
 
-    return VarDecl {std::move(type), std::move(id),
-                    baseName,        std::move(description),
-                    required,        std::move(defaultValue)};
+    return VarDecl{std::move(type),        std::move(id), string(baseName),
+                   std::move(description), required,      std::move(defaultValue)};
 }
 
 void Analyzer::addVarDecl(VarDecls &varList, VarDecl &&v) const
@@ -487,8 +487,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
         _allModels.erase(filePath);
     }
     auto&& model = _allModels[makeModelKey(filePath)];
-    ContextOverlay _modelContext(*this, fspath(filePath).parent_path(), &model,
-                                 inOut);
+    const ContextOverlay _modelContext(*this, fspath(filePath).parent_path(), &model, inOut);
 
     // Detect which file we have: API description or data definition
     // Using YamlGenericMap so that YamlException could be used on the map key
@@ -500,7 +499,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
     }
 
     // The rest is exclusive to API descriptions
-    if (yaml.get<string>("swagger", {}) != "2.0")
+    if (yaml.get<string_view>("swagger", {}) != "2.0")
         throw Exception(
                 "This software only supports swagger version 2.0 for now");
 
@@ -523,13 +522,11 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 if (const auto security = yamlCall.maybeGet<YamlSequence<>>("security"))
                     needsSecurity = security->front()["accessToken"].IsDefined();
 
-                cout << logOffset() << yamlCall.location()
-                     << ": Found operation " << operationId
-                     << " (" << path << ", " << verb << ')' << endl;
+                cout << logOffset() << yamlCall.location() << ": Found operation " << operationId
+                     << " (" << path << ", " << verb << ")\n";
 
-                Call& call = model.addCall(path, std::move(verb),
-                                           std::move(operationId),
-                                           needsSecurity);
+                Call& call =
+                    model.addCall(path, std::move(verb), std::move(operationId), needsSecurity);
 
                 yamlCall.maybeLoad("summary", &call.summary);
                 yamlCall.maybeLoad("description", &call.description);
@@ -550,14 +547,14 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 for (const auto& yamlParam: yamlParams) {
                     const auto& name = yamlParam.get<string>("name");
 
-                    ContextOverlay _inContext(*this, {name, OnlyIn, &call});
+                    const ContextOverlay _inContext(*this, {name, OnlyIn, &call});
 
                     auto&& in = yamlParam.get<string>("in");
                     auto required = yamlParam.get<bool>("required", false);
                     if (!required && in == "path") {
                         cout << logOffset() << yamlParam.location() << ": warning: '" << name
                              << "' is in path but has no 'required' attribute"
-                             << " - treating as required anyway\n";
+                                " - treating as required anyway\n";
                         required = true;
                     }
 
@@ -579,7 +576,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                     if (responseCode.starts_with('2')) {
                         // Only handling the first 2xx response for now
                         Response response{responseCode, responseData.get<string>("description")};
-                        ContextOverlay _outContext(*this, {responseCode, OnlyOut, &call});
+                        const ContextOverlay _outContext(*this, {responseCode, OnlyOut, &call});
                         for (const auto& [headerName, headerYaml] :
                              responseData.maybeGet<YamlMap<YamlMap<>>>("headers"))
                             addVarDecl(response.headers,
@@ -654,8 +651,7 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
          << " with role " << modelRole << endl;
     const auto yaml =
         YamlNode::fromFile(_baseDir / fullPath, _translator.substitutions()).as<YamlMap<>>();
-    ContextOverlay _modelContext(*this, fullPath.parent_path(), &model,
-                                 modelRole);
+    const ContextOverlay _modelContext(*this, fullPath.parent_path(), &model, modelRole);
     fillDataModel(model, yaml, stem.filename());
     auto& mainSchema = model.types.back();
     if (!overrideTitle.empty() && !model.types.empty())

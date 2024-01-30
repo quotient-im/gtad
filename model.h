@@ -35,8 +35,7 @@ constexpr inline char roleToChar(InOut r)
     return r == OnlyIn ? '>' : r == OnlyOut ? '<' : '.';
 }
 
-template <typename StreamT>
-inline StreamT& operator<<(StreamT& s, const InOut& v)
+inline auto& operator<<(auto& s, const InOut& v)
 {
     return s << (v == OnlyIn ? "In" : v == OnlyOut ? "Out" : "In/Out");
 }
@@ -182,8 +181,6 @@ using Body = std::variant<std::monostate, FlatSchema, VarDecl>;
  */
 template <class... Ts>
 struct overloadedVisitor : Ts... { using Ts::operator()...; };
-template <class... Ts>
-overloadedVisitor(Ts...) -> overloadedVisitor<Ts...>; // not needed as of C++20
 
 /** Convenience wrapper around std::visit */
 template <typename VariantT, typename... VisitorTs>
@@ -317,8 +314,7 @@ struct ModelException : Exception
     using Exception::Exception;
 };
 
-template <typename StreamT>
-inline StreamT& operator<<(StreamT& s, const Identifier& id)
+inline auto& operator<<(auto& s, const Identifier& id)
 {
     if (id.call)
         s << id.call->name;
