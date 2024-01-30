@@ -21,63 +21,44 @@
 #include <yaml-cpp/node/parse.h>
 
 #include <regex>
-#include <functional>
 
 using Node = YAML::Node;
 using NodeType = YAML::NodeType;
 using std::string;
-using namespace std::string_literals;
+
+YamlException::YamlException(const YamlNode& node, std::string_view msg) noexcept
+    : Exception(node.location().append(": ").append(msg))
+{}
 
 namespace {
-// Follows the YAML::NodeType::value enum; if that enum changes, this has
-// to be changed too (but it probably would only change if YAML standard is updated).
-constexpr std::array typenames{"Undefined"s, "Null"s, "Scalar"s, "Sequence"s, "Map"s};
+YAML::Node makeNodeFromFile(const string& fileName, const subst_list_t& replacePairs)
+{
+    if (replacePairs.empty())
+        return YAML::LoadFile(fileName);
+
+    auto fileContents = readFile(fileName);
+    if (fileContents.empty())
+        throw YAML::BadFile(fileName);
+    for (const auto& subst : replacePairs)
+        fileContents = std::regex_replace(fileContents, std::regex(subst.first), subst.second);
+    return YAML::Load(fileContents);
+}
 }
 
-YamlSequence YamlNode::asSequence() const { return {*this}; }
-
-YamlMap YamlNode::asMap() const { return {*this}; }
-
-void YamlNode::checkType(NodeType::value checkedType) const
+YamlNode YamlNode::fromFile(std::string fileName, const subst_list_t& replacePairs)
 {
-    if (Type() == checkedType)
-        return;
-
-    throw YamlException(*this, "The node has a wrong type (expected " + typenames[checkedType]
-                                   + ", got " + typenames[Type()] + ")");
+    return {makeNodeFromFile(fileName, replacePairs), std::make_shared<string>(fileName),
+            AllowUndefined{}};
 }
 
-std::vector<string> asStrings(const YamlSequence& seq)
+void YamlNode::checkType(YAML::NodeType::value checkedType) const
 {
-    std::vector<string> listVals { seq.size() };
-    transform(seq.begin(), seq.end(), listVals.begin(), std::mem_fn(&YamlNode::as<string>));
-    return listVals;
-}
+    using namespace std::string_literals;
+    // Follows the YAML::NodeType::value enum; if that enum changes, this has
+    // to be changed too (but it probably would only change if YAML standard is updated).
+    static constexpr std::array typenames{"Undefined"s, "Null"s, "Scalar"s, "Sequence"s, "Map"s};
 
-YAML::Node makeNodeFromFile(const string& fileName,
-                            const pair_vector_t<string>& replacePairs)
-{
-    try {
-        if (replacePairs.empty())
-            return YAML::LoadFile(fileName);
-
-        auto fileContents = readFile(fileName);
-        if (fileContents.empty())
-            throw YAML::BadFile(fileName);
-        for (const auto& subst: replacePairs)
-            fileContents = std::regex_replace(fileContents,
-                                 std::regex(subst.first), subst.second);
-        return YAML::Load(fileContents);
-    }
-    catch (YAML::BadFile &)
-    {
-        throw Exception("Couldn't read YAML from input");
-    }
-}
-
-YamlMap loadYamlFromFile(const std::filesystem::path& fileName,
-                         const pair_vector_t<std::string>& replacePairs)
-{
-    return YamlNode(makeNodeFromFile(fileName.string(), replacePairs),
-                    std::make_shared<string>(fileName.string()));
+    if (Type() != checkedType)
+        throw YamlException(*this, "The node has a wrong type (expected " + typenames[checkedType]
+                                       + ", got " + typenames[Type()] + ")");
 }

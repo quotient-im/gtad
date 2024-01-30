@@ -22,6 +22,7 @@
 #include "yaml.h"
 
 #include <algorithm>
+#include <iostream>
 
 using namespace std;
 namespace fs = filesystem;
@@ -70,21 +71,21 @@ Analyzer::Analyzer(const Translator& translator, fspath basePath)
          << endl;
 }
 
-TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
+TypeUsage Analyzer::analyzeTypeUsage(const YamlMap<>& node, IsTopLevel isTopLevel)
 {
     auto yamlTypeNode = node["type"];
 
-    if (yamlTypeNode && yamlTypeNode.IsSequence())
-        return analyzeMultitype(yamlTypeNode.asSequence());
+    if (yamlTypeNode && yamlTypeNode->IsSequence())
+        return analyzeMultitype(yamlTypeNode->as<YamlSequence<>>());
 
-    auto yamlType = yamlTypeNode.tryAs<string>("object");
+    auto yamlType = yamlTypeNode ? yamlTypeNode->as<string>() : "object"s;
     if (yamlType == "array")
     {
-        if (auto yamlElemType = node["items"].asMap(); !yamlElemType.empty()) {
-            auto&& elemType = analyzeTypeUsage(yamlElemType, TopLevel);
-            const auto& protoType = _translator.mapType(
-                "array", elemType.baseName,
-                camelCase(node["title"].tryAs<string>(elemType.baseName + "[]")));
+        if (auto yamlElemType = node.maybeGet<YamlMap<>>("items"); !yamlElemType.empty()) {
+            auto&& elemType = analyzeTypeUsage(*yamlElemType);
+            const auto& protoType =
+                _translator.mapType("array", elemType.baseName,
+                                    camelCase(node.get<string>("title", elemType.baseName + "[]")));
             return protoType.specialize({std::move(elemType)});
         }
 
@@ -110,7 +111,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap& node, IsTopLevel isTopLevel)
         // Also, a nameless non-empty schema is now treated as a generic
         // mapType("object"). TODO, low priority: ad-hoc typing (via tuples?)
     }
-    if (const auto tu = _translator.mapType(yamlType, node["format"].tryAs<string>());
+    if (const auto tu = _translator.mapType(yamlType, node.get<string>("format", {}));
         !tu.empty())
         return tu;
 
@@ -128,13 +129,12 @@ TypeUsage Analyzer::addSchema(ObjectSchema&& schema)
     return tu;
 }
 
-TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes)
+TypeUsage Analyzer::analyzeMultitype(const YamlSequence<>& yamlTypes)
 {
     vector<TypeUsage> tus;
     for (const auto& yamlType: yamlTypes)
-        tus.emplace_back(yamlType.IsScalar()
-                         ? _translator.mapType(yamlType.as<string>())
-                         : analyzeTypeUsage(yamlType));
+        tus.emplace_back(yamlType.IsScalar() ? _translator.mapType(yamlType.as<string>())
+                                             : analyzeTypeUsage(yamlType.as<YamlMap<>>()));
 
     string baseTypes;
     for (const auto& t: tus)
@@ -150,19 +150,19 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence& yamlTypes)
     return protoType.specialize(std::move(tus));
 }
 
-ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
+ObjectSchema Analyzer::analyzeSchema(const YamlMap<>& yamlSchema,
                                      RefsStrategy refsStrategy)
 {
-    if (const auto yamlRef = yamlSchema["$ref"]) {
+    if (const auto yamlRef = yamlSchema.maybeGet<string>("$ref")) {
         // https://tools.ietf.org/html/draft-pbryan-zyp-json-ref-03#section-3
         if (yamlSchema.size() > 1)
             clog << yamlSchema.location() << ": Warning: "
                     "members next to $ref in the same map will be ignored"
                  << endl;
-        return resolveRef(yamlRef.as<string>(), refsStrategy);
+        return resolveRef(*yamlRef, refsStrategy);
     }
 
-    const auto schema = yamlSchema["type"].tryAs<string>("object") == "object"
+    const auto schema = yamlSchema.get<string>("type", "object"s) == "object"
                             ? analyzeObject(yamlSchema, refsStrategy)
                             : makeEphemeralSchema(analyzeTypeUsage(yamlSchema));
 
@@ -185,10 +185,9 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap& yamlSchema,
     return schema;
 }
 
-ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
-                                     RefsStrategy refsStrategy)
+ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy refsStrategy)
 {
-    ObjectSchema schema{currentRole(), currentCall(), yamlSchema["description"].tryAs<string>()};
+    ObjectSchema schema{currentRole(), currentCall(), yamlSchema.get<string>("description", {})};
 
     // The name is taken from: the schema's "title" property; failing that,
     // the _inline_ schema(s) "title" in allOf (with the last one winning,
@@ -196,16 +195,15 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
     // in oneOf or $ref'ed in allOf).
     string name;
 
-    // To check for substitions, calculate the name without resolving
+    // To check for substitutions, calculate the name without resolving
     // references first, to avoid generating unused schemas.
 
-    auto yamlAllOf = yamlSchema["allOf"].asSequence();
-    if (yamlAllOf)
-        for (const auto& yamlEntry : yamlAllOf) {
-            name = yamlEntry["title"].as<string>(name);
-        }
+    auto yamlAllOf = yamlSchema.maybeGet<YamlSequence<YamlMap<>>>("allOf");
+    for (const auto& yamlEntry : yamlAllOf) {
+        yamlEntry.maybeLoad("title", &name);
+    }
 
-    name = yamlSchema["title"].tryAs<string>(name);
+    yamlSchema.maybeLoad("title", &name);
 
     if (!name.empty()) {
         // Now that we have a good idea of the schema identity we can check if
@@ -214,43 +212,38 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
             return makeEphemeralSchema(std::move(tu));
     }
 
-    if (auto yamlOneOf = yamlSchema["oneOf"].asSequence())
-        schema.parentTypes.emplace_back(analyzeMultitype(yamlOneOf));
+    if (auto yamlOneOf = yamlSchema.maybeGet<YamlSequence<>>("oneOf"))
+        schema.parentTypes.emplace_back(analyzeMultitype(*yamlOneOf));
 
-    if (yamlAllOf)
-        for (const auto& yamlEntry : yamlAllOf) {
-            auto&& innerSchema = analyzeSchema(yamlEntry, refsStrategy);
-            // NB: If the schema is loaded from $ref, it ends up in
-            // innerSchema.parentType; its name won't be in innerSchema.name
-            if (!innerSchema.name.empty())
-                name = innerSchema.name;
-            std::copy(innerSchema.parentTypes.begin(),
-                      innerSchema.parentTypes.end(),
-                      std::back_inserter(schema.parentTypes));
-            if (!innerSchema.description.empty())
-                schema.description = innerSchema.description;
-            for (auto&& f: innerSchema.fields) {
-                // Re-map the identifier name using the current schema as scope
-                // (f has been produced with innerSchema as scope)
-                f.name =
-                    _translator.mapIdentifier(f.baseName, &schema, f.required);
-                if (!f.name.empty())
-                    addVarDecl(schema.fields, std::move(f));
-            }
-
-            if (innerSchema.hasPropertyMap()) {
-                auto&& pm = innerSchema.propertyMap;
-                if (schema.hasPropertyMap() && schema.propertyMap.type != pm.type)
-                    throw YamlException(
-                        yamlEntry, "Conflicting property map types when "
-                                   "merging properties to the main schema");
-
-                pm.name = _translator.mapIdentifier(pm.baseName, &schema,
-                                                    pm.required);
-                if (!pm.name.empty())
-                    schema.propertyMap = std::move(pm);
-            }
+    for (const auto& yamlEntry : yamlAllOf) {
+        auto&& innerSchema = analyzeSchema(yamlEntry, refsStrategy);
+        // NB: If the schema is loaded from $ref, it ends up in
+        // innerSchema.parentType; its name won't be in innerSchema.name
+        if (!innerSchema.name.empty())
+            name = innerSchema.name;
+        std::copy(innerSchema.parentTypes.begin(), innerSchema.parentTypes.end(),
+                  std::back_inserter(schema.parentTypes));
+        if (!innerSchema.description.empty())
+            schema.description = innerSchema.description;
+        for (auto&& f: innerSchema.fields) {
+            // Re-map the identifier name using the current schema as scope
+            // (f has been produced with innerSchema as scope)
+            f.name = _translator.mapIdentifier(f.baseName, &schema, f.required);
+            if (!f.name.empty())
+                addVarDecl(schema.fields, std::move(f));
         }
+
+        if (innerSchema.hasPropertyMap()) {
+            auto&& pm = innerSchema.propertyMap;
+            if (schema.hasPropertyMap() && schema.propertyMap.type != pm.type)
+                throw YamlException(yamlEntry, "Conflicting property map types when "
+                                               "merging properties to the main schema");
+
+            pm.name = _translator.mapIdentifier(pm.baseName, &schema, pm.required);
+            if (!pm.name.empty())
+                schema.propertyMap = std::move(pm);
+        }
+    }
 
     // Last resort: pick the name from the parent (i.e. $ref'ed) schema but only
     // if the current schema is trivial (i.e. has no extra fields on top of
@@ -261,7 +254,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
     if (!name.empty())
         name = _translator.mapIdentifier(name, &currentScope(), false);
 
-    auto properties = yamlSchema["properties"].asMap();
+    auto properties = yamlSchema.maybeGet<YamlMap<YamlMap<>>>("properties");
     auto additionalProperties = yamlSchema["additionalProperties"];
 
     if (properties || additionalProperties
@@ -271,39 +264,34 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
     }
 
     if (properties) {
-        const auto requiredList = yamlSchema["required"].asSequence();
-        for (const auto& property: properties) {
-            auto&& baseName = property.first.as<string>();
-            auto required = any_of(requiredList.begin(), requiredList.end(),
-                                   [&baseName](const YamlNode& n) {
-                                       return baseName == n.as<string>();
-                                   });
-            addVarDecl(schema.fields, analyzeTypeUsage(property.second),
-                       baseName, schema,
-                       property.second["description"].as<string>(""), required,
-                       property.second["default"].as<string>(""));
+        const auto requiredList = yamlSchema.maybeGet<YamlSequence<string>>("required");
+        for (const auto& [baseName, details] : *properties) {
+            const auto required = requiredList ? ranges::contains(*requiredList, baseName) : false;
+            addVarDecl(schema.fields, analyzeTypeUsage(details), baseName, schema,
+                       details.get<string>("description", {}), required,
+                       details.get<string>("default", {}));
         }
     }
     if (additionalProperties) {
         TypeUsage tu;
         string description;
-        switch (additionalProperties.Type()) {
+        switch (additionalProperties->Type()) {
         case YAML::NodeType::Map: {
-            auto elemType = analyzeTypeUsage(additionalProperties.asMap());
+            auto elemType = analyzeTypeUsage(additionalProperties->as<YamlMap<>>());
             const auto& protoType =
                 _translator.mapType("map", elemType.baseName,
                                     "string->" + elemType.baseName);
             tu = protoType.specialize({std::move(elemType)});
-            description = additionalProperties["description"].as<string>("");
+            description = (*additionalProperties)["description"].as<string>("");
             break;
         }
         case YAML::NodeType::Scalar: // Generic map
-            if (additionalProperties.as<bool>())
+            if (additionalProperties->as<bool>())
                 tu = _translator.mapType("map");
             break;
         default:
-            throw YamlException(additionalProperties,
-                "additionalProperties should be either a boolean or a map");
+            throw YamlException(*additionalProperties,
+                                "additionalProperties should be either a boolean or a map");
         }
 
         if (!tu.empty()) {
@@ -318,7 +306,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap& yamlSchema,
     return schema;
 }
 
-Body Analyzer::analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
+Body Analyzer::analyzeBodySchema(const YamlMap<>& yamlSchema, const string& name,
                                  string description, bool required)
 {
     if (currentRole() == InAndOut)
@@ -481,17 +469,18 @@ inline fs::path Analyzer::makeModelKey(const fs::path& sourcePath)
         .lexically_normal();
 }
 
-vector<string> loadContentTypes(const YamlMap& yaml, const char* keyName)
+vector<string> loadContentTypes(const YamlMap<>& yaml, const char* keyName)
 {
-    if (auto yamlTypes = yaml[keyName].asSequence())
-        return asStrings(yamlTypes);
+    if (auto yamlTypes = yaml.maybeGet<YamlSequence<string>>(keyName))
+        return {yamlTypes->begin(), yamlTypes->end()};
     return {};
 }
 
 const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 {
     cout << "Loading from " << filePath << endl;
-    const auto yaml = loadYamlFromFile(_baseDir / filePath, _translator.substitutions());
+    const auto yaml =
+        YamlNode::fromFile(_baseDir / filePath, _translator.substitutions()).as<YamlMap<>>();
     if (_allModels.contains(filePath)) {
         clog << "Warning: the model has been loaded from " << filePath
              << " but will be reloaded again" << endl;
@@ -502,7 +491,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                                  inOut);
 
     // Detect which file we have: API description or data definition
-    const auto paths = yaml["paths"s].asMap();
+    // Using YamlGenericMap so that YamlException could be used on the map key
+    const auto paths = yaml.maybeGet<YamlGenericMap>("paths");
     if (!paths) {
         // XXX: this branch is yet unused; one day it will load event schemas
         fillDataModel(model, yaml, fspath(filePath).filename());
@@ -510,8 +500,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
     }
 
     // The rest is exclusive to API descriptions
-    const auto paths = yaml.get("paths", true).asMap();
-    if (yaml["swagger"].tryAs<string>() != "2.0")
+    if (yaml.get<string>("swagger", {}) != "2.0")
         throw Exception(
                 "This software only supports swagger version 2.0 for now");
 
@@ -520,21 +509,19 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 
     auto defaultConsumed = loadContentTypes(yaml, "consumes");
     auto defaultProduced = loadContentTypes(yaml, "produces");
-    model.hostAddress = yaml["host"].tryAs<string>();
-    model.basePath = yaml["basePath"].tryAs<string>();
+    model.hostAddress = yaml.get<string>("host", {});
+    model.basePath = yaml.get<string>("basePath", {});
 
-    for (const auto& yaml_path: paths)
+    for (const auto& yaml_path: *paths)
         try {
             const Path path { yaml_path.first.as<string>() };
 
-            for (const auto& yaml_call_pair: yaml_path.second.asMap()) {
-                auto verb = yaml_call_pair.first.as<string>();
-                const YamlMap yamlCall { yaml_call_pair.second };
-                auto operationId = yamlCall.get("operationId").as<string>();
+            for (auto [verb, yamlCall] : yaml_path.second.as<YamlMap<YamlMap<>>>()) {
+                auto&& operationId = yamlCall.get<string>("operationId");
 
                 bool needsSecurity = false;
-                if (const auto security = yamlCall["security"].asSequence())
-                    needsSecurity = security[0]["accessToken"].IsDefined();
+                if (const auto security = yamlCall.maybeGet<YamlSequence<>>("security"))
+                    needsSecurity = security->front()["accessToken"].IsDefined();
 
                 cout << logOffset() << yamlCall.location()
                      << ": Found operation " << operationId
@@ -544,13 +531,12 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                                            std::move(operationId),
                                            needsSecurity);
 
-                if (auto&& yamlSummary = yamlCall["summary"])
-                    call.summary = yamlSummary.as<string>();
-                if (auto&& yamlDescription = yamlCall["description"])
-                    call.description = yamlDescription.as<string>();
-                if (YamlMap yamlExternalDocs = yamlCall["externalDocs"])
-                    call.externalDocs = {yamlExternalDocs["description"].tryAs<string>(),
-                                         yamlExternalDocs.get("url").tryAs<string>()};
+                yamlCall.maybeLoad("summary", &call.summary);
+                yamlCall.maybeLoad("description", &call.description);
+                if (auto&& yamlExternalDocs = yamlCall.maybeGet<YamlMap<string>>("externalDocs"))
+                    call.externalDocs = {yamlExternalDocs->get("description", {}),
+                                         yamlExternalDocs->get("url")};
+
                 call.consumedContentTypes =
                         loadContentTypes(yamlCall, "consumes");
                 if (call.consumedContentTypes.empty())
@@ -560,32 +546,27 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 if (call.producedContentTypes.empty())
                     call.producedContentTypes = defaultProduced;
 
-                const auto yamlParams = yamlCall["parameters"].asSequence();
-                for (const YamlMap yamlParam: yamlParams) {
-                    const auto& name = yamlParam.get("name").as<string>();
+                const auto yamlParams = yamlCall.maybeGet<YamlSequence<YamlMap<>>>("parameters");
+                for (const auto& yamlParam: yamlParams) {
+                    const auto& name = yamlParam.get<string>("name");
 
                     ContextOverlay _inContext(*this, {name, OnlyIn, &call});
 
-                    auto&& in = yamlParam.get("in").as<string>();
-                    auto required = yamlParam["required"].tryAs<bool>();
+                    auto&& in = yamlParam.get<string>("in");
+                    auto required = yamlParam.get<bool>("required", false);
                     if (!required && in == "path") {
-                        cout << logOffset() << yamlParam.location()
-                        	 << ": warning: '" << name
+                        cout << logOffset() << yamlParam.location() << ": warning: '" << name
                              << "' is in path but has no 'required' attribute"
-                             << " - treating as required anyway" << endl;
+                             << " - treating as required anyway\n";
                         required = true;
                     }
-//                    cout << "Parameter: " << name << endl;
-//                    for (const YamlNodePair p: yamlParam)
-//                        cout << "  At " << p.first.location() << ": "
-//                                        << p.first.as<string>() << endl;
 
-                    auto&& description = yamlParam["description"].tryAs<string>();
+                    auto&& description = yamlParam.get<string>("description", {});
                     if (in != "body") {
                         addVarDecl(call.getParamsBlock(in),
                                    analyzeTypeUsage(yamlParam, TopLevel),
                                    name, call, std::move(description), required,
-                                   yamlParam["default"].tryAs<string>());
+                                   yamlParam.get<string>("default", {}));
                         continue;
                     }
 
@@ -593,26 +574,34 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                                                   std::move(description),
                                                   required);
                 }
-                const auto yamlResponses = yamlCall.get("responses").asMap();
-                if (const auto yamlResponse = yamlResponses["200"].asMap()) {
-                    Response response{
-                        "200", yamlResponse.get("description").as<string>()};
-                    ContextOverlay _outContext(*this,
-                                               {response.code, OnlyOut, &call});
-                    if (auto yamlHeaders = yamlResponse["headers"])
-                        for (const auto& yamlHeader: yamlHeaders.asMap())
+                const auto& yamlResponses = yamlCall.get<YamlMap<YamlMap<>>>("responses");
+                for (const auto& [responseCode, responseData] : yamlResponses)
+                    if (responseCode.starts_with('2')) {
+                        // Only handling the first 2xx response for now
+                        Response response{responseCode, responseData.get<string>("description")};
+                        ContextOverlay _outContext(*this, {responseCode, OnlyOut, &call});
+                        for (const auto& [headerName, headerYaml] :
+                             responseData.maybeGet<YamlMap<YamlMap<>>>("headers"))
                             addVarDecl(response.headers,
-                                analyzeTypeUsage(yamlHeader.second, TopLevel),
-                                yamlHeader.first.as<string>(), call,
-                                yamlHeader.second["description"].as<string>(""));
+                                       analyzeTypeUsage(headerYaml, TopLevel),
+                                       headerName, call, headerYaml.get<string>("description", {}));
 
-                    if (const auto& yamlBody = yamlResponse["schema"])
-                        response.body = analyzeBodySchema(yamlBody, "data"s,
-                                                          response.description,
-                                                          false);
+                        if (const auto& yamlBody = responseData.maybeGet<YamlMap<>>("schema"))
+                            response.body = analyzeBodySchema(*yamlBody, "data"s,
+                                                              response.description, false);
 
-                    call.responses.emplace_back(std::move(response));
-                }
+                        call.responses.emplace_back(std::move(response));
+                        break;
+                    }
+
+                if (call.responses.empty()
+                    || std::none_of(call.responses.cbegin(), call.responses.cend(),
+                                    [](const Response& r) {
+                                        return r.code.starts_with('2') || r.code.starts_with('3');
+                                    }))
+                    clog << logOffset() << yamlResponses.location()
+                         << ": warning: all responses seem to describe errors - possibly "
+                            "incomplete API description\n";
             }
         } catch (ModelException& me) {
             throw YamlException(yaml_path.first, me.message);
@@ -663,7 +652,8 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
 
     cout << logOffset() << "Loading data schema from " << relPath
          << " with role " << modelRole << endl;
-    const auto yaml = loadYamlFromFile(_baseDir / fullPath, _translator.substitutions());
+    const auto yaml =
+        YamlNode::fromFile(_baseDir / fullPath, _translator.substitutions()).as<YamlMap<>>();
     ContextOverlay _modelContext(*this, fullPath.parent_path(), &model,
                                  modelRole);
     fillDataModel(model, yaml, stem.filename());
@@ -679,8 +669,7 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
     return result;
 }
 
-void Analyzer::fillDataModel(Model& m, const YamlNode& yaml,
-                             const fs::path& filename)
+void Analyzer::fillDataModel(Model& m, const YamlMap<>& yaml, const fs::path& filename)
 {
     m.apiSpec = ApiSpec::JSONSchema;
     m.apiSpecVersion = 201909; // Only JSON Schema 2019-09 is targeted for now

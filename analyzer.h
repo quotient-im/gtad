@@ -79,18 +79,18 @@ private:
     [[nodiscard]] std::pair<const Model&, fspath> loadDependency(
         const string& relPath, const string& overrideTitle,
         bool inlined = false);
-    void fillDataModel(Model& m, const YamlNode& yaml, const fspath& filename);
+    void fillDataModel(Model& m, const YamlMap<>& yaml, const fspath& filename);
 
-    [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap& node,
+    [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap<>& node,
                                              IsTopLevel isTopLevel = Inner);
     TypeUsage addSchema(ObjectSchema&& schema);
-    [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence& yamlTypes);
-    [[nodiscard]] ObjectSchema analyzeSchema(
-        const YamlMap& yamlSchema, RefsStrategy refsStrategy = ImportRefs);
-    [[nodiscard]] ObjectSchema analyzeObject(const YamlMap& yamlSchema,
+    [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence<>& yamlTypes);
+    [[nodiscard]] ObjectSchema analyzeSchema(const YamlMap<>& yamlSchema,
+                                             RefsStrategy refsStrategy = ImportRefs);
+    [[nodiscard]] ObjectSchema analyzeObject(const YamlMap<>& yamlSchema,
                                              RefsStrategy refsStrategy);
 
-    Body analyzeBodySchema(const YamlMap& yamlSchema, const string& name,
+    Body analyzeBodySchema(const YamlMap<>& yamlSchema, const string& name,
                            string description, bool required = true);
 
     ObjectSchema resolveRef(const string& refPath, RefsStrategy refsStrategy);

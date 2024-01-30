@@ -20,9 +20,11 @@
 
 #include <vector>
 #include <string>
+#include <optional>
 
 template <typename T>
 using pair_vector_t = std::vector<std::pair<std::string, T>>;
+using subst_list_t = pair_vector_t<std::string>;
 
 std::string readFile(const std::string& fileName);
 

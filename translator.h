@@ -31,6 +31,7 @@ class Translator
 {
 public:
     using string = std::string;
+    using string_view = std::string_view;
     using path = std::filesystem::path;
     using output_config_t = std::vector<std::pair<path, string>>;
 
@@ -38,26 +39,21 @@ public:
                Verbosity verbosity);
     ~Translator();
 
-    [[nodiscard]] const pair_vector_t<string>& substitutions() const
-    {
-        return _substitutions;
-    }
+    [[nodiscard]] const subst_list_t& substitutions() const { return _substitutions; }
     [[nodiscard]] const path& outputBaseDir() const { return _outputDirPath; }
     [[nodiscard]] Printer& printer() const { return *_printer; }
 
     [[nodiscard]] output_config_t outputConfig(const path& fileStem,
                                                const Model& model) const;
-    [[nodiscard]] TypeUsage mapType(const string& swaggerType,
-                                    const string& swaggerFormat = {},
-                                    const string& baseName = {}) const;
-    [[nodiscard]] string mapIdentifier(const string& baseName,
-                                       const Identifier* scope,
+    [[nodiscard]] TypeUsage mapType(string_view swaggerType, string_view swaggerFormat = {},
+                                    string_view baseName = {}) const;
+    [[nodiscard]] string mapIdentifier(string_view baseName, const Identifier* scope,
                                        bool required) const;
 
 private:
     Verbosity _verbosity;
-    pair_vector_t<string> _substitutions;
-    pair_vector_t<string> _identifiers;
+    subst_list_t _substitutions;
+    subst_list_t _identifiers;
     /// In JSON/YAML, the below looks like:
     /// <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
     pair_vector_t<pair_vector_t<TypeUsage>> _typesMap;
