@@ -202,10 +202,7 @@ inline object wrap(const filesystem::path& p)
 
 void setList(auto& target, const string& name, const auto& source, auto convert)
 {
-    if (source.empty())
-        return; // Don't even bother to add the empty list
-
-    target[name + '?'] = true;
+    target[name + '?'] = !source.empty();
     km::list mList;
     auto it = source.begin();
     for (bool hasMore = it != source.end(); hasMore;) {
