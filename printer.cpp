@@ -324,32 +324,31 @@ auto copyPartitionedByRequired(std::vector<VarDecl> vars)
 object Printer::dumpAllTypes(const Model::schemas_type& types) const
 {
     object mModels;
-    setList(mModels, "model", types,
-        [this](const ObjectSchema& type)
-        {
-            auto mType = renderType(TypeUsage(type));
-            mType["classname"] = type.name; // Swagger compat
-            dumpDescription(mType, type);
-            mType["in?"] = type.role != OnlyOut;
-            mType["out?"] = type.role != OnlyIn;
-            if (type.trivial())
-            {
-                mType["trivial?"] = true;
-                mType["parent"] = renderType(type.parentTypes.back());
-            }
-            setList(mType, "parents", type.parentTypes,
-                    bind(&Printer::renderType, this, _1));
-            setList(mType, "vars", copyPartitionedByRequired(type.fields),
-                [this](const VarDecl& f) {
-                    object fieldDef = dumpField(f);
-                    fieldDef["name"] = f.name;
-                    fieldDef["datatype"] = f.type.name; // Swagger compat
-                    return fieldDef;
-                });
-            if (type.hasPropertyMap())
-                mType["propertyMap"] = dumpField(type.propertyMap);
-            return mType;
-        });
+    if (!types.empty())
+        setList(
+            mModels, "model", types, [this](const ObjectSchema& type) {
+                auto mType = renderType(TypeUsage(type));
+                mType["classname"] = type.name; // Swagger compat
+                dumpDescription(mType, type);
+                mType["in?"] = type.role != OnlyOut;
+                mType["out?"] = type.role != OnlyIn;
+                if (type.trivial())
+                {
+                    mType["trivial?"] = true;
+                    mType["parent"] = renderType(type.parentTypes.back());
+                }
+                setList(mType, "parents", type.parentTypes, bind_front(&Printer::renderType, this));
+                setList(mType, "vars", copyPartitionedByRequired(type.fields),
+                    [this](const VarDecl& f) {
+                        object fieldDef = dumpField(f);
+                        fieldDef["name"] = f.name;
+                        fieldDef["datatype"] = f.type.name; // Swagger compat
+                        return fieldDef;
+                    });
+                if (type.hasPropertyMap())
+                    mType["propertyMap"] = dumpField(type.propertyMap);
+                return mType;
+            });
     return mModels;
 }
 
