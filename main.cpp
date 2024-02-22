@@ -144,11 +144,11 @@ int main(int argc, char* argv[])
     }
     catch (Exception& e)
     {
-        std::cerr << e.message << std::endl;
+        std::cerr << e.message << "\n";
         return 3;
     }
     catch (std::exception& e) {
-        std::cerr << e.what() << std::endl;
+        std::cerr << e.what() << "\n";
         return 3;
     }
 

@@ -134,7 +134,7 @@ inline auto renderWithOverlay(const km::basic_mustache<StringT>& tmpl,
                               km::context<StringT>& ctx,
                               const km::basic_object<StringT>& overlay)
 {
-    ContextOverlay ctxOverlay(ctx, overlay);
+    const ContextOverlay ctxOverlay(ctx, overlay);
     return tmpl.render(ctx);
 }
 
@@ -169,12 +169,9 @@ Printer::Printer(context_type&& contextObj, fspath inputBasePath,
     : _translator(translator)
     , _contextData(addLibrary(contextObj))
     , _delimiter(std::move(delimiter))
-    , _typeRenderer(
-          makeMustache(safeString(contextObj, "_typeRenderer", "{{>name}}")))
-    , _leftQuote(safeString(contextObj, "_leftQuote",
-                            safeString(contextObj, "_quote", "\"")))
-    , _rightQuote(safeString(contextObj, "_rightQuote",
-                             safeString(contextObj, "_quote", "\"")))
+    , _typeRenderer(makeMustache(safeString(contextObj, "_typeRenderer", "{{>name}}")))
+    , _leftQuote(safeString(contextObj, "_leftQuote", safeString(contextObj, "_quote", "\"")))
+    , _rightQuote(safeString(contextObj, "_rightQuote", safeString(contextObj, "_quote", "\"")))
     , _inputBasePath(std::move(inputBasePath))
 {
     if (!outFilesListPath.empty())
@@ -224,10 +221,11 @@ void dumpDescription(object& target, const auto& model)
 {
     vector<string> lines{};
     if (!model.description.empty()) {
-        regex re{"\\n"};
-        lines = {sregex_token_iterator{model.description.cbegin(),
-                                       model.description.cend(), re, -1},
-                 sregex_token_iterator{}};
+        static const regex re{"\\n"};
+        lines = {
+            sregex_token_iterator{model.description.cbegin(), model.description.cend(), re, -1},
+            sregex_token_iterator{}
+        };
     }
     setList(target, "description", lines);
 }
@@ -256,10 +254,8 @@ object Printer::renderType(const TypeUsage& tu) const
     }
 
     // Fill parameters for parameterized types
-    setList(values, "types", tu.paramTypes,
-            bind(&Printer::renderType, this, _1));
-    setList(qualifiedValues, "types", tu.paramTypes,
-            bind(&Printer::renderType, this, _1));
+    setList(values, "types", tu.paramTypes, bind_front(&Printer::renderType, this));
+    setList(qualifiedValues, "types", tu.paramTypes, bind_front(&Printer::renderType, this));
     int i = 0;
     for (const auto& t: tu.paramTypes)
     {
@@ -311,7 +307,7 @@ object Printer::dumpField(const VarDecl& field) const
 void Printer::addList(object& target, const string& name,
                       const VarDecls& properties) const
 {
-    setList(target, name, properties, bind(&Printer::dumpField, this, _1));
+    setList(target, name, properties, bind_front(&Printer::dumpField, this));
 }
 
 auto copyPartitionedByRequired(std::vector<VarDecl> vars)
@@ -437,14 +433,14 @@ vector<string> Printer::print(const fspath& filePathBase,
         bool globalConsumesNonJson = false, globalProducesNonJson = false;
         // Any attributes should be added after setList
         setList(mOperations, "operation", callClass.calls, [&](const Call& call) {
-            // clang-format off
-            object mCall { { "operationId", call.name }
-                         , { "camelCaseOperationId", camelCase(call.name) }
-                         , { "httpMethod", call.verb }
-                         , { "path", call.path }
-                         , { "summary", call.summary }
-                         , { "skipAuth", !call.needsSecurity } };
-            // clang-format on
+            object mCall{
+                {"operationId",          call.name           },
+                {"camelCaseOperationId", camelCase(call.name)},
+                {"httpMethod",           call.verb           },
+                {"path",                 call.path           },
+                {"summary",              call.summary        },
+                {"skipAuth",             !call.needsSecurity }
+            };
             dumpDescription(mCall, call);
 
             globalConsumesNonJson |=
