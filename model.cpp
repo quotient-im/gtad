@@ -185,7 +185,7 @@ void Model::addImportsFrom(const TypeUsage& type)
 
 void Model::clear()
 {
-    apiSpec.clear();
+    apiSpec = ApiSpec::Undefined;
     imports.clear();
     types.clear();
     defaultServers.clear();

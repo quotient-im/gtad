@@ -294,13 +294,7 @@ struct CallClass
     std::list<Call> calls;
 };
 
-namespace ApiSpec {
-using namespace std::string_literals;
-static inline constexpr auto Swagger = "swagger"s;
-static inline constexpr auto JSONSchema = "json-schema"s;
-static inline constexpr auto OpenAPI3 = "openapi3"s;
-// static inline const auto RAML = "raml"s;
-}
+enum class ApiSpec { Undefined = 0, Swagger = 20, OpenAPI3 = 31, JSONSchema = 201909 };
 
 struct Model {
     using string = std::string;
@@ -308,10 +302,8 @@ struct Model {
     using imports_type = std::unordered_map<string, string>;
     using schemas_type = std::vector<ObjectSchema>;
 
-    string apiSpec;
-    /// Spec version liberally encoded in an int, e.g. 20 for Swagger 2.0
-    /// or 201909 for JSON Schema 2019-09
-    int apiSpecVersion = 0;
+    ApiSpec apiSpec;
+
     bool inlineMainSchema = false;
 
     imports_type imports;

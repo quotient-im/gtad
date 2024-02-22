@@ -319,14 +319,14 @@ Body Analyzer::analyzeBody(const YamlMap<>& contentYaml, string description,
 {
     if (currentRole() == InAndOut)
         throw YamlException(contentYaml, "Internal error, role must be either OnlyIn or OnlyOut");
-    if (currentModel().apiSpecVersion < 20 || currentModel().apiSpecVersion >= 40)
+    if (currentModel().apiSpec != ApiSpec::Swagger && currentModel().apiSpec != ApiSpec::OpenAPI3)
         throw YamlException(
             contentYaml, "Internal error, trying to call analyzeBody on non-OpenAPI description");
 
     const Identifier location{{}, currentRole(), currentCall()};
     auto packedType = _translator.mapType("schema", location.qualifiedName());
     if (packedType.empty()) {
-        const auto isOldSwagger = context().model->apiSpecVersion < 30;
+        const auto isOldSwagger = context().model->apiSpec == ApiSpec::Swagger;
         auto&& bodySchema =
             isOldSwagger ? analyzeSchema(contentYaml) : [this, &contentYaml, &contentType] {
                 // TODO: the below sort of hardwires having `schema` to application/json content
@@ -535,12 +535,10 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
     const auto isOpenApi3 = yaml.get<string_view>("openapi", {}).starts_with("3.1");
     if (isOpenApi3) {
         model.apiSpec = ApiSpec::OpenAPI3;
-        model.apiSpecVersion = 31;
         for (const auto serverSpec : yaml.maybeGet<YamlSequence<YamlMap<>>>("servers"))
             model.defaultServers.emplace_back(resolveOas3Server(serverSpec));
     } else if (yaml.get<string_view>("swagger", {}).starts_with("2.0")) {
         model.apiSpec = ApiSpec::Swagger;
-        model.apiSpecVersion = 20; // Swagger/OpenAPI 2.0
         auto schemesYaml = yaml.maybeGet<YamlSequence<string>>("schemes");
         model.defaultServers.emplace_back(schemesYaml.empty() ? string{} : schemesYaml->front(),
                                           yaml.get<string>("host", {}),
@@ -698,9 +696,7 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
     if (!unseen) {
         if (model.apiSpec != ApiSpec::JSONSchema)
             throw Exception("Dependency model for " + relPath
-                            + " is found in the cache but doesn't seem to be"
-                              " for a data schema (format " + model.apiSpec
-                            + ")");
+                            + " is found in the cache but doesn't seem to be for a data structure");
         if (!model.callClasses.empty())
             throw Exception(
                 "Internal error: a JSON Schema model has API definitions");
@@ -745,7 +741,6 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
 void Analyzer::fillDataModel(Model& m, const YamlMap<>& yaml, const fs::path& filename)
 {
     m.apiSpec = ApiSpec::JSONSchema;
-    m.apiSpecVersion = 201909; // Only JSON Schema 2019-09 is targeted for now
     auto&& s = analyzeSchema(yaml);
     if (s.name.empty())
         s.name = camelCase(filename.string());
