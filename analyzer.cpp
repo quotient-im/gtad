@@ -273,7 +273,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
     if (properties) {
         const auto requiredList = yamlSchema.maybeGet<YamlSequence<string>>("required");
         for (const auto& [baseName, details] : *properties) {
-            const auto required = ranges::contains(*requiredList, baseName);
+            const auto required = ranges::contains(requiredList, baseName);
             addVarDecl(schema.fields, analyzeTypeUsage(details), baseName, schema,
                        details.get<string>("description", {}), required,
                        details.get<string>("default", {}));
