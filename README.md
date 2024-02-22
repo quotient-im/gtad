@@ -38,9 +38,9 @@ in the future).
 - Qt 6 (either Open Source or Commercial)
 - CMake 3.20 or newer (from your package management system or
   [the official website](https://cmake.org/download/))
-- a C++ toolchain with solid C++20 support (concepts and `std::source_location`,
-  in particular), that is: GCC 12 (Windows, Linux, OSX), Clang 14 (Linux),
-  Xcode 15 (macOS 13), Visual C++ 19.30 (aka VS 2022 17.0), or newer
+- a C++ toolchain with solid C++20 and at least some C++23 support (ranges, in particular), that is:
+  GCC 12 (Windows, Linux, OSX), Clang 14 (Linux), Xcode 15 (macOS 13),
+  Visual C++ 19.30 (aka VS 2022 17.0), or newer
 - any build system that works with CMake and/or qmake should be fine:
   GNU Make, ninja (any platform), NMake, jom (Windows) are known to work.
 - for the actual invocation - clang-format in your PATH or CLANG_FORMAT variable
