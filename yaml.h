@@ -35,15 +35,23 @@ struct YamlException : Exception {
 
 class YamlNode : public YAML::Node {
 public:
-    YamlNode(const YAML::Node& n = {}, std::shared_ptr<std::string> fileName = {})
-        : YamlNode(n, fileName ? fileName : std::make_shared<std::string>(), {})
+    struct Context {
+        std::string fileName;
+        YAML::Node rootNode;
+    };
+    // This constructor is templated to prevent accidental construction from YamlNode and descendants
+    template <class NodeT = YAML::Node>
+        requires std::is_same_v<std::decay_t<NodeT>, YAML::Node>
+    YamlNode(const NodeT& n = {}, std::shared_ptr<Context> context = {})
+        : YamlNode(n, context ? context : std::make_shared<Context>(), {})
     {
         Mark(); // Throw YAML::InvalidNode if n is invalid
     }
-    static YamlNode fromFile(std::string fileName, const subst_list_t& replacePairs = {});
+    static YamlNode fromFile(const std::string& fileName, const subst_list_t& replacePairs = {});
 
-    std::string fileName() const { return *_fileName; }
-    std::string location() const noexcept
+    const std::string& fileName() const { return _context->fileName; }
+    YamlNode root() const { return {_context->rootNode, _context, AllowUndefined{}}; }
+    std::string location() const
     {
         return fileName() + ':' + std::to_string(Mark().line + 1);
     }
@@ -85,23 +93,23 @@ public:
 protected:
     struct AllowUndefined {};
 
-    YamlNode(const Node& rhs, std::shared_ptr<std::string> fileName, AllowUndefined)
-        : Node(rhs), _fileName(std::move(fileName))
+    YamlNode(const Node& rhs, std::shared_ptr<Context> context, AllowUndefined)
+        : Node(rhs), _context(std::move(context))
     {}
 
     YamlNode(const YamlNode& rhs, AllowUndefined)
-        : Node(static_cast<const Node&>(rhs)), _fileName(rhs._fileName)
+        : Node(static_cast<const Node&>(rhs)), _context(rhs._context)
     {}
 
     template <typename T>
-    static T as(const Node& rhs, std::shared_ptr<std::string> fileName)
+    static T as(const Node& rhs, std::shared_ptr<Context> context)
     {
-        return YamlNode(rhs, fileName, AllowUndefined{}).template as<T>();
+        return YamlNode(rhs, context, AllowUndefined{}).template as<T>();
     }
 
     void checkType(YAML::NodeType::value checkedType) const;
 
-    std::shared_ptr<std::string> _fileName;
+    std::shared_ptr<Context> _context;
 
     template <class ContainerT>
     friend class iterator_base;
@@ -117,8 +125,8 @@ public:
 template <std::derived_from<YamlNode> NodeT>
 class Optional<NodeT> : private NodeT {
 public:
-    Optional(const YAML::Node& rhs, std::shared_ptr<std::string> fileName)
-        : NodeT(rhs, std::move(fileName), YamlNode::AllowUndefined{})
+    Optional(const YAML::Node& rhs, std::shared_ptr<YamlNode::Context> context)
+        : NodeT(rhs, std::move(context), YamlNode::AllowUndefined{})
     {}
 
     using YamlNode::fileName, YamlNode::location, YamlNode::empty;
@@ -164,8 +172,8 @@ private:
     using iter_impl_t = YAML::detail::iterator_base<apply_const_t<YAML::detail::iterator_value>>;
     friend ContainerT;
 
-    iterator_base(iter_impl_t iter, std::shared_ptr<std::string> fileName)
-        : _impl(std::move(iter)), _fileName(std::move(fileName))
+    iterator_base(iter_impl_t iter, std::shared_ptr<YamlNode::Context> context)
+        : _impl(std::move(iter)), _context(std::move(context))
     {}
 
     struct ArrowProxy {
@@ -179,7 +187,7 @@ public:
     operator iterator_base<const ContainerT>() const
         requires(!std::is_const_v<ContainerT>)
     {
-        return {_impl, _fileName};
+        return {_impl, _context};
     }
 
     this_type& operator++()
@@ -187,24 +195,24 @@ public:
         ++_impl;
         return *this;
     }
-    this_type operator++(int) { return {_impl++, _fileName}; }
+    this_type operator++(int) { return {_impl++, _context}; }
 
     auto operator==(const auto& rhs) const
-        -> bool // If the body is ill-formed, the function won't be generated
+        -> bool // Don't emit the function if rhs has a wrong type (=the body is ill-formed)
     {
         return _impl == rhs._impl
-               && ((_fileName && rhs._fileName && *_fileName == *rhs._fileName)
-                   || (!_fileName && !rhs._fileName));
+               && ((_context && rhs._context && _context->fileName == rhs._context->fileName)
+                   || (!_context && !rhs._context));
     }
 
     value_type operator*() const
     {
         if constexpr (ContainerT::nodeType == YAML::NodeType::Sequence)
-            return YamlNode::as<value_type>(*_impl, _fileName);
+            return YamlNode::as<value_type>(*_impl, _context);
         else
             return std::pair{
-                YamlNode::as<typename value_type::first_type>(_impl->first, _fileName),
-                YamlNode::as<typename value_type::second_type>(_impl->second, _fileName)};
+                YamlNode::as<typename value_type::first_type>(_impl->first, _context),
+                YamlNode::as<typename value_type::second_type>(_impl->second, _context)};
     }
 
     // NB: Don't try to store the returned result, or you will end up with a dangling proxy
@@ -212,7 +220,7 @@ public:
 
 private:
     iter_impl_t _impl;
-    std::shared_ptr<std::string> _fileName;
+    std::shared_ptr<YamlNode::Context> _context;
 };
 
 template <YAML::NodeType::value NodeTypeV, typename KeyT, typename ItemT>
@@ -233,8 +241,8 @@ public:
     using YamlNode::YamlNode;
     explicit YamlContainer(const YamlNode& yn) : YamlNode(yn) { checkType(nodeType); }
 
-    const_iterator begin() const { return const_iterator(Node::begin(), this->_fileName); }
-    const_iterator end() const { return const_iterator(Node::end(), this->_fileName); }
+    const_iterator begin() const { return const_iterator(Node::begin(), this->_context); }
+    const_iterator end() const { return const_iterator(Node::end(), this->_context); }
 
     //! \brief Access an element in the container (requires existence)
     //!
@@ -246,7 +254,7 @@ public:
     {
         const auto& subnode = Node::operator[](key);
         if (subnode.IsDefined())
-            return YamlNode::as<AsT>(subnode, _fileName);
+            return YamlNode::as<AsT>(subnode, _context);
         throw YamlException(*this,
                             (std::stringstream() << "subnode " << key << " is undefined").view());
     }
@@ -262,7 +270,7 @@ public:
     AsT get(key_view_type key, DT&& defaultValue) const
     {
         if (const auto& subnode = Node::operator[](key); subnode.IsDefined())
-            return YamlNode::as<AsT>(subnode, _fileName);
+            return YamlNode::as<AsT>(subnode, _context);
         return std::forward<DT>(defaultValue);
     }
 
@@ -271,9 +279,9 @@ public:
     {
         const auto& subnode = Node::operator[](key);
         if constexpr (std::derived_from<AsT, YamlNode>)
-            return Optional<AsT>(subnode, _fileName);
+            return Optional<AsT>(subnode, _context);
         else if (subnode.IsDefined())
-            return Optional<AsT>(YamlNode::as<AsT>(subnode, _fileName));
+            return Optional<AsT>(YamlNode::as<AsT>(subnode, _context));
         else
             return std::nullopt;
     }
@@ -305,9 +313,8 @@ public:
     }
 
 protected:
-    explicit YamlContainer(const YAML::Node& n, std::shared_ptr<std::string> fileName,
-                           AllowUndefined)
-        : YamlNode(n, fileName, AllowUndefined{})
+    explicit YamlContainer(const YAML::Node& n, std::shared_ptr<Context> context, AllowUndefined)
+        : YamlNode(n, context, AllowUndefined{})
     {
         if (IsDefined())
             checkType(nodeType);
