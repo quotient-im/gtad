@@ -26,12 +26,23 @@
 #include <yaml-cpp/node/node.h>
 
 #include <utility>
+#include <ranges>
 
 class YamlNode;
 
 struct YamlException : Exception {
     explicit YamlException(const YamlNode& node, std::string_view msg) noexcept;
 };
+
+template <YAML::NodeType::value NodeTypeV, typename KeyT, typename ItemT>
+class YamlContainer;
+
+template <typename ItemT = YamlNode>
+using YamlMap = YamlContainer<YAML::NodeType::Map, std::string, ItemT>;
+using YamlGenericMap = YamlContainer<YAML::NodeType::Map, YamlNode, YamlNode>;
+
+template <typename ItemT = YamlNode>
+using YamlSequence = YamlContainer<YAML::NodeType::Sequence, size_t, ItemT>;
 
 class YamlNode : public YAML::Node {
 public:
@@ -85,6 +96,26 @@ public:
         }
     }
 
+    //! \brief Resolve a Reference Object to the referred-to YAML value
+    //!
+    //! If the current node is a Reference Object (i.e. it has a key named `$ref`) this call
+    //! attempts to resolve it to an entity referred to by the value under `$ref`. If the original
+    //! Reference Object defines `summary` and/or `description` and the resolved object is a map,
+    //! the values under these keys are applied to the resolved object. Finally, the resulting YAML
+    //! node is converted to \p TargetT before returning.
+    //! If the current node is not a map or has no `$ref` key, the function returns a shallow copy
+    //! of that very node.
+    //! \note Only local (within the same file) references are supported for now; a YamlException
+    //!       will be thrown on non-local ones (i.e. that don't start with `#`).
+    //! \note If the resolved entity is not a map, trying to apply `summary`/`description` to it
+    //!       will trigger YamlException
+    //! \sa https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#reference-object
+    template <class TargetT = YamlMap<>>
+    TargetT resolveRef() const
+    {
+        return doResolveRef().as<TargetT>();
+    }
+
     void begin() const = delete;
     void begin() = delete;
     void end() const = delete;
@@ -108,6 +139,7 @@ protected:
     }
 
     void checkType(YAML::NodeType::value checkedType) const;
+    YamlNode doResolveRef() const;
 
     std::shared_ptr<Context> _context;
 
@@ -321,9 +353,15 @@ protected:
     }
 };
 
-template <typename ItemT = YamlNode>
-using YamlMap = YamlContainer<YAML::NodeType::Map, std::string, ItemT>;
-using YamlGenericMap = YamlContainer<YAML::NodeType::Map, YamlNode, YamlNode>;
-
-template <typename ItemT = YamlNode>
-using YamlSequence = YamlContainer<YAML::NodeType::Sequence, size_t, ItemT>;
+//! \brief A range adaptor applying YamlContainer::resolveRef() to each value of the passed range
+//!
+//! This adaptor works with any range (not just YamlContainer) of YamlNodes, some of which may be
+//! Reference Objects. It also works on YamlMaps of maybe-Reference Objects, copying keys as they
+//! are and resolving references in values where applicable.
+template <class TargetT = YamlMap<>>
+constexpr inline auto resolveRefs = std::views::transform([](const auto& v) {
+    if constexpr (requires { v.second; })
+        return std::pair{v.first, v.second.template resolveRef<TargetT>()};
+    else
+        return v.template resolveRef<TargetT>();
+});

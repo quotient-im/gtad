@@ -573,21 +573,22 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                     call.externalDocs = {yamlExternalDocs->get("description", {}),
                                          yamlExternalDocs->get("url")};
                 if (isOpenApi3) {
-                    if (auto&& yamlBody = yamlCall.maybeGet<YamlMap<>>("requestBody")) {
+                    if (auto&& unresolvedYamlBody = yamlCall.maybeGet<YamlMap<>>("requestBody")) {
                         const ContextOverlay _inContext(*this, {"(requestBody)", OnlyIn, &call});
 
                         if (call.verb == "get" || call.verb == "head" || call.verb == "delete")
-                            clog << logOffset() << yamlBody.location()
+                            clog << logOffset() << unresolvedYamlBody.location()
                                  << ": warning: RFC7231 does not allow requestBody in '"
                                  << call.verb << "' operations\n";
 
+                        const auto& yamlBody = unresolvedYamlBody->resolveRef();
                         // Only one content type in requestBody is supported
                         const auto& [contentType, contentData] =
-                            yamlBody->get<YamlMap<YamlMap<>>>("content").front();
+                            yamlBody.get<YamlMap<YamlMap<>>>("content").front();
                         call.consumedContentTypes.emplace_back(contentType);
                         call.body =
-                            analyzeBody(contentData, yamlBody->get<string>("description", {}),
-                                        contentType, yamlBody->get<bool>("required", false));
+                            analyzeBody(contentData, yamlBody.get<string>("description", {}),
+                                        contentType, yamlBody.get<bool>("required", false));
                     }
                 } else {
                     call.consumedContentTypes = loadSwaggerContentTypes(yamlCall, "consumes");
@@ -596,7 +597,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 }
 
                 const auto yamlParams = yamlCall.maybeGet<YamlSequence<YamlMap<>>>("parameters");
-                for (const auto& yamlParam: yamlParams) {
+                for (const auto& yamlParam : yamlParams | resolveRefs<>) {
                     const auto& name = yamlParam.get<string>("name");
 
                     const ContextOverlay _inContext(*this, {name, OnlyIn, &call});
@@ -626,7 +627,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                     }
                 }
                 const auto& yamlResponses = yamlCall.get<YamlMap<YamlMap<>>>("responses");
-                for (const auto& [responseCode, responseData] : yamlResponses)
+                for (const auto& [responseCode, responseData] : yamlResponses | resolveRefs<>)
                     if (responseCode.starts_with('2')) {
                         // Only handling the first 2xx response for now
                         Response response{responseCode, responseData.get<string>("description")};
