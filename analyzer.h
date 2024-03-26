@@ -83,7 +83,7 @@ private:
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap<>& node);
     TypeUsage addSchema(ObjectSchema&& schema);
     [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence<>& yamlTypes);
-    [[nodiscard]] ObjectSchema analyzeSchema(const YamlMap<>& yamlSchema,
+    [[nodiscard]] ObjectSchema analyzeSchema(const YamlMap<>& schemaYaml,
                                              RefsStrategy refsStrategy = ImportRefs);
     [[nodiscard]] ObjectSchema analyzeObject(const YamlMap<>& yamlSchema,
                                              RefsStrategy refsStrategy);
@@ -92,7 +92,7 @@ private:
                      const string& contentType = {}, bool required = false,
                      std::string_view name = "data");
 
-    ObjectSchema resolveRef(const string& refPath, RefsStrategy refsStrategy);
+    ObjectSchema loadSchemaFromRef(const YamlMap<>& refObjectYaml, RefsStrategy refsStrategy);
 
     [[nodiscard]] ObjectSchema makeTrivialSchema(TypeUsage&& tu) const;
     [[nodiscard]] std::optional<VarDecl> makeVarDecl(TypeUsage type, std::string_view baseName,

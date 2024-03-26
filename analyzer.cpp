@@ -152,24 +152,24 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence<>& yamlTypes)
     return protoType.specialize(std::move(tus));
 }
 
-ObjectSchema Analyzer::analyzeSchema(const YamlMap<>& yamlSchema,
-                                     RefsStrategy refsStrategy)
+ObjectSchema Analyzer::analyzeSchema(const YamlMap<>& schemaYaml, RefsStrategy refsStrategy)
 {
-    if (const auto yamlRef = yamlSchema.maybeGet<string>("$ref")) {
-        // https://tools.ietf.org/html/draft-pbryan-zyp-json-ref-03#section-3
-        if (yamlSchema.size() > 1)
-            clog << yamlSchema.location() << ": Warning: "
-                    "members next to $ref in the same map will be ignored"
-                 << endl;
-        return resolveRef(*yamlRef, refsStrategy);
-    }
+    YamlMap<> resolvedSchemaYaml{};
+    const auto yamlRef = schemaYaml.maybeGet<string>("$ref");
+    if (yamlRef) {
+        if (!yamlRef->starts_with('#'))
+            return loadSchemaFromRef(schemaYaml, refsStrategy);
+        // Local $ref - just replace wit the referred object for now
+        resolvedSchemaYaml = schemaYaml.resolveRef();
+    } else
+        resolvedSchemaYaml = schemaYaml;
 
-    const auto schema = yamlSchema.get<string>("type", "object"s) == "object"
-                            ? analyzeObject(yamlSchema, refsStrategy)
-                            : makeTrivialSchema(analyzeTypeUsage(yamlSchema));
+    const auto schema = resolvedSchemaYaml.get<string>("type", "object"s) == "object"
+                            ? analyzeObject(resolvedSchemaYaml, refsStrategy)
+                            : makeTrivialSchema(analyzeTypeUsage(resolvedSchemaYaml));
 
     if (!schema.empty()) {
-        cout << logOffset() << yamlSchema.location() << ": schema for "
+        cout << logOffset() << schemaYaml.location() << ": schema for "
              << schema;
         if (const auto& scopeName = currentScope().name; !scopeName.empty())
             cout << '/' << scopeName;
@@ -379,9 +379,9 @@ Body Analyzer::analyzeBody(const YamlMap<>& contentYaml, string description,
     return {};
 }
 
-ObjectSchema Analyzer::resolveRef(const string& refPath,
-                                  RefsStrategy refsStrategy)
+ObjectSchema Analyzer::loadSchemaFromRef(const YamlMap<>& refObjectYaml, RefsStrategy refsStrategy)
 {
+    const auto refPath = refObjectYaml.get<string_view>("$ref");
     // First try to resolve refPath in types map
     auto&& tu = _translator.mapType("$ref", refPath);
     if (tu.empty()) {
@@ -398,7 +398,8 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
             loadDependency(refPath, overrideTitle, refsStrategy == InlineRefs);
 
         tu.addImport(importPath.string());
-        auto&& refSchema = refModel.types.back();
+        auto refSchema = refModel.types.back();
+        refObjectYaml.maybeLoad("description", &refSchema.description);
 
         if (refsStrategy == InlineRefs || refModel.trivial()) {
             cout << logOffset() << "The main schema from " << refPath;
