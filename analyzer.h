@@ -75,9 +75,9 @@ private:
     [[nodiscard]] const Call* currentCall() const { return currentScope().call; }
 
     [[nodiscard]] fspath makeModelKey(const fspath& sourcePath);
-    [[nodiscard]] std::pair<const Model&, fspath> loadDependency(
-        const string& relPath, const string& overrideTitle,
-        bool inlined = false);
+    [[nodiscard]] std::pair<const Model&, fspath> loadDependency(std::string_view relPath,
+                                                                 const string& overrideTitle,
+                                                                 bool forceInlining = false);
     void fillDataModel(Model& m, const YamlMap<>& yaml, const fspath& filename);
 
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap<>& node);
@@ -94,7 +94,7 @@ private:
 
     ObjectSchema resolveRef(const string& refPath, RefsStrategy refsStrategy);
 
-    [[nodiscard]] ObjectSchema makeEphemeralSchema(TypeUsage&& tu) const;
+    [[nodiscard]] ObjectSchema makeTrivialSchema(TypeUsage&& tu) const;
     [[nodiscard]] std::optional<VarDecl> makeVarDecl(TypeUsage type, std::string_view baseName,
                                                      const Identifier& scope, string description,
                                                      bool required = false,

@@ -38,7 +38,6 @@ private:
     Analyzer::Context _thisContext;
     const Identifier _scope;
 
-public:
     ContextOverlay(Analyzer& a, fs::path newFileDir, Model* newModel,
                    Identifier newScope)
         : _analyzer(a)
@@ -48,11 +47,12 @@ public:
         _analyzer._context = &_thisContext;
         ++_analyzer._indent;
     }
+public:
     ContextOverlay(Analyzer& a, fs::path newFileDir, Model* newModel, InOut role)
         : ContextOverlay(a, std::move(newFileDir), newModel, {{}, role})
     {}
     ContextOverlay(Analyzer& a, Identifier newScope)
-        : ContextOverlay(a, a.context().fileDir, a.context().model, newScope)
+        : ContextOverlay(a, a.context().fileDir, a.context().model, std::move(newScope))
     { }
     ~ContextOverlay()
     {
@@ -166,7 +166,7 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap<>& yamlSchema,
 
     const auto schema = yamlSchema.get<string>("type", "object"s) == "object"
                             ? analyzeObject(yamlSchema, refsStrategy)
-                            : makeEphemeralSchema(analyzeTypeUsage(yamlSchema));
+                            : makeTrivialSchema(analyzeTypeUsage(yamlSchema));
 
     if (!schema.empty()) {
         cout << logOffset() << yamlSchema.location() << ": schema for "
@@ -211,7 +211,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
         // Now that we have a good idea of the schema identity we can check if
         // the configuration has anything to substitute this schema with.
         if (auto&& tu = _translator.mapType("schema", name); !tu.empty())
-            return makeEphemeralSchema(std::move(tu));
+            return makeTrivialSchema(std::move(tu));
     }
 
     yamlSchema.maybeLoad("maxProperties", &schema.maxProperties);
@@ -304,7 +304,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
 
         if (!tu.empty()) {
             if (schema.empty())
-                return makeEphemeralSchema(std::move(tu));
+                return makeTrivialSchema(std::move(tu));
 
             if (auto&& v = makeVarDecl(std::move(tu), "additionalProperties",
                                        schema, std::move(description)))
@@ -337,7 +337,7 @@ Body Analyzer::analyzeBody(const YamlMap<>& contentYaml, string description,
                         return analyzeSchema(*schemaYaml);
                 // Emulate type definitions used with Swagger 2 so that users don't have
                 // to rewrite their configuration files
-                return makeEphemeralSchema(_translator.mapType("string"s, "binary"s));
+                return makeTrivialSchema(_translator.mapType("string"s, "binary"s));
             }();
 
         if (description.empty())
@@ -396,19 +396,15 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
             refsStrategy = InlineRefs;
         auto&& [refModel, importPath] =
             loadDependency(refPath, overrideTitle, refsStrategy == InlineRefs);
-        if (refModel.types.empty())
-            throw Exception(refPath + " has no schemas");
 
         tu.addImport(importPath.string());
         auto&& refSchema = refModel.types.back();
 
         if (refsStrategy == InlineRefs || refModel.trivial()) {
-            if (refModel.trivial())
-                cout << logOffset() << "The model at " << refPath
-                     << " is trivial (see the mapping above) and";
-            else
-                cout << logOffset() << "The main schema from " << refPath;
-            cout << " will be inlined" << endl;
+            cout << logOffset() << "The main schema from " << refPath;
+            if (refSchema.trivial())
+                cout << " is trivial (see the mapping above) and";
+            cout << " will be inlined\n";
 
             currentModel().imports.insert(refModel.imports.begin(),
                                           refModel.imports.end());
@@ -428,10 +424,10 @@ ObjectSchema Analyzer::resolveRef(const string& refPath,
     cout << logOffset() << "Resolved $ref: " << refPath << " to type usage "
          << tu.name << endl;
 
-    return makeEphemeralSchema(std::move(tu));
+    return makeTrivialSchema(std::move(tu));
 }
 
-ObjectSchema Analyzer::makeEphemeralSchema(TypeUsage&& tu) const
+ObjectSchema Analyzer::makeTrivialSchema(TypeUsage&& tu) const
 {
     ObjectSchema result{currentRole()};
     if (!tu.empty())
@@ -444,25 +440,20 @@ optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, string_view baseName,
                                         string description, bool required,
                                         string defaultValue) const
 {
-    auto&& id = _translator.mapIdentifier(baseName, &scope, required);
-    if (id.empty())
-        return {}; // Skip the variable
-
-    return VarDecl{std::move(type),        std::move(id), string(baseName),
-                   std::move(description), required,      std::move(defaultValue)};
+    if (auto&& id = _translator.mapIdentifier(baseName, &scope, required); !id.empty())
+        return VarDecl{std::move(type),        std::move(id), string(baseName),
+                       std::move(description), required,      std::move(defaultValue)};
+    return {}; // Skip the variable
 }
 
 void Analyzer::addVarDecl(VarDecls &varList, VarDecl &&v) const
 {
-    varList.erase(remove_if(varList.begin(), varList.end(),
-                            [&v, this](const VarDecl& vv) {
-                                if (v.name != vv.name)
-                                    return false;
-                                cout << logOffset() << "Re-defining field "
-                                     << vv << endl;
-                                return true;
-                            }),
-                  varList.end());
+    erase_if(varList, [&v, this](const VarDecl& vv) {
+        if (v.name != vv.name)
+            return false;
+        cout << logOffset() << "Re-defining field " << vv << endl;
+        return true;
+    });
     varList.emplace_back(v);
 }
 
@@ -683,8 +674,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
 }
 
 pair<const Model&, fs::path>
-Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
-                         bool inlined)
+Analyzer::loadDependency(string_view relPath, const string& overrideTitle, bool forceInlining)
 {
     const auto& fullPath = context().fileDir / relPath;
     const auto stem = makeModelKey(fullPath);
@@ -696,8 +686,10 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
     auto modelRole = InAndOut;
     if (!unseen) {
         if (model.apiSpec != ApiSpec::JSONSchema)
-            throw Exception("Dependency model for " + relPath
-                            + " is found in the cache but doesn't seem to be for a data structure");
+            throw Exception(
+                string("Dependency model for ")
+                    .append(relPath)
+                    .append(" is found in the cache but doesn't seem to be for a data structure"));
         if (!model.callClasses.empty())
             throw Exception(
                 "Internal error: a JSON Schema model has API definitions");
@@ -705,37 +697,38 @@ Analyzer::loadDependency(const string& relPath, const string& overrideTitle,
         if (!model.types.empty()) {
             modelRole = model.types.back().role;
             if (modelRole == InAndOut || modelRole == currentRole()) {
-                cout << logOffset() << "Reusing already loaded model for "
-                     << relPath << " with role " << modelRole << endl;
+                cout << logOffset() << "Reusing already loaded model for " << relPath
+                     << " with role " << modelRole << '\n';
                 return result;
             }
             cout << logOffset()
                  << "Found existing data model generated for role " << modelRole
-                 << "; the model will be reloaded for all roles" << endl;
+                 << "; the model will be reloaded for all roles\n";
             modelRole = InAndOut;
             model.clear();
         } else {
             cout << logOffset() << "Warning: empty data model for " << relPath
-                 << " has been found in the cache; reloading" << endl;
+                 << " has been found in the cache; reloading\n";
             modelRole = currentRole();
         }
     }
 
     cout << logOffset() << "Loading data schema from " << relPath
-         << " with role " << modelRole << endl;
+         << " with role " << modelRole << '\n';
     const auto yaml =
         YamlNode::fromFile(_baseDir / fullPath, _translator.substitutions()).as<YamlMap<>>();
     const ContextOverlay _modelContext(*this, fullPath.parent_path(), &model, modelRole);
     fillDataModel(model, yaml, stem.filename());
+    if (model.types.empty())
+        throw Exception(string(relPath) + " has no schemas");
     auto& mainSchema = model.types.back();
     if (!overrideTitle.empty() && !model.types.empty())
         mainSchema.name = overrideTitle;
-    if (mainSchema.hasParents()
-        && (!mainSchema.fields.empty() || mainSchema.hasPropertyMap()))
-        cout << logOffset() << "Inlining suppressed due to model complexity"
-             << endl;
+    if (mainSchema.hasParents() && (!mainSchema.fields.empty() || mainSchema.hasPropertyMap()))
+        cout << logOffset() << "Inlining suppressed due to model complexity\n";
     else
-        model.inlineMainSchema = (unseen || model.inlineMainSchema) && inlined;
+        model.inlineMainSchema = (unseen || model.inlineMainSchema) && forceInlining;
+
     return result;
 }
 
