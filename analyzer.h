@@ -75,10 +75,15 @@ private:
     [[nodiscard]] const Call* currentCall() const { return currentScope().call; }
 
     [[nodiscard]] fspath makeModelKey(const fspath& sourcePath);
-    [[nodiscard]] std::pair<const Model&, fspath> loadDependency(std::string_view relPath,
-                                                                 const string& overrideTitle,
-                                                                 bool forceInlining = false);
-    void fillDataModel(Model& m, const YamlMap<>& yaml, const fspath& filename);
+
+    struct ImportedSchemaData {
+        std::variant<TypeUsage, ObjectSchema> schema;
+        fspath importPath;
+        bool hasExtraDeps = false;
+    };
+    [[nodiscard]] ImportedSchemaData loadSchemaFromRef(std::string_view refPath,
+                                                       bool preferInlining = false);
+    TypeUsage fillDataModel(Model& m, const YamlMap<>& yaml, const fspath& filename);
 
     [[nodiscard]] TypeUsage analyzeTypeUsage(const YamlMap<>& node);
     TypeUsage addSchema(ObjectSchema&& schema);
@@ -92,7 +97,7 @@ private:
                      const string& contentType = {}, bool required = false,
                      std::string_view name = "data");
 
-    ObjectSchema loadSchemaFromRef(const YamlMap<>& refObjectYaml, RefsStrategy refsStrategy);
+    ObjectSchema analyzeRefObject(const YamlMap<>& refObjectYaml, RefsStrategy refsStrategy);
 
     [[nodiscard]] ObjectSchema makeTrivialSchema(TypeUsage&& tu) const;
     [[nodiscard]] std::optional<VarDecl> makeVarDecl(TypeUsage type, std::string_view baseName,

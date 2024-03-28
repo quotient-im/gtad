@@ -150,6 +150,10 @@ the `events` directory will be searched under input `definitions` directory, and
 a respective `<outdir>/definitions/events` directory will be made for output
 files from `base.yml` processing.
 
+Since version 0.11, GTAD also supports local `$ref` objects (those with `$ref` starting with `#`).
+Schemas loaded from the local `$ref` will be emitted as a part of the current model, rather than
+put in their own files.
+
 ### GTAD configuration file
 
 GTAD uses a configuration file written in YAML to customise type mapping and
@@ -292,18 +296,18 @@ In the above,
 - `<targetTypeSpec>` is either the target type literal string (such as
   `double`) or, in turn, a YAML object:
   ```yaml
-      type: <target type literal> # mandatory except for schema and $ref
+      type: <target type literal> # mandatory except for 'schema' and mappings in 'references'
       imports: <filename> or [ <filenames...> ] # optional
       ... # key-value pairs for custom type attributes, optional
   ```
-  Each `<targetTypeSpec>` (except those in `schema` and `$ref`, see below)
+  Each `<targetTypeSpec>` (except those in `schema`, see below)
   must unambiguously specify the target type to be used - either as a string
   (`bool`) or as an object with `type` property (`{ type: bool }`). For
   the purpose of proper rendering you will likely need to pass (and use in
   your Mustache templates) additional information about the mapped type -
   e.g., whether the type is copyable, whether it should be wrapped up in
   another type in case a parameter is optional, or which import - for C/C++
-  it's a file for `#include` - should be added). To address that, GTAD has
+  it's a file for `#include` - should be added. To address that, GTAD has
   a concept of _type attributes_: every type can have an arbitrary number of
   "attributes" with arbitrary (except `type`) names, modeled as string-to-string
   or string-to-list mappings. `imports` is an example of a string-to-list
@@ -312,7 +316,7 @@ In the above,
   At the moment GTAD special-cases `imports`: in addition to just passing this
   attribute along with the type name, it adds its contents to a "global" (per
   input file) deduplicated set, to simplify generation of import/include
-  blocks. Since some of imports come from `$ref` keys in API descriptions
+  blocks. Since some of imports come from `$ref` objects in API descriptions
   (see below), GTAD also translates the original `$ref` path to a form
   suitable to import the respective data structure in the target language.
   Before GTAD 0.8, that was really hardcoded to C/C++; GTAD used the first
@@ -329,7 +333,6 @@ In the above,
     +on: # ...to anything matched by the list below
     - object: # ...
     - string: string
-    - $ref: # ...
     - schema: # ...
   ```
 Note that you should only specify any particular _type_/_format_ combination
@@ -337,12 +340,12 @@ no more than once. The lookup will stop on the first match, even if it only
 specifies attributes, without a type.
 
 ###### Supported types and formats
-As mentioned above, `swaggerType` and `swaggerFormat`/`swaggerFormatRegEx` are
-matched against _type_ and _format_ specified in API description. The
-[OpenAPI 2 specification](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md#user-content-data-types)
-defines standard _types_ and _formats_; on top of these you can use
-the following non-standard _types_/_formats_ in the GTAD configuration file
-(but _not_ in the API descriptions):
+As mentioned above, `swaggerType` and `swaggerFormat`/`swaggerFormatRegEx` are matched against
+_type_ and _format_ specified in API description.
+[OpenAPI 2](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md#user-content-data-types)
+and [OpenAPI 3](https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#data-types)
+define standard _types_ and _formats_; on top of these you can use the following non-standard
+_types_/_formats_ in the GTAD configuration file (but _not_ in the API descriptions):
 
 - "_formats_" under _type_ `array` are used to match arrays with elements
   of a certain element type. This way you can, e.g., special case an array
@@ -383,60 +386,18 @@ the following non-standard _types_/_formats_ in the GTAD configuration file
     for requests, `<` for responses (in the same vein as for `identifiers`
     entries) - e.g., `getTurnServers<` matches the top-level schema for
     the response body of `getTurnServers`.
-    
-- `$ref` (supported from GTAD 0.6): this matches types defined in a file 
-  referenced by `$ref` and is used either to override some of those types
-  with another type entirely or to add type attributes - similar to `schema`.
-  "_Formats_" under `$ref` define patterns (regexes or literal strings) for
-  referenced filenames, as they appear in the API description file. A `type`
-  key provided for a certain pattern means that a file matching this pattern
-  shall be entirely ignored and the target type provided under `type` shall
-  be used instead. This allows to completely skip files generation for
-  unwanted definitions. For example:
-  ```yaml
-  $ref:
-    # Coerce all types from files that have the path ending with "event.yaml"
-    # to type EventPtr; the files won't be opened at all
-    /event.yaml$/: { type: EventPtr, imports: '"events.h"' }
-    # For all other ref'ed types, resolve references as usual and set the
-    # 'referenced' attribute
-    //: { referenced: }
-  ```
-  Beware: supplying `type` in a catch-all (`//`) node in this section
-  (e.g., `$ref: { //: { type: Ref } }`) will lead to coercion of _all_
-  not explicitly mentioned $ref'ed types to the type specified in this node.
-  
-  Since GTAD 0.7, two special type attributes can be used in `$ref` blocks:
-  - `title: newName` will override the name of the main (top-level) referenced
-    structure with `newName`, disregarding any `title` it has in
-    the API description.
-  - `_inline: true` will attempt to "inline" the top-level structure.
-    
-    As described in the very beginning of the `Usage` section, GTAD usually
-    represents files included via `$ref` as separate type definitions
-    in separate target files. There's one exception to that: if the loaded
-    model turns out to be "trivial" - containing exactly one schema that
-    has an exactly one parent, basically, an alias for another type -
-    GTAD will replace usages of this schema with usages of the original type
-    and eliminate the schema from the generated files entirely (both for
-    definition and for usage).
-    
-    If `_inline: true` is specified for a given `$ref` GTAD will attempt
-    to apply the same optimisation even if the loaded schema is non-trivial.
-    This is useful in cases where an additional level of indirection
-    complicates the code without bringing value, e.g., to unroll the top-level
-    response object to a series of response parameters instead. Not all schemas
-    can be inlined; if the $ref'ed schema itself consists of a `$ref` to yet 
-    another schema _and_ parameters on top of that (more generally: if there's
-    an `allOf` instance with more than one list entry in the API description)
-    such schema will be "imported" as usual regardless of the `_inline` value -
-    that is, the type will be defined in a separate file and this type will
-    be used at the place of reference, with imports added
-    in the referring file.
-    
-    As of GTAD 0.7, `_inline: false` does nothing; eventually it may force
-    generating a full-fledged type for a schema even when the schema is
-    trivial.
+
+  In case of schemas, `<targetTypeSpec>` may omit `type` entirely and only supply additional
+  attributes that will be added to the Mustache context at each usage of the given type, while
+  the original schema is used to define the type. In GTAD 0.11, the `title` attribute has
+  a special meaning in this context: it preserves the original type definition but overrides
+  the type name (as if the respective `title` were provided in the API description instead). In
+  versions 0.7 through 0.10.x, the same effect could be achieved by supplying `_title` attribute
+  under `$ref`; this didn't allow to rename schemas not involved in reference objects, hence
+  the new mechanism.
+
+- `$ref` - this is a historical key supported by GTAD versions from 0.6 to 0.10.x; it was moved out
+  to its own `references` section under `analyzer` in GTAD 0.11, see below.
     
 - _type_ `object`: this is an entry (without _formats_ underneath) that
   describes the target type to be used when GTAD could not find any schema
@@ -481,38 +442,6 @@ the following non-standard _types_/_formats_ in the GTAD configuration file
     imports: <variant>
   ```
 
-##### Import renderers
-
-Since GTAD 0.8, it is possible (and, actually, necessary) to define the way
-imports will look in generated files. An import renderer is called in
-the context where a given import is stored in two forms: in complete but
-possibly half-baked (we'll get to that in a minute) form (in `{{_}}` - think of
-an element inside the `{{imports}}` Mustache list), and in a split form, as
-a Mustache list of path components comprising it (in `{{#segments}}` list).
-To give an example, if the original import was `events/event_loader.h`,
-the Mustache context would be:
-```yaml
-{{_}}: 'events/event_loader.h' # without quotes
-{{#segments}}: [ 'events', 'event_loader.h' ]
-```
-For simple cases when an import is provided verbatim in `gtad.yaml`, the default
-import renderer - that looks like `{{_}}` - works just fine. However, when it
-comes to imports produced from `$ref` nodes in the API description, `{{_}}` will
-store something like `csapi/definitions/filter` (base output directory and the
-path _stem_ - that is, a path to a file without its extension. To convert that
-to something usable in C/C++, one needs to override the import renderer by
-supplying `_importRenderer` type attribute - for example:
-```yaml
-types:
-- +set:
-    _importRenderer: '"{{#segments}}{{_}}{{#_join}}/{{/_join}}{{/segments}}.h"'
-  +on:
-  - $ref:
-    - # ...
-```
-You can use Mustache constants and partials defined in `gtad.yaml` within
-import renderers.
-
 ##### Advanced type mapping configuration
 
 In case when an element type of an array or a property map is in turn
@@ -551,6 +480,109 @@ It's not possible to use the same shortcut on the _type_ (top) level:
 - array:
   - int: # correct
 ```
+
+##### `references`
+
+This is a section where you configure the behaviour of the analyzer with respect to
+[reference objects](https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#reference-object).
+Before GTAD 0.11, there was a special `$ref` "type" that used to work in a way similar to
+`references.replace` subsection.
+
+Where value matching is performed under this configuration section, configuratin entries match
+relative paths contained in `$ref` values as follows:
+- if the `$ref` value in the API description is an external ref (contains a path leading to another
+  API description file), it is matched as is;
+- if the `$ref` value is a local reference, i.e. _starts_ with `#`, it is prepended by the relative
+  path of the current API description file, based off the root path of the API description (passed
+  to GTAD at invocation).
+
+As in other match locations, an entry key has to either match the value in the API description
+entirely byte by byte, or be a regular expression enclosed in `/`.
+
+The `references` section includes the following (all optional) keys.
+
+###### `inline`
+
+This subsection is a list of patterns (strings or regexes) for schemas that must always be inlined.
+Before GTAD 0.11, adding `_inline: true` to the type entry served the same purpose.
+
+As described in the very beginning of the `Usage` section, GTAD usually represents files
+included via `$ref` as separate type definitions in separate target files. Aside from the case
+of local `$ref`s there's one more exception to that, when the loaded model turns out to be
+"trivial" - containing exactly one schema that has an exactly one parent. In terms of OpenAPI,
+its data definition either consists of a bare `type`, or itself is a reference object - basically,
+an alias for another type. In that case, GTAD will replace usages of this schema with usages of
+the original type and eliminate the schema from the generated files entirely (both
+the definition and all usages).
+
+If a given `$ref` matches any entry in the `inline` list, GTAD will attempt to apply the same
+optimisation even if the loaded schema is non-trivial. This is useful in cases where an additional
+level of indirection complicates the code without bringing value; e.g., you can unroll a top-level
+response object to a series of response parameters this way. Not all schemas can be inlined;
+if the $ref'ed schema itself consists of a `$ref` object _and_ parameters on top of that
+(more generally: if there's an `allOf` instance with more than one list entry in the API
+description) such schema will be imported as usual regardless of the `_inline` value - that is,
+the type will be defined separately and used at the place of reference, with imports added
+in the referring file.
+
+As of GTAD 0.11 (and before), there's no way to force generation of a full-fledged definition for
+a trivial schema (pre-0.11, `_inline: false` did nothing).
+
+###### `replace`
+
+This is a dictionary from patterns to `<targetTypeSpec>` entries (see `types` section above). If
+a matching entry in this section is found for a given `$ref` value, it is used either to override
+some of those types with another type entirely or to decorate usages  of the target schema with
+additional attributes - similar to the effect of `types.schema` but applied before any resolution
+takes place. A `type` key provided for a matching pattern means that the referenced schema in
+the API description shall be entirely ignored and the target type provided under `type` (with
+additional attributes, if any are defined next to it) shall be used instead. This allows to skip
+generation of type definitions (and even whole files containing those), using a type defined
+in the target language/SDK instead.
+For example:
+```yaml
+references:
+  # Coerce all types from files that have the path ending with "event.yaml" to type EventPtr
+  # imported from "events.h"; the target API description files won't be opened at all
+  /event.yaml$/: { type: EventPtr, imports: '"events.h"' }
+  # For all other ref'ed types, resolve references as usual and set the 'referenced' attribute
+  //: { referenced: }
+```
+
+Beware: supplying `type` in a catch-all (`//`) node in this section (e.g., `- //: { type: Ref }`)
+will lead to substitution of _all_ not explicitly mentioned reference objects with the type
+specified in this node. This is most likely not what you would want to do.
+
+###### `importRenderer`
+
+The import renderer mechanism has been introduced back in GTAD 0.8 but was configured by supplying
+`_importRenderer` attribute for each type that needs it (effectively, for each externally defined
+`schema`). Since GTAD 0.11, one renderer is configured for all imports that are not spelled out
+explicitly in the configuration (i.e. if there's an `import` attribute then `importRenderer`
+is not used for it).
+
+An import renderer is a Mustache template called in the context where a given import is stored
+in two forms: in complete but possibly half-baked (we'll get to that in a minute) form, and in a split form, as a Mustache list of path components comprising it. These two forms are placed in
+`{{_}}` and `{{#segments}}` respectively. To give an example, if the import path is
+`events/event_loader.h`, the Mustache context would be:
+```yaml
+{{_}}: 'events/event_loader.h' # without quotes
+{{#segments}}: [ 'events', 'event_loader.h' ]
+```
+For simple cases when an import is provided verbatim in `gtad.yaml`, the default import renderer
+(that simply inserts the contents of `{{_}}`) works just fine. However, when it comes to imports
+produced from reference objects in the API description, `{{_}}` will store something like
+`csapi/definitions/filter` (base output directory and the path _stem_ - that is, a path to a file
+without its extension). To convert that to something usable, one would almost always need
+to override the import renderer, for example:
+```yaml
+reference:
+  importRenderer: '"{{#segments}}{{_}}{{#_join}}/{{/_join}}{{/segments}}.h"'
+  # ...
+```
+`{{#join}}` in the example above is a predefined partial coming in any list context (see "Data
+model exposed to Mustache" below); you can also define your own Mustache constants and partials
+in `gtad.yaml` and use them within import renderers.
 
 #### Printer configuration
 

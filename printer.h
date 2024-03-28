@@ -44,7 +44,9 @@ private:
     [[nodiscard]] m_object_type dumpField(const VarDecl& field) const;
     void addList(m_object_type& target, const string& name,
                  const VarDecls& properties) const;
-    [[nodiscard]] m_object_type dumpAllTypes(const Model::schemas_type& types) const;
-    [[nodiscard]] m_object_type dumpTypes(const Model::schemas_type& types,
-                                          const Call* scope = {}) const;
+    [[nodiscard]] m_object_type dumpAllTypes(const Model::schemaptrs_type& types) const;
+    template <typename SchemaPtrT>
+    [[nodiscard]] m_object_type
+    dumpTypes(const std::vector<std::pair<SchemaPtrT, TypeUsage>>& types,
+              const Call* scope = {}) const;
 };

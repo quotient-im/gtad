@@ -1,7 +1,6 @@
 #include "model.h"
 
 #include <algorithm>
-#include <functional>
 #include <locale>
 
 using namespace std;
@@ -13,7 +12,15 @@ string Identifier::qualifiedName() const
 
 TypeUsage::TypeUsage(const ObjectSchema& schema)
     : Identifier(static_cast<const Identifier&>(schema)), baseName(schema.name)
-{ }
+{}
+
+void TypeUsage::assignName(string setName, string setBaseName)
+{
+    if (!name.empty())
+        throw ModelException("It's not allowed to overwrite used type name if it's already set");
+    name = std::move(setName);
+    baseName = setBaseName.empty() ? name : std::move(setBaseName);
+}
 
 TypeUsage TypeUsage::specialize(vector<TypeUsage>&& params) const
 {
@@ -127,19 +134,16 @@ Call& Model::addCall(Path path, string verb, string operationId, bool needsToken
     return cc.calls.back();
 }
 
-void Model::addSchema(ObjectSchema&& schema)
+void Model::addSchema(ObjectSchema&& schema, const TypeUsage& tu)
 {
-    auto dupIt = find_if(types.begin(), types.end(),
-            [&](const ObjectSchema& s)
-            {
-                return s.call == schema.call &&
-                        s.name == schema.name;
-            });
+    auto dupIt = find_if(types.begin(), types.end(), [&](const schemaholder_type& s) {
+        return s.first->call == schema.call && s.first->name == schema.name;
+    });
     if (dupIt != types.end())
         return;
 
     addImportsFrom(schema);
-    types.emplace_back(std::move(schema));
+    types.emplace_back(std::make_unique<const ObjectSchema>(std::move(schema)), tu);
 }
 
 void Model::addImportsFrom(const ObjectSchema& s)
@@ -159,7 +163,7 @@ void Model::addImportsFrom(const FlatSchema& s)
 
 void Model::addImportsFrom(const TypeUsage& type)
 {
-    const auto renderer = type.attributes.at("_importRenderer");
+    const auto renderer = type.importRenderer;
     const auto singleTypeImport = type.attributes.find("imports");
     if (singleTypeImport != type.attributes.end())
         imports.emplace(singleTypeImport->second, renderer);

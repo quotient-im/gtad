@@ -183,7 +183,7 @@ inline object wrap(const filesystem::path& p)
     return wrap(p.string());
 }
 
-void setList(auto& target, const string& name, const auto& source, auto convert)
+void setList(object& target, const string& name, const auto& source, auto convert)
 {
     target[name + '?'] = !source.empty();
     km::list mList;
@@ -198,7 +198,7 @@ void setList(auto& target, const string& name, const auto& source, auto convert)
     target[name] = mList;
 }
 
-void setList(auto& target, const string& name, const auto& source)
+void setList(object& target, const string& name, const auto& source)
 {
     setList(target, name, source, [](auto element) { return element; });
 }
@@ -302,43 +302,46 @@ auto copyPartitionedByRequired(std::vector<VarDecl> vars)
     return vars;
 }
 
-object Printer::dumpAllTypes(const Model::schemas_type& types) const
+object Printer::dumpAllTypes(const Model::schemaptrs_type& types) const
 {
     object mModels;
     if (!types.empty())
         setList(
-            mModels, "model", types, [this](const ObjectSchema& type) {
-                auto mType = renderType(TypeUsage(type));
-                mType["classname"] = type.name; // Swagger compat
-                dumpDescription(mType, type);
-                mType["in?"] = type.role != OnlyOut;
-                mType["out?"] = type.role != OnlyIn;
-                if (type.trivial())
+            mModels, "model", types, [this](std::pair<const ObjectSchema*, TypeUsage> type) {
+                auto mType = renderType(type.second);
+                mType["classname"] = type.first->name; // Swagger compat
+                dumpDescription(mType, *type.first);
+                mType["in?"] = type.first->role != OnlyOut;
+                mType["out?"] = type.first->role != OnlyIn;
+                if (type.first->trivial())
                 {
                     mType["trivial?"] = true;
-                    mType["parent"] = renderType(type.parentTypes.back());
+                    mType["parent"] = renderType(type.first->parentTypes.back());
                 }
-                setList(mType, "parents", type.parentTypes, bind_front(&Printer::renderType, this));
-                setList(mType, "vars", copyPartitionedByRequired(type.fields),
+                setList(mType, "parents", type.first->parentTypes,
+                        bind_front(&Printer::renderType, this));
+                setList(mType, "vars", copyPartitionedByRequired(type.first->fields),
                     [this](const VarDecl& f) {
                         object fieldDef = dumpField(f);
                         fieldDef["name"] = f.name;
                         fieldDef["datatype"] = f.type.name; // Swagger compat
                         return fieldDef;
                     });
-                if (type.hasPropertyMap())
-                    mType["propertyMap"] = dumpField(type.propertyMap);
+                if (type.first->hasPropertyMap())
+                    mType["propertyMap"] = dumpField(type.first->propertyMap);
                 return mType;
             });
     return mModels;
 }
 
-object Printer::dumpTypes(const Model::schemas_type& types,
+template <typename SchemaPtrT>
+object Printer::dumpTypes(const std::vector<std::pair<SchemaPtrT, TypeUsage>>& types,
                           const Call* scope) const
 {
-    Model::schemas_type selectedTypes;
-    copy_if(types.begin(), types.end(), back_inserter(selectedTypes),
-            [&](const ObjectSchema& s) { return s.call == scope; });
+    Model::schemaptrs_type selectedTypes;
+    for (const auto& s : types)
+        if (s.first->call == scope)
+            selectedTypes.emplace_back(std::to_address(s.first), s.second);
     return dumpAllTypes(selectedTypes);
 }
 
@@ -396,13 +399,10 @@ vector<string> Printer::print(const fspath& filePathBase,
 
     // Unnamed schemas are only saved in the model to enable inlining
     // but cannot be used to emit valid code (not in C++ at least).
-    decltype(model.types) namedSchemas;
+    std::vector<std::pair<const ObjectSchema*, TypeUsage>> namedSchemas;
     for (const auto& schema: model.types)
-        if (!schema.name.empty())
-            namedSchemas.emplace_back(schema);
-
-    if (model.inlineMainSchema)
-        namedSchemas.pop_back();
+        if (!schema.first->name.empty() && !schema.first->inlined())
+            namedSchemas.emplace_back(schema.first.get(), schema.second);
 
     auto&& mAllTypes = dumpAllTypes(namedSchemas); // Back-comp w/swagger
     if (!mAllTypes.empty())
@@ -514,13 +514,12 @@ vector<string> Printer::print(const fspath& filePathBase,
         }
     }
     if (mTypes.empty() && mOperations.empty()) {
-        if (!model.inlineMainSchema)
-            clog << "Warning: no emittable contents found in the model for "
-                 << filePathBase << ".*" << endl;
+        clog << "No emittable contents found in the model for " << filePathBase.string()
+             << ".*, skipping\n";
         return {};
     }
 
-    ContextOverlay overlay(context, payloadObj);
+    const ContextOverlay overlay(context, payloadObj);
     const auto outputs = _translator.outputConfig(filePathBase, model);
     vector<string> emittedFilenames;
     emittedFilenames.reserve(outputs.size());

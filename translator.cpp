@@ -84,6 +84,11 @@ void parseEntries(const YamlSequence<YamlMap<>>& entriesYaml,
             case 1:
             {
                 const auto& [name, details] = typesBlockYaml.front();
+                if (name == "+set" || name == "+on")
+                    throw YamlException(
+                        typesBlockYaml,
+                        "+set and +on block should always be used together in the same object - "
+                        "did you accidentally put them in separate list items?");
                 inserter(name, details, commonAttributesYaml);
                 break;
             }
@@ -200,7 +205,22 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
                 _typesMap.emplace_back(name, parseTypeEntry(typeYaml, commonAttrsYaml));
             });
 
-        if (_verbosity == Verbosity::Debug)
+        if (const auto& referencesYaml = analyzerYaml->maybeGet<YamlMap<>>("references")) {
+            referencesYaml->maybeLoad("importRenderer", &_importRenderer);
+            ranges::copy(referencesYaml->maybeGet<YamlSequence<string>>("inline"),
+                         back_inserter(_inlinedRefs));
+            parseEntries(referencesYaml->get<YamlSequence<YamlMap<>>>("replace", {}),
+                         [this](string_view name, const YamlNode& typeYaml,
+                                const YamlMap<>& commonAttrsYaml) {
+                             if (name.size() > 1 && name.front() == '/' && name.back() == '/')
+                                 name.remove_suffix(1);
+                             _refReplacements.emplace_back(
+                                 name, parseTargetType(typeYaml, commonAttrsYaml));
+                         });
+        }
+
+        if (_verbosity == Verbosity::Debug) {
+            // TODO: dump identifier substitutions?
             for (const auto& t : _typesMap) {
                 clog << "Type " << t.first << ":" << endl;
                 for (const auto& f : t.second) {
@@ -224,6 +244,8 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
                         clog << "    no lists" << endl;
                 }
             }
+            // TODO: dump reference substitutions
+        }
     }
 
     Printer::context_type env;
@@ -286,8 +308,6 @@ conclusion:
     tu.baseName = baseName.empty()
                       ? swaggerFormat.empty() ? swaggerType : swaggerFormat
                       : baseName;
-    if (auto& renderer = tu.attributes["_importRenderer"]; renderer.empty())
-        renderer = "{{_}}"; // Just render the import as is
     return tu;
 }
 
@@ -323,4 +343,31 @@ string Translator::mapIdentifier(string_view baseName, const Identifier* scope, 
         throw Exception("Attempt to skip the required variable '"s.append(baseName).append(
             "' - check 'identifiers' block in your gtad.yaml"));
     return newName;
+}
+
+TypeUsage Translator::mapReference(string_view fullRefPath) const
+{
+    TypeUsage tu;
+    for (const auto& [pattn, mappedType] : _refReplacements)
+        if (pattn == fullRefPath
+            || (!pattn.empty() && pattn.front() == '/'
+                && regex_search(string(fullRefPath), regex(++pattn.begin(), pattn.end()))))
+        {
+            tu = mappedType;
+            break;
+        }
+    if (tu.empty())
+        tu.importRenderer = _importRenderer;
+
+    tu.baseName = fullRefPath;
+    return tu;
+}
+
+bool Translator::isRefInlined(string_view fullRefPath) const
+{
+    return ranges::any_of(_inlinedRefs, [fullRefPath](string_view pattn) {
+        return pattn == fullRefPath
+               || (!pattn.empty() && pattn.front() == '/'
+                   && regex_search(string(fullRefPath), regex(pattn.begin() + 1, pattn.end() - 1)));
+    });
 }

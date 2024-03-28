@@ -125,9 +125,13 @@ TypeUsage Analyzer::addSchema(ObjectSchema&& schema)
     // This is just to enrich the type usage with attributes, not
     // for type substitution
     auto tu = _translator.mapType("schema", schema.name);
+    if (tu.getAttributeValue("_inline"s) == "true")
+        schema.preferInlining = true;
+    if (const auto titleAttrIt = tu.attributes.find("title"s); titleAttrIt != tu.attributes.end())
+        schema.name = titleAttrIt->second;
     tu.name = schema.name;
     tu.call = schema.call;
-    currentModel().addSchema(std::move(schema));
+    currentModel().addSchema(std::move(schema), tu);
     return tu;
 }
 
@@ -154,19 +158,12 @@ TypeUsage Analyzer::analyzeMultitype(const YamlSequence<>& yamlTypes)
 
 ObjectSchema Analyzer::analyzeSchema(const YamlMap<>& schemaYaml, RefsStrategy refsStrategy)
 {
-    YamlMap<> resolvedSchemaYaml{};
-    const auto yamlRef = schemaYaml.maybeGet<string>("$ref");
-    if (yamlRef) {
-        if (!yamlRef->starts_with('#'))
-            return loadSchemaFromRef(schemaYaml, refsStrategy);
-        // Local $ref - just replace wit the referred object for now
-        resolvedSchemaYaml = schemaYaml.resolveRef();
-    } else
-        resolvedSchemaYaml = schemaYaml;
+    if (const auto yamlRef = schemaYaml.maybeGet<string>("$ref"))
+        return analyzeRefObject(schemaYaml, refsStrategy);
 
-    const auto schema = resolvedSchemaYaml.get<string>("type", "object"s) == "object"
-                            ? analyzeObject(resolvedSchemaYaml, refsStrategy)
-                            : makeTrivialSchema(analyzeTypeUsage(resolvedSchemaYaml));
+    auto&& schema = schemaYaml.get<string>("type", "object"s) == "object"
+                        ? analyzeObject(schemaYaml, refsStrategy)
+                        : makeTrivialSchema(analyzeTypeUsage(schemaYaml));
 
     if (!schema.empty()) {
         cout << logOffset() << schemaYaml.location() << ": schema for "
@@ -182,9 +179,9 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap<>& schemaYaml, RefsStrategy r
                 cout << " and a property map";
             cout << ")";
         }
-        cout << endl;
+        cout << '\n';
     }
-    return schema;
+    return std::move(schema);
 }
 
 ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy refsStrategy)
@@ -359,6 +356,8 @@ Body Analyzer::analyzeBody(const YamlMap<>& contentYaml, string description,
             // If the schema is complex (=with both parents and properties),
             // add a definition for it and make a single parameter with
             // the type of the schema.
+            if (bodySchema.name.empty())
+                bodySchema.name = titleCased(string(name));
             packedType = addSchema(std::move(bodySchema));
         } else {
             // No parents, non-empty - unpack the schema to body properties
@@ -379,53 +378,90 @@ Body Analyzer::analyzeBody(const YamlMap<>& contentYaml, string description,
     return {};
 }
 
-ObjectSchema Analyzer::loadSchemaFromRef(const YamlMap<>& refObjectYaml, RefsStrategy refsStrategy)
+ObjectSchema Analyzer::analyzeRefObject(const YamlMap<>& refObjectYaml, RefsStrategy refsStrategy)
 {
-    const auto refPath = refObjectYaml.get<string_view>("$ref");
+    const auto refPath = refObjectYaml.get<string>("$ref");
+    const auto refPathForMapping =
+        refPath.starts_with('#') ? refObjectYaml.fileName() + refPath : refPath;
+
     // First try to resolve refPath in types map
-    auto&& tu = _translator.mapType("$ref", refPath);
-    if (tu.empty()) {
-        // No type shortcut in the types map (but tu may have some attributes
-        // loaded by mapType() above)
-        const auto titleIt = tu.attributes.find("title");
-        const auto& overrideTitle =
-            titleIt != tu.attributes.cend() ? titleIt->second : string();
-        // Take the configuration override into account
-        if (auto inlineAttrIt = tu.attributes.find("_inline");
-            inlineAttrIt != tu.attributes.end() && inlineAttrIt->second == "true")
-            refsStrategy = InlineRefs;
-        auto&& [refModel, importPath] =
-            loadDependency(refPath, overrideTitle, refsStrategy == InlineRefs);
+    auto&& tu = _translator.mapReference(refPathForMapping);
+    if (!tu.empty()) {
+        cout << logOffset() << "Mapped $ref: " << refPath << " to type usage " << tu.name
+             << " from the configuration\n";
+        return makeTrivialSchema(std::move(tu));
+    }
 
-        tu.addImport(importPath.string());
-        auto refSchema = refModel.types.back();
-        refObjectYaml.maybeLoad("description", &refSchema.description);
+    // No type shortcut in the types map (but tu may have some attributes
+    // loaded by mapType() above)
 
-        if (refsStrategy == InlineRefs || refModel.trivial()) {
-            cout << logOffset() << "The main schema from " << refPath;
-            if (refSchema.trivial())
-                cout << " is trivial (see the mapping above) and";
-            cout << " will be inlined\n";
+    // Check whether the configuration requests inlining; also, if there's an overriding description
+    // in the $ref object the resulting schema has to be inlined as it will be distinct from
+    // the $ref'ed one anyway.
+    if (_translator.isRefInlined(refPathForMapping) || refObjectYaml.size() > 1)
+        refsStrategy = InlineRefs;
 
-            currentModel().imports.insert(refModel.imports.begin(),
-                                          refModel.imports.end());
+    if (refPath.starts_with('#')) {
+        // TODO: merge with similar code in loadSchemaFromRef(); and maybe even move the whole
+        // branch there
+        auto sIt = currentModel().localRefs.find(refPath);
+        if (sIt != currentModel().localRefs.end()) {
+            if (refsStrategy != InlineRefs) {
+                tu = sIt->second;
+                cout << logOffset() << "Reusing already loaded mapping " << refPath
+                     << " -> " << tu.name << " with role " << currentRole() << '\n';
+                return makeTrivialSchema(std::move(tu));
+            }
+            cout << logOffset() << refObjectYaml.location() << ": forced inlining of saved schema "
+                 << sIt->second << '\n';
+        }
+        // NB: schemas in localRefs are considered common, not belonging to any call
+        const ContextOverlay _schemaContext(
+            *this,
+            {refPath, InAndOut /* see loadSchemaFromRef() - we have to have similar stuff here */,
+             nullptr});
+        auto&& s = analyzeSchema(refObjectYaml.resolveRef(), refsStrategy);
+        if (refsStrategy == InlineRefs || s.inlined())
+            return std::move(s);
+
+        if (s.name.empty()) // Use the $ref's last segment as a fallback for the name
+            s.name =
+                titleCased({find(refPath.crbegin(), refPath.crend(), '/').base(), refPath.cend()});
+        tu = addSchema(std::move(s));
+        currentModel().localRefs.emplace(refPath, tu);
+        return makeTrivialSchema(std::move(tu));
+    }
+
+    auto&& [schemaOrTu, importPath, hasExtraDeps] =
+        loadSchemaFromRef(refPath, refsStrategy == InlineRefs);
+
+    return dispatchVisit(
+        std::move(schemaOrTu),
+        [this, refPath, &tu, importPath](TypeUsage&& refTu) {
+            cout << logOffset() << "Resolved $ref: " << refPath << " to type usage " << refTu.name
+                 << '\n';
+            if (!importPath.empty())
+                refTu.addImport(importPath.string());
+            refTu.importRenderer = tu.importRenderer;
+
+            return makeTrivialSchema(std::move(refTu));
+        },
+        [this, &tu, &refObjectYaml, importPath, hasExtraDeps](ObjectSchema&& s) {
+            refObjectYaml.maybeLoad("description", &s.description);
+
+            if (!importPath.empty())
+                tu.addImport(importPath.string());
+
             // If the model is non-trivial the inlined main schema likely
             // depends on other definitions from the same file; but it's
             // not always practical to inline dependencies as well
-            if (refModel.types.size() > 1) {
-                cout << "The dependencies will still be imported from "
-                     << importPath << endl;
-                currentModel().addImportsFrom(tu); // One import actually
+            if (hasExtraDeps) {
+                cout << logOffset() << "The dependencies will still be imported from " << importPath
+                     << '\n';
+                currentModel().addImportsFrom(tu); // Usually one, unless mapType() added more
             }
-            return refSchema;
-        }
-        tu.name = refSchema.name;
-        tu.baseName = tu.name.empty() ? refPath : tu.name;
-    }
-    cout << logOffset() << "Resolved $ref: " << refPath << " to type usage "
-         << tu.name << endl;
-
-    return makeTrivialSchema(std::move(tu));
+            return std::move(s);
+        });
 }
 
 ObjectSchema Analyzer::makeTrivialSchema(TypeUsage&& tu) const
@@ -449,13 +485,15 @@ optional<VarDecl> Analyzer::makeVarDecl(TypeUsage type, string_view baseName,
 
 void Analyzer::addVarDecl(VarDecls &varList, VarDecl &&v) const
 {
-    erase_if(varList, [&v, this](const VarDecl& vv) {
-        if (v.name != vv.name)
-            return false;
-        cout << logOffset() << "Re-defining field " << vv << endl;
-        return true;
-    });
-    varList.emplace_back(v);
+    const auto vIt = ranges::find(varList, v.name, &VarDecl::name);
+    if (vIt == varList.end()) {
+        varList.emplace_back(std::move(v));
+        return;
+    }
+    // throw Exception("Attempt to overwrite field " + v.name);
+    cout << logOffset() << "Warning: re-defining field " << *vIt
+         << ", make sure its schema is inlined or standalone to avoid aliasing\n";
+    *vIt = std::move(v);
 }
 
 void Analyzer::addVarDecl(VarDecls& varList, TypeUsage type,
@@ -674,14 +712,12 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
     return model;
 }
 
-pair<const Model&, fs::path>
-Analyzer::loadDependency(string_view relPath, const string& overrideTitle, bool forceInlining)
+Analyzer::ImportedSchemaData Analyzer::loadSchemaFromRef(string_view refPath, bool preferInlining)
 {
-    const auto& fullPath = context().fileDir / relPath;
+    const auto& fullPath = context().fileDir / refPath;
     const auto stem = makeModelKey(fullPath);
     const auto [mIt, unseen] = _allModels.try_emplace(stem);
     auto& model = mIt->second;
-    const pair result {cref(model), stem};
 
     // If there is a matching model just return it
     auto modelRole = InAndOut;
@@ -689,18 +725,25 @@ Analyzer::loadDependency(string_view relPath, const string& overrideTitle, bool 
         if (model.apiSpec != ApiSpec::JSONSchema)
             throw Exception(
                 string("Dependency model for ")
-                    .append(relPath)
+                    .append(refPath)
                     .append(" is found in the cache but doesn't seem to be for a data structure"));
         if (!model.callClasses.empty())
             throw Exception(
                 "Internal error: a JSON Schema model has API definitions");
 
         if (!model.types.empty()) {
-            modelRole = model.types.back().role;
+            const auto& mainSchema = model.types.back().first;
+            modelRole = mainSchema->role;
             if (modelRole == InAndOut || modelRole == currentRole()) {
-                cout << logOffset() << "Reusing already loaded model for " << relPath
+                cout << logOffset() << "Reusing already loaded model for " << refPath
                      << " with role " << modelRole << '\n';
-                return result;
+                if (!mainSchema->inlined()) {
+                    if (!preferInlining)
+                        return {model.types.back().second, stem};
+                    cout << logOffset() << "Forced inlining of schema " << mainSchema
+                         << " $ref'ed as " << refPath << '\n';
+                }
+                return {mainSchema->cloneForInlining(), stem, model.types.size() > 1};
             }
             cout << logOffset()
                  << "Found existing data model generated for role " << modelRole
@@ -708,36 +751,41 @@ Analyzer::loadDependency(string_view relPath, const string& overrideTitle, bool 
             modelRole = InAndOut;
             model.clear();
         } else {
-            cout << logOffset() << "Warning: empty data model for " << relPath
+            cout << logOffset() << "Warning: empty data model for " << refPath
                  << " has been found in the cache; reloading\n";
             modelRole = currentRole();
         }
     }
 
-    cout << logOffset() << "Loading data schema from " << relPath
+    cout << logOffset() << "Loading data schema from " << refPath
          << " with role " << modelRole << '\n';
     const auto yaml =
         YamlNode::fromFile(_baseDir / fullPath, _translator.substitutions()).as<YamlMap<>>();
     const ContextOverlay _modelContext(*this, fullPath.parent_path(), &model, modelRole);
-    fillDataModel(model, yaml, stem.filename());
-    if (model.types.empty())
-        throw Exception(string(relPath) + " has no schemas");
-    auto& mainSchema = model.types.back();
-    if (!overrideTitle.empty() && !model.types.empty())
-        mainSchema.name = overrideTitle;
-    if (mainSchema.hasParents() && (!mainSchema.fields.empty() || mainSchema.hasPropertyMap()))
+    auto tu = fillDataModel(model, yaml, stem.filename());
+    const auto& mainSchema = model.types.back().first;
+    if (mainSchema->hasParents() && (!mainSchema->fields.empty() || mainSchema->hasPropertyMap())) {
         cout << logOffset() << "Inlining suppressed due to model complexity\n";
-    else
-        model.inlineMainSchema = (unseen || model.inlineMainSchema) && forceInlining;
+        return {tu, stem};
+    }
+    mainSchema->preferInlining = (unseen || mainSchema->preferInlining) && preferInlining;
+    if (mainSchema->inlined()) {
+        cout << logOffset() << "The main schema from " << refPath;
+        if (mainSchema->trivial())
+            cout << " is trivial (see the mapping above) and";
+        cout << " will be inlined\n";
 
-    return result;
+        currentModel().imports.insert(model.imports.begin(), model.imports.end());
+        return {mainSchema->cloneForInlining(), stem, model.types.size() > 1};
+    }
+    return {tu, stem};
 }
 
-void Analyzer::fillDataModel(Model& m, const YamlMap<>& yaml, const fs::path& filename)
+TypeUsage Analyzer::fillDataModel(Model& m, const YamlMap<>& yaml, const fs::path& filename)
 {
     m.apiSpec = ApiSpec::JSONSchema;
     auto&& s = analyzeSchema(yaml);
     if (s.name.empty())
         s.name = titleCased(filename.string());
-    m.addSchema(std::move(s));
+    return addSchema(std::move(s));
 }

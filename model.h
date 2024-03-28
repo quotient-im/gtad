@@ -68,12 +68,14 @@ struct TypeUsage : Identifier
     std::unordered_map<std::string, std::string> attributes;
     std::unordered_map<std::string, std::vector<std::string>> lists;
     std::vector<TypeUsage> paramTypes; ///< Parameter types for type templates
+    std::string importRenderer = "{{_}}";
 
     TypeUsage() = default;
     explicit TypeUsage(std::string typeName)
         : Identifier {std::move(typeName)}
     {}
     explicit TypeUsage(const ObjectSchema& schema);
+    void assignName(std::string setName, std::string setBaseName = {});
 
     [[nodiscard]] TypeUsage specialize(std::vector<TypeUsage>&& params) const;
 
@@ -84,15 +86,17 @@ struct TypeUsage : Identifier
         lists["imports"].emplace_back(std::move(importName));
     }
 
+    std::string_view getAttributeValue(const std::string& attrName) const
+    {
+        const auto attrIt = attributes.find(attrName);
+        return attrIt != attributes.end() ? attrIt->second : std::string_view{};
+    }
+
     [[nodiscard]] bool operator==(const TypeUsage& other) const
     {
         return name == other.name && call == other.call
                && baseName == other.baseName && attributes == other.attributes
                && lists == other.lists && paramTypes == other.paramTypes;
-    }
-    [[nodiscard]] bool operator!=(const TypeUsage& other) const
-    {
-        return !operator==(other);
     }
 };
 
@@ -135,11 +139,16 @@ struct FlatSchema : Identifier {
 struct ObjectSchema : FlatSchema {
     std::string description;
     std::vector<TypeUsage> parentTypes;
+    mutable bool preferInlining = false;
 
     explicit ObjectSchema(InOut inOut, const Call* scope = nullptr,
                           std::string description = {})
         : FlatSchema(inOut, scope), description(std::move(description))
     { }
+    ~ObjectSchema() = default; // Just to satisfy Rule of 5
+    ObjectSchema(ObjectSchema&&) = default;
+    void operator=(const ObjectSchema&) = delete;
+    void operator=(ObjectSchema&&) = delete;
 
     [[nodiscard]] bool empty() const
     {
@@ -152,6 +161,16 @@ struct ObjectSchema : FlatSchema {
                && propertyMap.name.empty();
     }
     [[nodiscard]] bool hasParents() const { return !parentTypes.empty(); }
+    ObjectSchema cloneForInlining() const
+    {
+        auto clone = *this;
+        clone.preferInlining = true;
+        return clone;
+    }
+    bool inlined() const { return trivial() || preferInlining; }
+
+private: // I know, doesn't belong to structs, but it's the simplest and most readable
+    ObjectSchema(const ObjectSchema&) = default;
 };
 
 /** @brief A structure to store request and response bodies
@@ -299,14 +318,14 @@ struct Model {
     using string = std::string;
     /// Map from the included path (in API description) to the import renderer
     using imports_type = std::unordered_map<string, string>;
-    using schemas_type = std::vector<ObjectSchema>;
+    using schemaholder_type = std::pair<std::unique_ptr<const ObjectSchema>, TypeUsage>;
+    using schemaptrs_type = std::vector<std::pair<const ObjectSchema*, TypeUsage>>;
 
     ApiSpec apiSpec;
 
-    bool inlineMainSchema = false;
-
     imports_type imports;
-    schemas_type types;
+    std::vector<schemaholder_type> types;
+    std::unordered_map<std::string, TypeUsage> localRefs;
 
     std::vector<Server> defaultServers;
     std::list<CallClass> callClasses;
@@ -314,7 +333,7 @@ struct Model {
     void clear();
 
     Call& addCall(Path path, string verb, string operationId, bool needsToken);
-    void addSchema(ObjectSchema&& schema);
+    void addSchema(ObjectSchema&& schema, const TypeUsage &tu);
     void addImportsFrom(const ObjectSchema& type);
     void addImportsFrom(const FlatSchema& type);
     void addImportsFrom(const TypeUsage& type);
@@ -326,7 +345,7 @@ struct Model {
     [[nodiscard]] bool trivial() const
     {
         return callClasses.empty() &&
-                types.size() == 1 && types.front().trivial();
+               types.size() == 1 && types.front().first->trivial();
     }
 };
 

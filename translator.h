@@ -49,14 +49,21 @@ public:
                                     string_view baseName = {}) const;
     [[nodiscard]] string mapIdentifier(string_view baseName, const Identifier* scope,
                                        bool required) const;
+    [[nodiscard]] TypeUsage mapReference(string_view fullRefPath) const;
+    [[nodiscard]] bool isRefInlined(string_view fullRefPath) const;
 
 private:
     Verbosity _verbosity;
     subst_list_t _substitutions;
     subst_list_t _identifiers;
+
     /// In JSON/YAML, the below looks like:
     /// <swaggerType>: { <swaggerFormat>: <TypeUsage>, ... }, ...
     pair_vector_t<pair_vector_t<TypeUsage>> _typesMap;
+    string _importRenderer;
+    std::vector<string> _inlinedRefs;
+    pair_vector_t<TypeUsage> _refReplacements;
+
     /// Mapping of file extensions to mustache templates
     pair_vector_t<string> _dataTemplates, _apiTemplates;
     path _outputDirPath;
