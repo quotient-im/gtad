@@ -143,22 +143,8 @@ inline Printer::context_type addLibrary(Printer::context_type contextObj)
 {
     using km::lambda2;
     using km::renderer;
-    contextObj.emplace("_cap", lambda2 {[](const string& s, renderer render) {
-                           return capitalizedCopy(render(s, false));
-                       }});
-    contextObj.emplace("_toupper", lambda2 {[](string s, renderer render) {
-                           s = render(s, false);
-                           transform(s.begin(), s.end(), s.begin(), [](char c) {
-                               return toupper(c, locale::classic());
-                           });
-                           return s;
-                       }});
-    contextObj.emplace("_tolower", lambda2 {[](string s, renderer render) {
-                           s = render(s, false);
-                           transform(s.begin(), s.end(), s.begin(), [](char c) {
-                               return tolower(c, locale::classic());
-                           });
-                           return s;
+    contextObj.emplace("_titleCase", lambda2{[](const string& s, renderer render) {
+                           return titleCased(render(s, false));
                        }});
     return contextObj;
 }
@@ -247,10 +233,9 @@ object Printer::renderType(const TypeUsage& tu) const
     {
         // Not using call->qualifiedName() because:
         // 1) we don't have nested calls as a thing
-        // 2) we qualify types with call names, not calls (think of referring
+        // 2) we qualify types, not calls, with call names (think of referring
         //    to another type within the same call)
         qualifiedValues.emplace("scope", tu.call->name);
-        qualifiedValues.emplace("scopeCamelCase", camelCase(tu.call->name));
     }
 
     // Fill parameters for parameterized types
@@ -275,7 +260,7 @@ object Printer::renderType(const TypeUsage& tu) const
 
 object Printer::dumpField(const VarDecl& field) const
 {
-    auto paramNameCamelCase = camelCase(field.name);
+    auto paramNameCamelCase = titleCased(field.name);
     paramNameCamelCase.front() =
         tolower(paramNameCamelCase.front(), locale::classic());
 
@@ -435,7 +420,6 @@ vector<string> Printer::print(const fspath& filePathBase,
         setList(mOperations, "operation", callClass.calls, [&](const Call& call) {
             object mCall{
                 {"operationId",          call.name           },
-                {"camelCaseOperationId", camelCase(call.name)},
                 {"httpMethod",           call.verb           },
                 {"path",                 call.path           },
                 {"summary",              call.summary        },

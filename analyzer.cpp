@@ -87,7 +87,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap<>& node)
             auto&& elemType = analyzeTypeUsage(*yamlElemType);
             const auto& protoType =
                 _translator.mapType("array", elemType.baseName,
-                                    camelCase(node.get<string>("title", elemType.baseName + "[]")));
+                                    titleCased(node.get<string>("title", elemType.baseName + "[]")));
             return protoType.specialize({std::move(elemType)});
         }
 
@@ -267,7 +267,7 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
     if (properties || additionalProperties
         || (!schema.empty() && !schema.trivial())) {
         // If the schema is not just an alias for another type, name it.
-        schema.name = camelCase(name);
+        schema.name = titleCased(name);
     }
 
     if (properties) {
@@ -738,6 +738,6 @@ void Analyzer::fillDataModel(Model& m, const YamlMap<>& yaml, const fs::path& fi
     m.apiSpec = ApiSpec::JSONSchema;
     auto&& s = analyzeSchema(yaml);
     if (s.name.empty())
-        s.name = camelCase(filename.string());
+        s.name = titleCased(filename.string());
     m.addSchema(std::move(s));
 }

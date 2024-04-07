@@ -22,24 +22,14 @@ TypeUsage TypeUsage::specialize(vector<TypeUsage>&& params) const
     return tu;
 }
 
-void capitalize(string& s, string::size_type pos = 0)
-{
-    if (pos < s.size())
-        s[pos] = toupper(s[pos], locale::classic());
-}
+void toUpper(char& c) { c = toupper(c, locale::classic()); }
 
-string capitalizedCopy(string s)
-{
-    capitalize(s);
-    return s;
-}
-
-string camelCase(string s)
+string titleCased(string s)
 {
     string::size_type pos = 0;
     while (pos < s.size())
     {
-        capitalize(s, pos);
+        toUpper(s[pos]);
         pos = s.find_first_of("/_ .-:", pos);
         if (pos == string::npos)
             break;
@@ -50,9 +40,7 @@ string camelCase(string s)
             ++pos;
     }
     // Remove all remaining non-identifier characters
-    s.erase(remove_if(s.begin(), s.end(),
-                      [] (auto c) { return !isalnum(c) && c != '_'; }),
-            s.end());
+    std::erase_if(s, [] (auto c) { return !isalnum(c) && c != '_'; });
     return s;
 }
 

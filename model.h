@@ -29,8 +29,7 @@
 #include <unordered_map>
 #include <variant>
 
-std::string capitalizedCopy(std::string s);
-std::string camelCase(std::string s);
+std::string titleCased(std::string s);
 
 enum InOut : unsigned char { InAndOut = 0, OnlyIn, OnlyOut };
 
