@@ -125,8 +125,6 @@ TypeUsage Analyzer::addSchema(ObjectSchema&& schema)
     // This is just to enrich the type usage with attributes, not
     // for type substitution
     auto tu = _translator.mapType("schema", schema.name);
-    if (tu.getAttributeValue("_inline"s) == "true")
-        schema.preferInlining = true;
     if (const auto titleAttrIt = tu.attributes.find("title"s); titleAttrIt != tu.attributes.end())
         schema.name = titleAttrIt->second;
     tu.name = schema.name;
@@ -392,8 +390,7 @@ ObjectSchema Analyzer::analyzeRefObject(const YamlMap<>& refObjectYaml, RefsStra
         return makeTrivialSchema(std::move(tu));
     }
 
-    // No type shortcut in the types map (but tu may have some attributes
-    // loaded by mapType() above)
+    // No type shortcut in the references map, load schema from the $ref value
 
     // Check whether the configuration requests inlining; also, if there's an overriding description
     // in the $ref object the resulting schema has to be inlined as it will be distinct from
@@ -404,8 +401,14 @@ ObjectSchema Analyzer::analyzeRefObject(const YamlMap<>& refObjectYaml, RefsStra
     if (refPath.starts_with('#')) {
         // TODO: merge with similar code in loadSchemaFromRef(); and maybe even move the whole
         // branch there
-        auto sIt = currentModel().localRefs.find(refPath);
-        if (sIt != currentModel().localRefs.end()) {
+        const ContextOverlay _schemaContext(
+            *this,
+            {refPath,
+             InAndOut /* TODO: see loadSchemaFromRef() - we have to have similar stuff here */,
+             nullptr}); // NB: schemas in localRefs are considered common, not belonging to any call
+        if (auto sIt = currentModel().localRefs.find(refPath);
+            sIt != currentModel().localRefs.end())
+        {
             if (refsStrategy != InlineRefs) {
                 tu = sIt->second;
                 cout << logOffset() << "Reusing already loaded mapping " << refPath
@@ -415,13 +418,9 @@ ObjectSchema Analyzer::analyzeRefObject(const YamlMap<>& refObjectYaml, RefsStra
             cout << logOffset() << refObjectYaml.location() << ": forced inlining of saved schema "
                  << sIt->second << '\n';
         }
-        // NB: schemas in localRefs are considered common, not belonging to any call
-        const ContextOverlay _schemaContext(
-            *this,
-            {refPath, InAndOut /* see loadSchemaFromRef() - we have to have similar stuff here */,
-             nullptr});
         auto&& s = analyzeSchema(refObjectYaml.resolveRef(), refsStrategy);
-        if (refsStrategy == InlineRefs || s.inlined())
+        s.preferInlining = refsStrategy == InlineRefs;
+        if (s.inlined())
             return std::move(s);
 
         if (s.name.empty()) // Use the $ref's last segment as a fallback for the name
