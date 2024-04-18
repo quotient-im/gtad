@@ -31,15 +31,12 @@ in the future).
 
 ### Pre-requisites
 - a recent Linux, Windows or macOS system
-  - for Ubuntu flavours - bionic or newer (or a derivative) is good enough
-  - [macOS 10.15 SDK or later is needed](https://developer.apple.com/documentation/xcode_release_notes/xcode_11_release_notes)
-    due to `std::filesystem` dependency
 - a Git client to check out this repo
 - Qt 6 (either Open Source or Commercial)
 - CMake 3.20 or newer (from your package management system or
   [the official website](https://cmake.org/download/))
 - a C++ toolchain with solid C++20 and at least some C++23 support (ranges, in particular), that is:
-  GCC 12 (Windows, Linux, OSX), Clang 14 (Linux), Xcode 15 (macOS 13),
+  GCC 13 (Windows, Linux, OSX), Clang 16 (Linux), Xcode 15 (macOS 13),
   Visual C++ 19.30 (aka VS 2022 17.0), or newer
 - any build system that works with CMake and/or qmake should be fine:
   GNU Make, ninja (any platform), NMake, jom (Windows) are known to work.
@@ -52,11 +49,11 @@ GTAD only uses a tiny subset of Qt Base so you can install as little of Qt as
 possible.
 
 #### OS X
-`brew install qt5` should get you a recent Qt5. You may need to tell CMake
+`brew install qt` should get you a recent Qt. You may need to tell CMake
 about the path to Qt by passing `-DCMAKE_PREFIX_PATH=<where-Qt-installed>`.
 
 #### Windows
-1. Install Qt5 and CMake.
+1. Install Qt and CMake.
 1. The commands in further sections imply that cmake is in your PATH - otherwise
    you have to prepend those commands with actual paths. As an option, it's a 
    good idea to run a `qtenv2.bat` script that can be found in
@@ -586,16 +583,13 @@ in `gtad.yaml` and use them within import renderers.
 
 #### Printer configuration
 
-The printer is essentially a Mustache generator (see above) that receives a 
-certain context (very much resembling JSON structure) produced from the model
-made by the analyzer and from additional definitions, as described below.
-For that reason, it's essential that you get acquainted with Mustache language
-and its vocabulary;
-[the entire Mustache specification](https://mustache.github.io/mustache.5.html)
-is a 5-minute read but the following section gives a quick overview of what's
-available. Originally Mustache has been made to render HTML but GTAD
-reconfigures the generator for C++ instead (so you don't need to worry about
-`&`-escaping etc.).
+The printer is essentially a Mustache generator that receives a certain context (mostly resembling
+JSON structure) produced from the model made by the analyzer and from additional definitions,
+as described below. For that reason, it's essential that you get acquainted with Mustache language
+and its vocabulary; [the entire Mustache specification](https://mustache.github.io/mustache.5.html)
+is a 5-minute read but the following section gives a quick overview of what's available. Originally
+Mustache was made to render HTML but GTAD reconfigures the generator for C++ instead (so you
+don't need to worry about `&`-escaping etc.).
 
 ##### Quick introduction into Mustache
 Mustache template syntax boils down to 4 tag types:
@@ -719,35 +713,24 @@ TODO: more tips and tricks
 #### Data model exposed to Mustache
 
 ##### Predefined 
-GTAD provides a small "library" of predefined Mustache tags. Most of them
-start with `@` to avoid clashes with ordinary context values.
-- `@cap` - capitalises the passed text; `{{#@cap}}text{{/@cap}}` is rendered
-  as `Text`.
-- `@toupper` and `@tolower` - do what you expect them to do to each letter of
-  the passed text, e.g. `{{#@toupper}}tExt{{/@toupper}}` becomes `TEXT`.
-- before GTAD 0.7, `@filePartial` allowed to load a Mustache template from
-  another file, with the relative or absolute path passed as the argument.
-  This is no more needed now that GTAD is on Kainjow Mustache v4.0 that 
-  allows to use the normal Mustache `{{>partial}}` syntax to load a partial
-  either from the context (`gtad.yaml`) or, failing that, from a file.
+For now, GTAD provides one predefined Mustache tag. There might be more, eventually.
+- `_titleCase` - does what you expect it to do to the passed text, e.g.
+`{{#_titleCase}}plain_text{{/_titleCase}}` becomes `PlainText`. It does not support locales for now
+but this may change in the future.
+
+GTAD versions before 0.11 had `_cap`, `_toupper` and `_tolower` tags that are no more used and were
+therefore discontinued. Also, `@filePartial` that allowed to load a Mustache template from another
+file before GTAD 0.7, was removed as external files inclusion now works with the native partial
+syntax: `{{>name}}` would first try to load a partial from the context (`gtad.yaml`); failing
+that, from the file named `name`; and as a last resort, from the file named `name.mustache`.
 
 GTAD has a few extensions to _lists_ compared to original Mustache:
-- on the same level with the list `l` an additional boolean variable with
-  the name `l?` (with the question mark appended) is set to `true`. This
-  allows you to write templates that get substituted no more than once even
-  when a variable is a list (see the example below). Unfortunately, because
-  false behaves as _null_ in this Mustache implementation, you cannot rely
-  on nested lists with the same name `l` to have the correct `l?` value:
-  the following snippet
-  ```handlebars
-  {{#l?}}{{#l}}{{#a}}
-    {{!the following is supposed to be on the `l?` nested in `a`;
-       but it checks the upper level `l?` when inner `l?` is empty or false}}
-    {{^l?}}something{{/l?}}
-  {{/a}}{{/l}}{{/l?}}
-  ```
-  will not emit `something` even if the inner `l` list is empty. Fixing this is
-  [on the roadmap](https://github.com/KitsuneRal/gtad/issues/50).
+- on the same level with the list `l` an additional boolean variable with the name `l?` (with
+  the question mark suffix) is set to `true`. This allows you to write templates that get
+  substituted no more than once even when a variable is a list (see the example below). Before
+  version 0.10.2 GTAD had [a bug](https://github.com/KitsuneRal/gtad/issues/50) not resetting
+  `l?` to false when lists with the same name were nested; 0.10.2 and later versions allow to nest
+  lists with the same name without side effects.
 - inside the list, a boolean variable `_join` is set to true for all elements
   except the last one. For (eventual) compatibility with Mustache templates
   used in swagger-codegen, there's a synonym `hasMore` equal to `_join`.
@@ -766,24 +749,7 @@ The list{{#list?}}: {{#list}}{{_}}{{#_join}}, {{/_join}}{{/list}}{{/list?
 For the context: `{ "list": [1, 2, 3] }` the output will be:
 `The list: 1, 2, 3`; for the empty context, it will be: `The list is empty`.
   
-Text-manipulating lambdas do not support locales since the main intention of
-GTAD is to generate code (written in Latin script). This may change in
-the future.
 
 ##### API data model
 
 TODO
-
-## Troubleshooting
-
-#### Building fails
-
-If `cmake` fails with...
-```
-CMake Warning at CMakeLists.txt:11 (find_package):
-  By not providing "FindQt5Core.cmake" in CMAKE_MODULE_PATH this project
-  has asked CMake to find a package configuration file provided by
-  "Qt5Core", but CMake did not find one.
-```
-...then you need to set the right `-DCMAKE_PREFIX_PATH` variable, see above.
-
