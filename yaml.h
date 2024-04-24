@@ -348,7 +348,7 @@ protected:
     explicit YamlContainer(const YAML::Node& n, std::shared_ptr<Context> context, AllowUndefined)
         : YamlNode(n, context, AllowUndefined{})
     {
-        if (IsDefined())
+        if (IsDefined() && Type() != YAML::NodeType::Null) // Null is treated as empty container
             checkType(nodeType);
     }
 };
