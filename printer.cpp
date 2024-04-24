@@ -156,8 +156,6 @@ Printer::Printer(context_type&& contextObj, fspath inputBasePath,
     , _contextData(addLibrary(contextObj))
     , _delimiter(std::move(delimiter))
     , _typeRenderer(makeMustache(safeString(contextObj, "_typeRenderer", "{{>name}}")))
-    , _leftQuote(safeString(contextObj, "_leftQuote", safeString(contextObj, "_quote", "\"")))
-    , _rightQuote(safeString(contextObj, "_rightQuote", safeString(contextObj, "_quote", "\"")))
     , _inputBasePath(std::move(inputBasePath))
 {
     if (!outFilesListPath.empty())
@@ -451,15 +449,14 @@ vector<string> Printer::print(const fspath& filePathBase,
             auto&& mCallTypes = dumpTypes(model.types, &call);
             if (!mCallTypes.empty())
                 mCall.emplace("models", mCallTypes);
-            setList(mCall, "pathParts", call.path.parts,
-                    [this, &call](const Path::part_type& p) {
-                        const string s{call.path, get<0>(p), get<1>(p)};
-                        return get<2>(p) == Path::Variable ? s
-                               : _leftQuote + s + _rightQuote;
-                    });
+            setList(mCall, "pathParts", call.path.parts, [&call](const Path::PartType& p) {
+                return object{
+                    {p.kind == Path::PartType::Variable ? "variable"s : "literal"s,
+                     string{call.path, p.from, p.to}}
+                };
+            });
 
-            addList(mCall, "allParams",
-                    copyPartitionedByRequired(call.collateParams()));
+            addList(mCall, "allParams", copyPartitionedByRequired(call.collateParams()));
             for (size_t i = 0; i < Call::ParamGroups.size(); ++i)
                 addList(mCall, Call::ParamGroups[i] + "Params",
                         call.params[i]);

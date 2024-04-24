@@ -240,14 +240,14 @@ private:
 struct Path : public std::string
 {
     explicit Path(std::string path);
-    Path(const Path& other) = default;
-    Path& operator=(const Path& other) = default;
-    Path(Path&&) = default;
-    Path& operator=(Path&&) = default;
 
-    enum PartKind { Literal, Variable };
-    using part_type = std::tuple<size_type /*from*/, size_type /*to*/, PartKind>;
-    std::vector<part_type> parts;
+    struct PartType {
+        size_type from;
+        size_type to;
+        enum { Literal, Variable } kind;
+    };
+
+    std::vector<PartType> parts;
     std::vector<Server> overrideServers;
 };
 

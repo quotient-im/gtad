@@ -35,8 +35,6 @@ private:
     kainjow::mustache::data _contextData;
     string _delimiter;
     template_type _typeRenderer;
-    string _leftQuote;
-    string _rightQuote;
     fspath _inputBasePath;
     mutable std::ofstream _outFilesList;
 

@@ -75,15 +75,15 @@ Path::Path(string path)
         const auto i1 = find('{', i);
         if (i1 == npos)
         {
-            parts.emplace_back(i, npos, Literal);
+            parts.emplace_back(i, npos, PartType::Literal);
             break;
         }
         const auto i2 = find('}', i1);
         if (i2 == npos)
             throw ModelException("Unbalanced braces in the path: " + *this);
 
-        parts.emplace_back(i, i1 - i, Literal);
-        parts.emplace_back(i1 + 1, i2 - i1 - 1, Variable);
+        parts.emplace_back(i, i1 - i, PartType::Literal);
+        parts.emplace_back(i1 + 1, i2 - i1 - 1, PartType::Variable);
         i = i2 + 1;
     }
 }
