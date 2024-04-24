@@ -260,10 +260,8 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
         env.emplace(pName, makePartial(pValue, delimiter));
 
     const auto& templatesYaml = mustacheYaml.maybeGet<YamlMap<YamlMap<string>>>("templates");
-    for (auto [templates, nodeName] :
-         {pair {&_dataTemplates, "data"}, {&_apiTemplates, "api"}})
-        for (auto extToTemplateYaml : templatesYaml->maybeGet(nodeName))
-            templates->emplace_back(extToTemplateYaml);
+    templatesYaml->maybeLoad("data", &_dataTemplates);
+    templatesYaml->maybeLoad("api", &_apiTemplates);
 
     _printer = make_unique<Printer>(std::move(env), configFilePath.parent_path(),
                                     mustacheYaml.get<string>("outFilesList", {}),

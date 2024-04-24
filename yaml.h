@@ -24,6 +24,7 @@
 #include <yaml-cpp/node/detail/impl.h>
 #include <yaml-cpp/node/iterator.h>
 #include <yaml-cpp/node/node.h>
+#include <yaml-cpp/node/convert.h>
 
 #include <utility>
 #include <ranges>
@@ -364,3 +365,32 @@ constexpr inline auto resolveRefs = std::views::transform([](const auto& v) {
     else
         return v.resolveRef();
 });
+
+template <typename T>
+struct YAML::convert<pair_vector_t<T>> {
+    static Node encode(const pair_vector_t<T>& rhs)
+    {
+        // This is quite opinionated; a vector of pairs can be just as correctly stored as
+        // a sequence. The original yaml-cpp logic, however, would produce a sequence of two-element
+        // sequences for it, which is never appropriate in our cases, and rarely appropriate
+        // elsewhere. Ideally encode() should've accepted a target type somehow; but it would make
+        // for a completely different encoding API, and we don't even use that except in as().
+        Node node(NodeType::Map);
+        for (const auto& element : rhs)
+            node.force_insert(element.first, element.second);
+        return node;
+    }
+
+    static bool decode(const Node& node, pair_vector_t<T>& rhs)
+    {
+        if (!node.IsMap())
+            return false;
+
+        rhs.clear();
+        rhs.reserve(node.size());
+        for (const auto& element : node)
+            rhs.emplace_back(element.first.Scalar(), element.second.as<T>());
+        return true;
+    }
+};
+
