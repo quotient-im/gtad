@@ -80,7 +80,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap<>& node)
     if (yamlTypeNode && yamlTypeNode->IsSequence())
         return analyzeMultitype(yamlTypeNode->as<YamlSequence<>>());
 
-    auto yamlType = yamlTypeNode ? yamlTypeNode->as<string>() : "object"s;
+    auto yamlType = yamlTypeNode ? yamlTypeNode->as<string>() : ""s;
     if (yamlType == "array")
     {
         if (auto yamlElemType = node.maybeGet<YamlMap<>>("items"); !yamlElemType.empty()) {
@@ -93,7 +93,7 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap<>& node)
 
         return _translator.mapType("array");
     }
-    if (yamlType == "object")
+    if (yamlType.empty() || yamlType == "object")
     {
         auto schema = analyzeSchema(node);
         if (schema.maxProperties == 0)
@@ -109,15 +109,10 @@ TypeUsage Analyzer::analyzeTypeUsage(const YamlMap<>& node)
         if (!schema.name.empty()) // Only ever filled for non-empty schemas
             return addSchema(std::move(schema)); // Wrap `schema` in a TypeUsage
 
-        // An empty object is schemaless but existing, mapType("object")
-        // Also, a nameless non-empty schema is treated as a generic
-        // mapType("object") for now. TODO, low priority: ad-hoc typing (via tuples?)
+        // An empty type is schemaless but existing, while a nameless non-empty schema is treated
+        // as a generic mapType("object") for now. TODO, low priority: ad-hoc typing (via tuples?)
     }
-    if (const auto tu = _translator.mapType(yamlType, node.get<string_view>("format", {}));
-        !tu.empty())
-        return tu;
-
-    throw YamlException(node, "Unknown type: " + yamlType);
+    return _translator.mapType(yamlType, node.get<string_view>("format", {}));
 }
 
 TypeUsage Analyzer::addSchema(ObjectSchema&& schema)
