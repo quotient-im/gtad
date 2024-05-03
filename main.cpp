@@ -103,13 +103,13 @@ int main(int argc, char* argv[])
                 continue;
 
             Analyzer a{translator, path};
-            for (const auto& f: fs::directory_iterator(
-                     path, fs::directory_options::skip_permission_denied)) {
+            for (const auto& f :
+                 fs::directory_iterator(path, fs::directory_options::skip_permission_denied))
+            {
                 if (!f.is_regular_file())
                     continue;
                 auto&& fName = f.path().filename();
-                if (find(exclusions.begin(), exclusions.end(), fName)
-                    == exclusions.cend())
+                if (ranges::find(exclusions, fName) == exclusions.cend())
                     a.loadModel(fName.string(), role);
             }
         }
