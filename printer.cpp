@@ -295,10 +295,9 @@ void Printer::addList(object& target, const string& name,
     setList(target, name, properties, bind_front(&Printer::dumpField, this));
 }
 
-auto copyPartitionedByRequired(std::vector<VarDecl> vars)
+inline auto copyPartitionedByRequired(std::vector<VarDecl> vars)
 {
-    std::stable_partition(vars.begin(), vars.end(),
-                          [](const VarDecl& v) { return v.required; });
+    ranges::stable_partition(vars, &VarDecl::required);
     return vars;
 }
 
@@ -307,7 +306,7 @@ object Printer::dumpAllTypes(const Model::schemaptrs_type& types) const
     object mModels;
     if (!types.empty())
         setList(
-            mModels, "model", types, [this](std::pair<const ObjectSchema*, TypeUsage> type) {
+            mModels, "model", types, [this](const std::pair<const ObjectSchema*, TypeUsage>& type) {
                 auto mType = renderType(type.second);
                 mType["classname"] = type.first->name; // Swagger compat
                 dumpDescription(mType, *type.first);
@@ -419,11 +418,11 @@ vector<string> Printer::print(const fspath& filePathBase,
         // Any attributes should be added after setList
         setList(mOperations, "operation", callClass.calls, [&](const Call& call) {
             object mCall{
-                {"operationId",          call.name           },
-                {"httpMethod",           call.verb           },
-                {"path",                 call.path           },
-                {"summary",              call.summary        },
-                {"skipAuth",             !call.needsSecurity }
+                {"operationId", call.name          },
+                {"httpMethod",  call.verb          },
+                {"path",        call.path          },
+                {"summary",     call.summary       },
+                {"skipAuth",    !call.needsSecurity}
             };
             dumpDescription(mCall, call);
 
@@ -433,8 +432,9 @@ vector<string> Printer::print(const fspath& filePathBase,
                 const auto& producedContentTypes = call.responses.front().contentTypes;
                 globalProducesNonJson |= dumpContentTypes(mCall, "produces", producedContentTypes);
                 mCall.emplace("producesImage?",
-                              all_of(producedContentTypes.begin(), producedContentTypes.end(),
-                                     [](const string& s) { return s.starts_with("image/"); }));
+                              ranges::all_of(producedContentTypes, [](const string& s) {
+                                  return s.starts_with("image/");
+                              }));
             }
 
             auto&& mCallTypes = dumpTypes(model.types, &call);
@@ -475,14 +475,10 @@ vector<string> Printer::print(const fspath& filePathBase,
                 copy(r.headers.begin(), r.headers.end(),
                      back_inserter(allProperties));
 
-                dispatchVisit(
-                    r.body,
-                    [this, &mResponse,
-                     &allProperties](const FlatSchema& unpackedBody) {
+                dispatchVisit(r.body,
+                    [this, &mResponse, &allProperties](const FlatSchema& unpackedBody) {
                         addList(mResponse, "properties", unpackedBody.fields);
-                        copy(unpackedBody.fields.begin(),
-                             unpackedBody.fields.end(),
-                             back_inserter(allProperties));
+                        ranges::copy(unpackedBody.fields, back_inserter(allProperties));
                         if (unpackedBody.hasPropertyMap()) {
                             allProperties.emplace_back(unpackedBody.propertyMap);
                             mResponse["propertyMap"] =
@@ -490,8 +486,7 @@ vector<string> Printer::print(const fspath& filePathBase,
                         } else if (unpackedBody.fields.size() == 1)
                             mResponse["singleValue?"] = true;
                     },
-                    [this, &mResponse,
-                     &allProperties](const VarDecl& packedBody) {
+                    [this, &mResponse, &allProperties](const VarDecl& packedBody) {
                         mResponse.emplace("inlineResponse",
                                           dumpField(packedBody));
                         allProperties.emplace_back(packedBody);

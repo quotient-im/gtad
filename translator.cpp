@@ -222,28 +222,29 @@ Translator::Translator(const path& configFilePath, path outputDirPath,
         if (_verbosity == Verbosity::Debug) {
             // TODO: dump identifier substitutions?
             for (const auto& t : _typesMap) {
-                clog << "Type " << t.first << ":" << endl;
+                clog << "Type " << t.first << ":\n";
                 for (const auto& f : t.second) {
-                    clog << "  Format " << (f.first.empty() ? "(none)" : f.first) << ":" << endl
+                    clog << "  Format " << (f.first.empty() ? "(none)" : f.first) << ":\n"
                          << "    mapped to " << (!f.second.name.empty() ? f.second.name : "(none)")
-                         << endl;
+                         << '\n';
 
                     if (!f.second.attributes.empty()) {
-                        clog << "    attributes:" << endl;
+                        clog << "    attributes:\n";
                         for (const auto& a : f.second.attributes)
-                            clog << "      " << a.first << " -> " << a.second << endl;
+                            clog << "      " << a.first << " -> " << a.second << '\n';
                     } else
-                        clog << "    no attributes" << endl;
+                        clog << "    no attributes\n";
 
                     if (!f.second.lists.empty()) {
-                        clog << "    lists:" << endl;
+                        clog << "    lists:\n";
                         for (const auto& l : f.second.lists)
-                            clog << "      " << l.first << " (entries: " << l.second.size() << ")"
-                                 << endl;
+                            clog << "      " << l.first << " (entries: " << l.second.size()
+                                 << ")\n";
                     } else
-                        clog << "    no lists" << endl;
+                        clog << "    no lists\n";
                 }
             }
+            clog.flush();
             // TODO: dump reference substitutions
         }
     }
