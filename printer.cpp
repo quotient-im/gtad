@@ -487,7 +487,8 @@ vector<string> Printer::print(const fspath& filePathBase,
                             allProperties.emplace_back(unpackedBody.propertyMap);
                             mResponse["propertyMap"] =
                                 dumpField(unpackedBody.propertyMap);
-                        }
+                        } else if (unpackedBody.fields.size() == 1)
+                            mResponse["singleValue?"] = true;
                     },
                     [this, &mResponse,
                      &allProperties](const VarDecl& packedBody) {
