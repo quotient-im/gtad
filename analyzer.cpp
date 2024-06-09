@@ -657,7 +657,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                         Response response{responseCode, responseData.get<string>("description")};
                         const ContextOverlay _outContext(*this, {responseCode, OnlyOut, &call});
                         for (const auto& [headerName, headerYaml] :
-                             responseData.maybeGet<YamlMap<YamlMap<>>>("headers"))
+                             responseData.maybeGet<YamlMap<YamlMap<>>>("headers") | resolveRefs)
                             addVarDecl(response.headers,
                                        analyzeTypeUsage(isOpenApi3
                                                             ? headerYaml.get<YamlMap<>>("schema")
