@@ -593,9 +593,22 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
             for (auto [verb, yamlCall] : yaml_path.second.as<YamlMap<YamlMap<>>>()) {
                 auto&& operationId = yamlCall.get<string>("operationId");
 
+                // NB: accessToken and accessTokenBearer are Matrix-specific schemes that stand for,
+                // roughly, `{ type: apiKey, scheme: bearer }` in OpenAPI. GTAD only supports these
+                // for now, and even for these, only passes a flag that a given call needs a token.
                 bool needsSecurity = false;
-                if (const auto security = yamlCall.maybeGet<YamlSequence<>>("security"))
-                    needsSecurity = security->front()["accessToken"].IsDefined();
+                for (const auto securityScheme :
+                     yamlCall.maybeGet<YamlSequence<YamlMap<>>>("security"))
+                    switch (securityScheme.size()) {
+                    case 0: break; // Empty security scheme == no token needed
+                    case 1:
+                        needsSecurity |= securityScheme.front().first.starts_with("accessToken");
+                        break;
+                    default:
+                        throw YamlException(securityScheme,
+                                            "Malformed security scheme: each security scheme "
+                                            "should be a map with exactly one pair in it");
+                    }
 
                 cout << logOffset() << yamlCall.location() << ": Found operation " << operationId
                      << " (" << path << ", " << verb << ")\n";
