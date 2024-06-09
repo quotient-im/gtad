@@ -179,10 +179,13 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap<>& schemaYaml, RefsStrategy r
 
 std::pair<TypeUsage, string> Analyzer::analyzePropertiesMap(const YamlMap<>& propertyYaml)
 {
+    auto keyType =
+        _translator.mapType("string", propertyYaml.get<string_view>("x-pattern-format", {}));
     auto elemType = analyzeTypeUsage(propertyYaml);
+
     const auto& protoType =
         _translator.mapType("map", elemType.baseName, "string->" + elemType.baseName);
-    return std::pair{protoType.specialize({std::move(elemType)}),
+    return std::pair{protoType.specialize({std::move(keyType), std::move(elemType)}),
                      propertyYaml.get<string>("description", {})};
 }
 
