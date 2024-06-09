@@ -44,6 +44,7 @@ private:
     [[nodiscard]] m_object_type dumpField(const VarDecl& field) const;
     void addList(m_object_type& target, const string& name,
                  const VarDecls& properties) const;
+    bool dumpAdditionalProperties(m_object_type& target, const FlatSchema& s) const;
     [[nodiscard]] m_object_type dumpAllTypes(const Model::schemaptrs_type& types) const;
     template <typename SchemaPtrT>
     [[nodiscard]] m_object_type

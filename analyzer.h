@@ -90,6 +90,7 @@ private:
     [[nodiscard]] TypeUsage analyzeMultitype(const YamlSequence<>& yamlTypes);
     [[nodiscard]] ObjectSchema analyzeSchema(const YamlMap<>& schemaYaml,
                                              RefsStrategy refsStrategy = ImportRefs);
+    [[nodiscard]] std::pair<TypeUsage, string> analyzePropertiesMap(const YamlMap<>& propertyYaml);
     [[nodiscard]] ObjectSchema analyzeObject(const YamlMap<>& yamlSchema,
                                              RefsStrategy refsStrategy);
 

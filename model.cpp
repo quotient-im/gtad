@@ -114,8 +114,8 @@ Call::params_type Call::collateParams() const
         [&allCollated](const FlatSchema& unpacked) {
             allCollated.insert(allCollated.end(), unpacked.fields.begin(),
                                unpacked.fields.end());
-            if (unpacked.hasPropertyMap())
-                allCollated.emplace_back(unpacked.propertyMap);
+            if (unpacked.hasAdditionalProperties())
+                allCollated.emplace_back(unpacked.additionalProperties);
         },
         [&allCollated](const VarDecl& packed) {
             allCollated.emplace_back(packed);
@@ -157,8 +157,8 @@ void Model::addImportsFrom(const FlatSchema& s)
 {
     for (const auto& f : s.fields)
         addImportsFrom(f.type);
-    if (!s.propertyMap.type.empty())
-        addImportsFrom(s.propertyMap.type);
+    if (!s.additionalProperties.type.empty())
+        addImportsFrom(s.additionalProperties.type);
 }
 
 void Model::addImportsFrom(const TypeUsage& type)

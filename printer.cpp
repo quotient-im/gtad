@@ -301,6 +301,17 @@ inline auto copyPartitionedByRequired(std::vector<VarDecl> vars)
     return vars;
 }
 
+bool Printer::dumpAdditionalProperties(m_object_type& target, const FlatSchema& s) const
+{
+    if (!s.hasAdditionalProperties())
+        return false;
+
+    target.insert_or_assign("propertyMap", dumpField(s.additionalProperties));
+    if (const auto& p = s.additionalPropertiesPattern; !p.empty())
+        target.insert_or_assign("extraPropertiesPattern", p);
+    return true;
+}
+
 object Printer::dumpAllTypes(const Model::schemaptrs_type& types) const
 {
     object mModels;
@@ -326,8 +337,7 @@ object Printer::dumpAllTypes(const Model::schemaptrs_type& types) const
                         fieldDef["datatype"] = f.type.name; // Swagger compat
                         return fieldDef;
                     });
-                if (type.first->hasPropertyMap())
-                    mType["propertyMap"] = dumpField(type.first->propertyMap);
+                dumpAdditionalProperties(mType, *type.first);
                 return mType;
             });
     return mModels;
@@ -457,9 +467,7 @@ vector<string> Printer::print(const fspath& filePathBase,
                 call.body,
                 [this, &mCall](const FlatSchema& unpackedBody) {
                     addList(mCall, "bodyParams", unpackedBody.fields);
-                    if (unpackedBody.hasPropertyMap())
-                        mCall["propertyMap"] =
-                            dumpField(unpackedBody.propertyMap);
+                    dumpAdditionalProperties(mCall, unpackedBody);
                 },
                 [this, &mCall](const VarDecl& packedBody) {
                     mCall.emplace("inlineBody", dumpField(packedBody));
@@ -479,11 +487,8 @@ vector<string> Printer::print(const fspath& filePathBase,
                     [this, &mResponse, &allProperties](const FlatSchema& unpackedBody) {
                         addList(mResponse, "properties", unpackedBody.fields);
                         ranges::copy(unpackedBody.fields, back_inserter(allProperties));
-                        if (unpackedBody.hasPropertyMap()) {
-                            allProperties.emplace_back(unpackedBody.propertyMap);
-                            mResponse["propertyMap"] =
-                                dumpField(unpackedBody.propertyMap);
-                        } else if (unpackedBody.fields.size() == 1)
+                        if (!dumpAdditionalProperties(mResponse, unpackedBody)
+                            && unpackedBody.fields.size() == 1)
                             mResponse["singleValue?"] = true;
                     },
                     [this, &mResponse, &allProperties](const VarDecl& packedBody) {

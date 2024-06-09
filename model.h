@@ -128,11 +128,12 @@ struct FlatSchema : Identifier {
     // uint16_t because that's as much as JSON accepts for integers
     uint16_t maxProperties = std::numeric_limits<uint16_t>::max();
     VarDecls fields;
-    VarDecl propertyMap;
+    VarDecl additionalProperties;
+    std::string additionalPropertiesPattern = {};
 
-    [[nodiscard]] bool hasPropertyMap() const
+    [[nodiscard]] bool hasAdditionalProperties() const
     {
-        return !propertyMap.type.empty();
+        return !additionalProperties.type.empty();
     }
 };
 
@@ -157,8 +158,7 @@ struct ObjectSchema : FlatSchema {
     }
     [[nodiscard]] bool trivial() const
     {
-        return parentTypes.size() == 1 && fields.empty()
-               && propertyMap.name.empty();
+        return parentTypes.size() == 1 && fields.empty() && additionalProperties.name.empty();
     }
     [[nodiscard]] bool hasParents() const { return !parentTypes.empty(); }
     ObjectSchema cloneForInlining() const

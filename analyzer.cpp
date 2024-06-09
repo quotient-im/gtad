@@ -168,13 +168,22 @@ ObjectSchema Analyzer::analyzeSchema(const YamlMap<>& schemaYaml, RefsStrategy r
         else {
             cout << " (parent(s): " << schema.parentTypes.size()
                  << ", field(s): " << schema.fields.size();
-            if (!schema.propertyMap.type.empty())
-                cout << " and a property map";
+            if (!schema.additionalProperties.type.empty())
+                cout << ", and additional properties";
             cout << ")";
         }
         cout << '\n';
     }
     return std::move(schema);
+}
+
+std::pair<TypeUsage, string> Analyzer::analyzePropertiesMap(const YamlMap<>& propertyYaml)
+{
+    auto elemType = analyzeTypeUsage(propertyYaml);
+    const auto& protoType =
+        _translator.mapType("map", elemType.baseName, "string->" + elemType.baseName);
+    return std::pair{protoType.specialize({std::move(elemType)}),
+                     propertyYaml.get<string>("description", {})};
 }
 
 ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy refsStrategy)
@@ -230,15 +239,14 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
                 addVarDecl(schema.fields, std::move(f));
         }
 
-        if (innerSchema.hasPropertyMap()) {
-            auto&& pm = innerSchema.propertyMap;
-            if (schema.hasPropertyMap() && schema.propertyMap.type != pm.type)
+        if (auto&& aps = innerSchema.additionalProperties; !aps.type.empty()) {
+            if (schema.additionalProperties.type != aps.type)
                 throw YamlException(yamlEntry, "Conflicting property map types when "
                                                "merging properties to the main schema");
 
-            pm.name = _translator.mapIdentifier(pm.baseName, &schema, pm.required);
-            if (!pm.name.empty())
-                schema.propertyMap = std::move(pm);
+            aps.name = _translator.mapIdentifier(aps.baseName, &schema, aps.required);
+            if (!aps.name.empty())
+                schema.additionalProperties = std::move(aps);
         }
     }
 
@@ -252,9 +260,10 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
         name = _translator.mapIdentifier(name, &currentScope(), false);
 
     auto properties = yamlSchema.maybeGet<YamlMap<YamlMap<>>>("properties");
+    auto patternPropertiesYaml = yamlSchema.maybeGet<YamlMap<YamlMap<>>>("patternProperties");
     auto additionalProperties = yamlSchema["additionalProperties"];
 
-    if (properties || additionalProperties
+    if (properties || patternPropertiesYaml || additionalProperties
         || (!schema.empty() && !schema.trivial())) {
         // If the schema is not just an alias for another type, name it.
         schema.name = titleCased(name);
@@ -269,20 +278,24 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
                        details.get<string>("default", {}));
         }
     }
-    if (additionalProperties) {
-        TypeUsage tu;
-        string description;
+    TypeUsage tu;
+    string description;
+    if (patternPropertiesYaml) {
+        if (additionalProperties)
+            throw YamlException(yamlSchema, "Using patternProperties and additionalProperties in "
+                                            "the same object is not supported at the moment");
+        if (patternPropertiesYaml->size() > 1)
+            throw YamlException(*patternPropertiesYaml,
+                                "Multiple pattern properties are not supported at the moment");
+        const auto& [pattern, propertyYaml] = patternPropertiesYaml->front();
+        std::tie(tu, description) = analyzePropertiesMap(propertyYaml);
+        if (!tu.empty() && !schema.empty())
+            schema.additionalPropertiesPattern = pattern;
+    } else if (additionalProperties) {
         switch (additionalProperties->Type()) {
-        case YAML::NodeType::Map: {
-            const auto propertiesMap = additionalProperties->as<YamlMap<>>();
-            auto elemType = analyzeTypeUsage(propertiesMap);
-            const auto& protoType =
-                _translator.mapType("map", elemType.baseName,
-                                    "string->" + elemType.baseName);
-            tu = protoType.specialize({std::move(elemType)});
-            description = propertiesMap.get<string>("description", {});
+        case YAML::NodeType::Map:
+            std::tie(tu, description) = analyzePropertiesMap(additionalProperties->as<YamlMap<>>());
             break;
-        }
         case YAML::NodeType::Scalar: // Generic map
             if (additionalProperties->as<bool>())
                 tu = _translator.mapType("map");
@@ -291,15 +304,14 @@ ObjectSchema Analyzer::analyzeObject(const YamlMap<>& yamlSchema, RefsStrategy r
             throw YamlException(*additionalProperties,
                                 "additionalProperties should be either a boolean or a map");
         }
+    }
+    if (!tu.empty()) {
+        if (schema.empty())
+            return makeTrivialSchema(std::move(tu));
 
-        if (!tu.empty()) {
-            if (schema.empty())
-                return makeTrivialSchema(std::move(tu));
-
-            if (auto&& v = makeVarDecl(std::move(tu), "additionalProperties",
-                                       schema, std::move(description)))
-                schema.propertyMap = *v;
-        }
+        if (auto&& v = makeVarDecl(std::move(tu), "additionalProperties",
+                                   schema, std::move(description)))
+            schema.additionalProperties = std::move(*v);
     }
     return schema;
 }
@@ -758,7 +770,7 @@ Analyzer::ImportedSchemaData Analyzer::loadSchemaFromRef(string_view refPath, bo
     const ContextOverlay _modelContext(*this, fullPath.parent_path(), &model, modelRole);
     auto tu = fillDataModel(model, yaml, stem.filename());
     const auto& mainSchema = model.types.back().first;
-    if (mainSchema->hasParents() && (!mainSchema->fields.empty() || mainSchema->hasPropertyMap())) {
+    if (mainSchema->hasParents() && (!mainSchema->fields.empty() || mainSchema->hasAdditionalProperties())) {
         cout << logOffset() << "Inlining suppressed due to model complexity\n";
         return {tu, stem};
     }
