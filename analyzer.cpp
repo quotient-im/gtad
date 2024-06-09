@@ -621,7 +621,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 }
 
                 const auto yamlParams = yamlCall.maybeGet<YamlSequence<YamlMap<>>>("parameters");
-                for (const auto& yamlParam : yamlParams | resolveRefs<>) {
+                for (const auto& yamlParam : yamlParams | resolveRefs) {
                     const auto& name = yamlParam.get<string>("name");
 
                     const ContextOverlay _inContext(*this, {name, OnlyIn, &call});
@@ -651,7 +651,7 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                     }
                 }
                 const auto& yamlResponses = yamlCall.get<YamlMap<YamlMap<>>>("responses");
-                for (const auto& [responseCode, responseData] : yamlResponses | resolveRefs<>)
+                for (const auto& [responseCode, responseData] : yamlResponses | resolveRefs)
                     if (responseCode.starts_with('2')) {
                         // Only handling the first 2xx response for now
                         Response response{responseCode, responseData.get<string>("description")};

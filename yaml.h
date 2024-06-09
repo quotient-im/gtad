@@ -358,10 +358,9 @@ protected:
 //! This adaptor works with any range (not just YamlContainer) of YamlNodes, some of which may be
 //! Reference Objects. It also works on YamlMaps of maybe-Reference Objects, copying keys as they
 //! are and resolving references in values where applicable.
-template <class TargetT = YamlMap<>>
 constexpr inline auto resolveRefs = std::views::transform([](const auto& v) {
     if constexpr (requires { v.second; })
-        return std::pair{v.first, v.second.template resolveRef<TargetT>()};
+        return std::pair{v.first, v.second.resolveRef()};
     else
-        return v.template resolveRef<TargetT>();
+        return v.resolveRef();
 });
