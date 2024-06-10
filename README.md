@@ -207,14 +207,12 @@ in the response. If you need to cover both directions, you're likely also
 covering several calls using a regex; just put a full stop (`.`)
 instead of the direction character.
 
-Scope matching is especially useful to adjust the parameter name for
-`additionalProperties` (see further in this document) in different schemas
-and the "packed" response body name (by default it's always `data`) in
-different calls. A "packed" body is a case when the entire JSON in
-the request or response body is treated as a single piece (parameter or
-returned value, respectively). In the opposite, "unpacked" case
-the top-level JSON object in the request body or response body is
-destructured to a series of parameters.
+Scope matching is especially useful to adjust the parameter name for `patternProperties` and
+`additionalProperties` (see further in this document) in different schemas and the "packed" response
+body name (by default it's always `data`) in different calls. A "packed" body is a case when
+the entire JSON in the request or response body is treated as a single piece (parameter or
+returned value, respectively). In the opposite, "unpacked" case the top-level JSON object in
+the request body or response body is "destructured" to several parameters/accessors.
 
 Also since GTAD 0.7 you can skip the entire field by renaming it to an empty
 string. This is useful to prune deprecated fields from your generated code
@@ -362,13 +360,12 @@ _types_/_formats_ in the GTAD configuration file (but _not_ in the API descripti
   - array: { type: "QVector<{{1}}>", imports: <QVector> }
   ```
 
-- `schema`: this matches all types defined within the API definition as
-  _schema_ structures, as long as these structures are not _trivial_.
-  - a trivial schema is a wrapper around another type, such as `string` or a
-    singular `$ref`, without additional parameter definitions; in other words,
-    a schema with one base type that stores the same data as this base type).
-    Such a schema will be inlined (=substituted with that type) in every
-    possible occasion; so there's little sense in handling it.
+- `schema`: this matches all types defined within the API definition as _schema_ structures,
+  as long as these structures are not _trivial_. (A trivial schema is a wrapper around another type,
+  such as `string` or a singular `$ref`, without additional parameter definitions; technically,
+  it can be represented as a data structure that derives from a single base type, with fields added.
+  Such a schema will be inlined (=substituted with that type) on every possible occasion; normally
+  you should never see it in generated code.)
   
   The list of "_formats_" inside `schema` allows to specify types, for which
   special target types/attributes should be used. Same as for other types,
@@ -406,29 +403,58 @@ _types_/_formats_ in the GTAD configuration file (but _not_ in the API descripti
   C++17 or `void*` in C) or a generic JSON object such as Qt's `QJsonObject`
   (as long as the API is based on JSON structures) can be used for this purpose.
 
-- `map`: this is what OpenAPI clumsily calls `additionalProperties` but 
-  a better name would probably be "property map" or "property list". 
-  `additionalProperties` corresponds to a data structure mapping strings 
-  (property names) to structures defined in the API description (property 
-  values); the API description file does not define property names, only the 
-  mapped type is defined. Similar to arrays, GTAD matches _formats_ under this
-  _type_ against the type defined inside `additionalProperties` (type of
-  property values). A typical translation of that in static-typed languages
-  involves a map from strings to structures; e.g. the current libQuotient
-  uses `QHash<QString, {{1}}>` as the default data structure for
-  `additionalProperties` when the mapped data type is defined, `QVariantHash`
-  for a generic map with no specific type, and, as a special case,
-  `std::unordered_map<QString, {{1}}>` when the contained schema's title is 
-  `RoomState` because that type is uncopyable.
+- `map`: this corresponds to OpenAPI's `patternProperties` (since GTAD 0.11) and
+  `additionalProperties`. In terms of actual API these define an open list of properties without
+  saying which names those properties must have: the API description file does not define property
+  names, but only the mapped type. Similar to arrays, GTAD matches _formats_ under this _type_
+  against the type defined inside `patternProperties`/`additionalProperties` (type of property
+  values). A typical translation of that in static-typed languages involves a map from strings
+  to structures; e.g. the current libQuotient uses `QHash<QString, {{1}}>` (`QHash<{{1}}, {{2}}`
+  since GTAD 0.11, see the next paragraph) as the default data structure for `map` when the mapped
+  data type is defined, `QVariantHash` for a generic map with no specific type, and as a special
+  case, `std::unordered_map<QString, {{1}}>` (`std::unordered_map<{{1}}, {{2}}>` since GTAD 0.11,
+  see the next paragraph) when the contained schema's title is `RoomState` because that type is
+  uncopyable and therefore cannot be stored in a `QHash`.
+
+  With support for `patternProperties` added in GTAD 0.11, it also became possible to specify
+  the mapping for the property name type, thanks to an OpenAPI extension used in Matrix.org
+  API definitions. The extension is a key-value pair with the key named `x-pattern-format` added
+  for the given pattern, next to the definition of the property value type, e.g.:
+  ```yaml
+  patternProperties:
+    "^@":
+      type: object
+      x-pattern-format: mx-user-id
+      additionalProperties:
+        type: number
+  ```
+  By default, the property name type is `string`, mapped to the target type according to usual
+  rules. `x-pattern-format` allows to override that. To map `mx-user-id` to some other type than
+  whatever `string` is mapped to, just add an `mx-user-id` entry to the list of formats under
+  `string` type. E.g., the following configuration in `gtad.yaml`:
+  ```yaml
+  types:
+    number: float
+    string:
+    - mx-user-id: UserId
+    # ...
+    map:
+    - /.+/: "QHash<{{1}}, {{2}}>"
+  ```
+  would cause GTAD to translate the above `patternProperties` block into an additional `data` field
+  with the type `QHash<UserId, float>`.
+
+  Be mindful that GTAD pre-0.11 only used one parameter for target types in `map` and would ignore
+  `patternProperties` entirely, only processing `additionalProperties`.
 
 - `variant` (supported from GTAD 0.6): this is a case of variant types or
   multitypes. Similar to `map` and others, you can override certain type
   combinations and use a dedicated type for them. The _format_ pattern under
-  `variant` should list the types separated by `&` in _exactly
-  the same order as in the API description_ (`string&object` and
-  `object&string` are distinct sequences). Also, beware that `null` is a
+  `variant` should list the types separated by `,` (comma) in _exactly
+  the same order as in the API description_ (`string,object` and
+  `object,string` are distinct sequences). Also, beware that `null` is a
   reserved keyword in JSON/YAML, so OpenAPI's `null` type should be escaped
-  with quotes (e.g., `"string&null"`).
+  with quotes (e.g., `"string,null"`).
   
   The list of types (for cases when the target type delimits the stored types,
   such `std::variant<>` from C++17) is stored in `{{types}}` variable:
