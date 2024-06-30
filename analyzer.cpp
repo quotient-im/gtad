@@ -616,8 +616,8 @@ const Model& Analyzer::loadModel(const string& filePath, InOut inOut)
                 cout << logOffset() << yamlCall.location() << ": Found operation " << operationId
                      << " (" << path << ", " << verb << ")\n";
 
-                Call& call =
-                    model.addCall(path, std::move(verb), std::move(operationId), needsSecurity);
+                Call& call = model.addCall(path, std::move(verb), std::move(operationId),
+                                           yamlCall.get<bool>("deprecated", false), needsSecurity);
 
                 yamlCall.maybeLoad("summary", &call.summary);
                 yamlCall.maybeLoad("description", &call.description);

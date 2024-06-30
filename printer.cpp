@@ -432,6 +432,7 @@ vector<string> Printer::print(const fspath& filePathBase,
                 {"httpMethod",  call.verb          },
                 {"path",        call.path          },
                 {"summary",     call.summary       },
+                {"deprecated?", call.deprecated    },
                 {"skipAuth",    !call.needsSecurity}
             };
             dumpDescription(mCall, call);

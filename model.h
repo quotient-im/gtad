@@ -275,10 +275,12 @@ struct Call : Identifier {
     using params_type = VarDecls;
     using string = std::string;
 
-    Call(Path callPath, string callVerb, string callName,
-         bool callNeedsSecurity)
-        : Identifier{std::move(callName)}, path(std::move(callPath))
-        , verb(std::move(callVerb)), needsSecurity(callNeedsSecurity)
+    Call(Path callPath, string callVerb, string callName, bool deprecated, bool callNeedsSecurity)
+        : Identifier{std::move(callName)}
+        , path(std::move(callPath))
+        , verb(std::move(callVerb))
+        , deprecated(deprecated)
+        , needsSecurity(callNeedsSecurity)
     { }
     ~Call() = default;
     Call(Call&) = delete;
@@ -295,6 +297,7 @@ struct Call : Identifier {
     string verb;
     string summary;
     string description;
+    bool deprecated;
     ExternalDocs externalDocs;
     static const std::array<string, 3> ParamGroups;
     std::array<params_type, 3> params;
@@ -332,7 +335,7 @@ struct Model {
 
     void clear();
 
-    Call& addCall(Path path, string verb, string operationId, bool needsToken);
+    Call& addCall(Path path, string verb, string operationId, bool deprecated, bool needsToken);
     void addSchema(ObjectSchema&& schema, const TypeUsage &tu);
     void addImportsFrom(const ObjectSchema& type);
     void addImportsFrom(const FlatSchema& type);

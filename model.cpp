@@ -124,13 +124,13 @@ Call::params_type Call::collateParams() const
     return allCollated;
 }
 
-Call& Model::addCall(Path path, string verb, string operationId, bool needsToken)
+Call& Model::addCall(Path path, string verb, string operationId, bool deprecated, bool needsToken)
 {
     if (callClasses.empty())
         callClasses.emplace_back();
     auto& cc = callClasses.back();
     cc.calls.emplace_back(std::move(path), std::move(verb),
-                          std::move(operationId), needsToken);
+                          std::move(operationId), deprecated, needsToken);
     return cc.calls.back();
 }
 
