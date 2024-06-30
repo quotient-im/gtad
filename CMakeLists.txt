@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20) # Older ones don't know about C++23
 
-project(gtad VERSION 0.9 LANGUAGES CXX)
+project(gtad VERSION 0.10.91 LANGUAGES CXX)
 
 include(CheckCXXCompilerFlag)
 
@@ -51,19 +51,18 @@ option(YAML_CPP_BUILD_CONTRIB "Enable contrib stuff in library" OFF)
 add_subdirectory(yaml-cpp)
 #add_subdirectory(mustache) # This is only needed to build mustache tests
 
-list(APPEND SRCS
+add_executable(${CMAKE_PROJECT_NAME})
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     main.cpp
-    translator.cpp
-    analyzer.cpp
-    model.cpp
-    printer.cpp
-    yaml.cpp
-    util.cpp
+    translator.h translator.cpp
+    analyzer.h analyzer.cpp
+    model.h model.cpp
+    printer.h printer.cpp
+    yaml.h yaml.cpp
+    util.h util.cpp
 )
 
-add_executable(${CMAKE_PROJECT_NAME} ${SRCS})
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE yaml-cpp/include)
 target_link_libraries(${CMAKE_PROJECT_NAME} Qt::Core yaml-cpp)
 
-install(TARGETS ${CMAKE_PROJECT_NAME}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS ${CMAKE_PROJECT_NAME})
