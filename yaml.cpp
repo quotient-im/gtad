@@ -84,7 +84,7 @@ void YamlNode::checkType(YAML::NodeType::value checkedType) const
                                        + ", got " + typenames[Type()] + ")");
 }
 
-YamlNode YamlNode::doResolveRef() const
+YamlNode YamlNode::doResolveRef(OverrideMode overrideMode) const
 {
     if (!IsMap()) // NB: will throw if the node is not even defined
         return *this;
@@ -122,9 +122,10 @@ YamlNode YamlNode::doResolveRef() const
         currentYaml.reset();
         currentYaml = *nextYaml;
     }
-    for (auto overridable : {"summary", "description"})
-        if (const auto maybeSummary = refObj.maybeGet<string>(overridable))
-            currentYaml->force_insert(overridable, *maybeSummary);
+    if (overrideMode == ApplyOverrides)
+        for (auto overridable : {"summary", "description"})
+            if (const auto maybeSummary = refObj.maybeGet<string>(overridable))
+                currentYaml->force_insert(overridable, *maybeSummary);
 
     // https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#reference-object
     if (refObj.size() > 1 && !ranges::all_of(refObj, [](const pair<string, YamlNode>& p) {

@@ -402,10 +402,8 @@ ObjectSchema Analyzer::analyzeRefObject(const YamlMap<>& refObjectYaml, RefsStra
 
     // No type shortcut in the references map, load schema from the $ref value
 
-    // Check whether the configuration requests inlining; also, if there's an overriding description
-    // in the $ref object the resulting schema has to be inlined as it will be distinct from
-    // the $ref'ed one anyway.
-    if (_translator.isRefInlined(refPathForMapping) || refObjectYaml.size() > 1)
+    // Check whether the configuration requests inlining
+    if (_translator.isRefInlined(refPathForMapping))
         refsStrategy = InlineRefs;
 
     if (refPath.starts_with('#')) {
@@ -423,22 +421,25 @@ ObjectSchema Analyzer::analyzeRefObject(const YamlMap<>& refObjectYaml, RefsStra
                 tu = sIt->second;
                 cout << logOffset() << "Reusing already loaded mapping " << refPath
                      << " -> " << tu.name << " with role " << currentRole() << '\n';
-                return makeTrivialSchema(std::move(tu));
+                return makeTrivialSchema(std::move(tu),
+                                         refObjectYaml.maybeGet<string>("description"));
             }
             cout << logOffset() << refObjectYaml.location() << ": forced inlining of saved schema "
                  << sIt->second << '\n';
         }
-        auto&& s = analyzeSchema(refObjectYaml.resolveRef(), refsStrategy);
+        auto&& s = analyzeSchema(refObjectYaml.resolveRef(YamlNode::SkipOverrides), refsStrategy);
         s.preferInlining = refsStrategy == InlineRefs;
-        if (s.inlined())
-            return std::move(s);
-
-        if (s.name.empty()) // Use the $ref's last segment as a fallback for the name
+        if (s.name.empty()) {
+            if (s.inlined())
+                return std::move(s);
+            // Use the $ref's last segment as a fallback for the name
             s.name =
                 titleCased({find(refPath.crbegin(), refPath.crend(), '/').base(), refPath.cend()});
+        }
+
         tu = addSchema(std::move(s));
         currentModel().localRefs.emplace(refPath, tu);
-        return makeTrivialSchema(std::move(tu));
+        return makeTrivialSchema(std::move(tu), refObjectYaml.maybeGet<string>("description"));
     }
 
     auto&& [schemaOrTu, importPath, hasExtraDeps] =
@@ -473,11 +474,14 @@ ObjectSchema Analyzer::analyzeRefObject(const YamlMap<>& refObjectYaml, RefsStra
         });
 }
 
-ObjectSchema Analyzer::makeTrivialSchema(TypeUsage&& tu) const
+ObjectSchema Analyzer::makeTrivialSchema(TypeUsage&& tu,
+                                         std::optional<string> maybeDescription) const
 {
     ObjectSchema result{currentRole()};
     if (!tu.empty())
         result.parentTypes.emplace_back(std::move(tu));
+    if (maybeDescription)
+        result.description = *maybeDescription;
     return result;
 }
 

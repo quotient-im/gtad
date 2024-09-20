@@ -97,6 +97,8 @@ public:
         }
     }
 
+    enum OverrideMode : bool { SkipOverrides, ApplyOverrides };
+
     //! \brief Resolve a Reference Object to the referred-to YAML value
     //!
     //! If the current node is a Reference Object (i.e. it has a key named `$ref`) this call
@@ -112,9 +114,9 @@ public:
     //!       will trigger YamlException
     //! \sa https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.1.0.md#reference-object
     template <class TargetT = YamlMap<>>
-    TargetT resolveRef() const
+    TargetT resolveRef(OverrideMode overrideMode = ApplyOverrides) const
     {
-        return doResolveRef().as<TargetT>();
+        return doResolveRef(overrideMode).as<TargetT>();
     }
 
     void begin() const = delete;
@@ -140,7 +142,7 @@ protected:
     }
 
     void checkType(YAML::NodeType::value checkedType) const;
-    YamlNode doResolveRef() const;
+    YamlNode doResolveRef(OverrideMode overrideMode) const;
 
     std::shared_ptr<Context> _context;
 

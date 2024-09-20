@@ -100,7 +100,8 @@ private:
 
     ObjectSchema analyzeRefObject(const YamlMap<>& refObjectYaml, RefsStrategy refsStrategy);
 
-    [[nodiscard]] ObjectSchema makeTrivialSchema(TypeUsage&& tu) const;
+    [[nodiscard]] ObjectSchema
+    makeTrivialSchema(TypeUsage&& tu, std::optional<std::string> maybeDescription = {}) const;
     [[nodiscard]] std::optional<VarDecl> makeVarDecl(TypeUsage type, std::string_view baseName,
                                                      const Identifier& scope, string description,
                                                      bool required = false,
