@@ -47,6 +47,8 @@ using YamlSequence = YamlContainer<YAML::NodeType::Sequence, size_t, ItemT>;
 
 class YamlNode : public YAML::Node {
 public:
+    using NodeType = YAML::NodeType::value;
+
     struct Context {
         std::string fileName;
         YAML::Node rootNode;
@@ -141,7 +143,7 @@ protected:
         return YamlNode(rhs, context, AllowUndefined{}).template as<T>();
     }
 
-    void checkType(YAML::NodeType::value checkedType) const;
+    void checkType(NodeType checkedType) const;
     YamlNode doResolveRef(OverrideMode overrideMode) const;
 
     std::shared_ptr<Context> _context;

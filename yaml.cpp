@@ -24,7 +24,6 @@
 #include <regex>
 
 using Node = YAML::Node;
-using NodeType = YAML::NodeType;
 using namespace std;
 
 YamlException::YamlException(const YamlNode& node, string_view msg) noexcept
@@ -72,7 +71,7 @@ YamlNode YamlNode::fromFile(const string& fileName, const subst_list_t& replaceP
     return {n, make_shared<Context>(fileName, n), AllowUndefined{}};
 }
 
-void YamlNode::checkType(YAML::NodeType::value checkedType) const
+void YamlNode::checkType(NodeType checkedType) const
 {
     using namespace string_literals;
     // Follows the YAML::NodeType::value enum; if that enum changes, this has

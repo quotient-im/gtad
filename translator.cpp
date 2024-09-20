@@ -51,10 +51,10 @@ void addTypeAttributes(TypeUsage& typeUsage, const YamlMap<>& attributesMap)
 
 TypeUsage parseTargetType(const YamlNode& yamlTypeNode)
 {
-    using YAML::NodeType;
-    if (yamlTypeNode.Type() == NodeType::Null)
+    using namespace YAML::NodeType;
+    if (yamlTypeNode.Type() == Null)
         return {};
-    if (yamlTypeNode.Type() == NodeType::Scalar)
+    if (yamlTypeNode.Type() == Scalar)
         return TypeUsage(yamlTypeNode.as<string>());
 
     const auto yamlTypeMap = yamlTypeNode.as<YamlMap<>>();
