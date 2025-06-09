@@ -306,39 +306,41 @@ bool Printer::dumpAdditionalProperties(m_object_type& target, const FlatSchema& 
     return true;
 }
 
-object Printer::dumpTypes(const types_t& types) const
+std::optional<object> Printer::dumpTypes(const types_t& types) const
 {
     // Unnamed schemas are only saved in the model to enable inlining
     // but cannot be used to emit valid code (not in C++ at least), so skip them from the context.
+    auto completeDefs = ranges::filter_view(types, [](const types_t::value_type& t) {
+        return !t.first->name.empty() && !t.first->inlined();
+    });
+    if (completeDefs.empty())
+        return {};
+
     object mModels;
-    if (auto completeDefs = types | views::filter([](const types_t::value_type& t) {
-                                return !t.first->name.empty() && !t.first->inlined();
-                            });
-        !completeDefs.empty())
-        setList(
-            mModels, "model", completeDefs, [this](const types_t::value_type& type) {
-                auto mType = renderType(type.second);
-                mType["classname"] = type.first->name; // Swagger compat
-                dumpDescription(mType, *type.first);
-                mType["in?"] = type.first->role != OnlyOut;
-                mType["out?"] = type.first->role != OnlyIn;
-                if (type.first->trivial())
-                {
-                    mType["trivial?"] = true;
-                    mType["parent"] = renderType(type.first->parentTypes.back());
-                }
-                setList(mType, "parents", type.first->parentTypes,
-                        bind_front(&Printer::renderType, this));
-                setList(mType, "vars", copyPartitionedByRequired(type.first->fields),
-                    [this](const VarDecl& f) {
-                        object fieldDef = dumpField(f);
-                        fieldDef["name"] = f.name;
-                        fieldDef["datatype"] = f.type.name; // Swagger compat
-                        return fieldDef;
-                    });
-                dumpAdditionalProperties(mType, *type.first);
-                return mType;
-            });
+    setList(
+        mModels, "model", completeDefs, [this](const types_t::value_type& type) {
+            auto mType = renderType(type.second);
+            mType["classname"] = type.first->name; // Swagger compat
+            dumpDescription(mType, *type.first);
+            mType["in?"] = type.first->role != OnlyOut;
+            mType["out?"] = type.first->role != OnlyIn;
+            if (type.first->trivial())
+            {
+                mType["trivial?"] = true;
+                mType["parent"] = renderType(type.first->parentTypes.back());
+            }
+            setList(mType, "parents", type.first->parentTypes,
+                    bind_front(&Printer::renderType, this));
+            setList(mType, "vars", copyPartitionedByRequired(type.first->fields),
+                [this](const VarDecl& f) {
+                    object fieldDef = dumpField(f);
+                    fieldDef["name"] = f.name;
+                    fieldDef["datatype"] = f.type.name; // Swagger compat
+                    return fieldDef;
+                });
+            dumpAdditionalProperties(mType, *type.first);
+            return mType;
+        });
     return mModels;
 }
 
@@ -394,9 +396,8 @@ vector<string> Printer::print(const fspath& filePathBase,
                                          importContextObj);
             });
 
-    auto&& mTypes = dumpTypes(model.globalSchemas);
-    if (!mTypes.empty())
-        payloadObj.emplace("models", mTypes);
+    auto&& mMaybeTypes = dumpTypes(model.globalSchemas);
+    payloadObj.emplace("models", mMaybeTypes.value_or(object{}));
 
     object mOperations;
     if (!model.callClasses.empty()) {
@@ -425,9 +426,7 @@ vector<string> Printer::print(const fspath& filePathBase,
                               }));
             }
 
-            auto&& mCallTypes = dumpTypes(call.localSchemas);
-            if (!mCallTypes.empty())
-                mCall.emplace("models", mCallTypes);
+            mCall.emplace("models", dumpTypes(call.localSchemas).value_or(object{}));
             setList(mCall, "pathParts", call.path.parts, [&call](const Path::PartType& p) {
                 return object{
                     {p.kind == Path::PartType::Variable ? "variable"s : "literal"s,
@@ -491,7 +490,7 @@ vector<string> Printer::print(const fspath& filePathBase,
             payloadObj.emplace("operations", mOperations);
         }
     }
-    if (mTypes.empty() && mOperations.empty()) {
+    if (!mMaybeTypes && mOperations.empty()) {
         clog << "No emittable contents found in the model for " << filePathBase.string()
              << ".*, skipping\n";
         return {};
