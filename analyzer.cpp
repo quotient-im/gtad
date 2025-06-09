@@ -757,19 +757,19 @@ Analyzer::ImportedSchemaData Analyzer::loadSchemaFromRef(string_view refPath, bo
             throw Exception(
                 "Internal error: a JSON Schema model has API definitions");
 
-        if (!model.types.empty()) {
-            const auto& mainSchema = model.types.back().first;
+        if (!model.globalSchemas.empty()) {
+            const auto& mainSchema = model.globalSchemas.back().first;
             modelRole = mainSchema->role;
             if (modelRole == InAndOut || modelRole == currentRole()) {
                 cout << logOffset() << "Reusing already loaded model for " << refPath
                      << " with role " << modelRole << '\n';
                 if (!mainSchema->inlined()) {
                     if (!preferInlining)
-                        return {model.types.back().second, stem};
+                        return {model.globalSchemas.back().second, stem};
                     cout << logOffset() << "Forced inlining of schema " << mainSchema
                          << " $ref'ed as " << refPath << '\n';
                 }
-                return {mainSchema->cloneForInlining(), stem, model.types.size() > 1};
+                return {mainSchema->cloneForInlining(), stem, model.globalSchemas.size() > 1};
             }
             cout << logOffset()
                  << "Found existing data model generated for role " << modelRole
@@ -789,7 +789,7 @@ Analyzer::ImportedSchemaData Analyzer::loadSchemaFromRef(string_view refPath, bo
         YamlNode::fromFile(_baseDir / fullPath, _translator.substitutions()).as<YamlMap<>>();
     const ContextOverlay _modelContext(*this, fullPath.parent_path(), &model, modelRole);
     auto tu = fillDataModel(model, yaml, stem.filename());
-    const auto& mainSchema = model.types.back().first;
+    const auto& mainSchema = model.globalSchemas.back().first;
     if (mainSchema->hasParents() && (!mainSchema->fields.empty() || mainSchema->hasAdditionalProperties())) {
         cout << logOffset() << "Inlining suppressed due to model complexity\n";
         return {tu, stem};
@@ -802,7 +802,7 @@ Analyzer::ImportedSchemaData Analyzer::loadSchemaFromRef(string_view refPath, bo
         cout << " will be inlined\n";
 
         currentModel().imports.insert(model.imports.begin(), model.imports.end());
-        return {mainSchema->cloneForInlining(), stem, model.types.size() > 1};
+        return {mainSchema->cloneForInlining(), stem, model.globalSchemas.size() > 1};
     }
     return {tu, stem};
 }

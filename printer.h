@@ -43,9 +43,5 @@ private:
     void addList(m_object_type& target, const string& name,
                  const VarDecls& properties) const;
     bool dumpAdditionalProperties(m_object_type& target, const FlatSchema& s) const;
-    [[nodiscard]] m_object_type dumpAllTypes(const Model::schemaptrs_type& types) const;
-    template <typename SchemaPtrT>
-    [[nodiscard]] m_object_type
-    dumpTypes(const std::vector<std::pair<SchemaPtrT, TypeUsage>>& types,
-              const Call* scope = {}) const;
+    [[nodiscard]] m_object_type dumpTypes(const types_t& types) const;
 };

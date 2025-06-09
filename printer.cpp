@@ -166,22 +166,18 @@ Printer::Printer(context_type&& contextObj, fspath inputBasePath,
     }
 }
 
-inline object wrap(object o)
+template <typename T>
+inline object wrap(T&& val)
 {
-    return o;
+    if constexpr (std::same_as<std::decay_t<T>, object>)
+        return val;
+    else if constexpr (std::same_as<std::decay_t<T>, filesystem::path>)
+        return wrap(val.string());
+    else
+        return object {{ "_", std::forward<T>(val) }};
 }
 
-inline object wrap(auto val)
-{
-    return object {{ "_", std::move(val) }};
-}
-
-inline object wrap(const filesystem::path& p)
-{
-    return wrap(p.string());
-}
-
-void setList(object& target, const string& name, const auto& source, auto convert)
+void setList(object& target, const string& name, auto&& source, auto convert)
 {
     target[name + '?'] = !source.empty();
     km::list mList;
@@ -310,12 +306,17 @@ bool Printer::dumpAdditionalProperties(m_object_type& target, const FlatSchema& 
     return true;
 }
 
-object Printer::dumpAllTypes(const Model::schemaptrs_type& types) const
+object Printer::dumpTypes(const types_t& types) const
 {
+    // Unnamed schemas are only saved in the model to enable inlining
+    // but cannot be used to emit valid code (not in C++ at least), so skip them from the context.
     object mModels;
-    if (!types.empty())
+    if (auto completeDefs = types | views::filter([](const types_t::value_type& t) {
+                                return !t.first->name.empty() && !t.first->inlined();
+                            });
+        !completeDefs.empty())
         setList(
-            mModels, "model", types, [this](const std::pair<const ObjectSchema*, TypeUsage>& type) {
+            mModels, "model", completeDefs, [this](const types_t::value_type& type) {
                 auto mType = renderType(type.second);
                 mType["classname"] = type.first->name; // Swagger compat
                 dumpDescription(mType, *type.first);
@@ -339,17 +340,6 @@ object Printer::dumpAllTypes(const Model::schemaptrs_type& types) const
                 return mType;
             });
     return mModels;
-}
-
-template <typename SchemaPtrT>
-object Printer::dumpTypes(const std::vector<std::pair<SchemaPtrT, TypeUsage>>& types,
-                          const Call* scope) const
-{
-    Model::schemaptrs_type selectedTypes;
-    for (const auto& s : types)
-        if (s.first->call == scope)
-            selectedTypes.emplace_back(std::to_address(s.first), s.second);
-    return dumpAllTypes(selectedTypes);
 }
 
 bool dumpContentTypes(object& target, const string& keyName, vector<string> types)
@@ -404,18 +394,7 @@ vector<string> Printer::print(const fspath& filePathBase,
                                          importContextObj);
             });
 
-    // Unnamed schemas are only saved in the model to enable inlining
-    // but cannot be used to emit valid code (not in C++ at least).
-    std::vector<std::pair<const ObjectSchema*, TypeUsage>> namedSchemas;
-    for (const auto& schema: model.types)
-        if (!schema.first->name.empty() && !schema.first->inlined())
-            namedSchemas.emplace_back(schema.first.get(), schema.second);
-
-    auto&& mAllTypes = dumpAllTypes(namedSchemas); // Back-comp w/swagger
-    if (!mAllTypes.empty())
-        payloadObj.emplace("allModels", mAllTypes);
-
-    auto&& mTypes = dumpTypes(namedSchemas);
+    auto&& mTypes = dumpTypes(model.globalSchemas);
     if (!mTypes.empty())
         payloadObj.emplace("models", mTypes);
 
@@ -446,7 +425,7 @@ vector<string> Printer::print(const fspath& filePathBase,
                               }));
             }
 
-            auto&& mCallTypes = dumpTypes(model.types, &call);
+            auto&& mCallTypes = dumpTypes(call.localSchemas);
             if (!mCallTypes.empty())
                 mCall.emplace("models", mCallTypes);
             setList(mCall, "pathParts", call.path.parts, [&call](const Path::PartType& p) {

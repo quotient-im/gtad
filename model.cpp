@@ -1,7 +1,9 @@
 #include "model.h"
 
 #include <algorithm>
+#include <format>
 #include <locale>
+#include <ranges>
 
 using namespace std;
 
@@ -134,16 +136,27 @@ Call& Model::addCall(Path path, string verb, string operationId, bool deprecated
     return cc.calls.back();
 }
 
+types_t& Model::typesForScope(const Call* s)
+{
+    if (!s)
+        return globalSchemas;
+    auto allScopes = views::transform(callClasses, &CallClass::calls) | views::join;
+    if (const auto scope = ranges::find(allScopes, s, [](const Call& c) { return &c; });
+        scope != allScopes.end())
+        return scope->localSchemas;
+    throw ModelException(format("Scope {} not found", s->name));
+}
+
 void Model::addSchema(ObjectSchema&& schema, const TypeUsage& tu)
 {
-    auto dupIt = find_if(types.begin(), types.end(), [&](const schemaholder_type& s) {
-        return s.first->call == schema.call && s.first->name == schema.name;
-    });
-    if (dupIt != types.end())
+    auto& schemas = typesForScope(schema.call);
+    if (ranges::find_if(schemas, [&n = schema.name](
+                                     const types_t::value_type& s) { return s.first->name == n; })
+        != schemas.end())
         return;
 
     addImportsFrom(schema);
-    types.emplace_back(std::make_unique<const ObjectSchema>(std::move(schema)), tu);
+    schemas.emplace_back(std::make_unique<const ObjectSchema>(std::move(schema)), tu);
 }
 
 void Model::addImportsFrom(const ObjectSchema& s)
@@ -179,7 +192,7 @@ void Model::clear()
 {
     apiSpec = ApiSpec::Undefined;
     imports.clear();
-    types.clear();
+    globalSchemas.clear();
     defaultServers.clear();
     callClasses.clear();
 }

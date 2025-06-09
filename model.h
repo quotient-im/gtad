@@ -271,6 +271,8 @@ struct ExternalDocs
 
 enum Location : size_t { InPath = 0, InQuery = 1, InHeaders = 2 };
 
+using types_t = std::vector<std::pair<std::unique_ptr<const ObjectSchema>, TypeUsage>>;
+
 struct Call : Identifier {
     using params_type = VarDecls;
     using string = std::string;
@@ -299,6 +301,7 @@ struct Call : Identifier {
     string description;
     bool deprecated;
     ExternalDocs externalDocs;
+    types_t localSchemas;
     static const std::array<string, 3> ParamGroups;
     std::array<params_type, 3> params;
     Body body;
@@ -321,13 +324,11 @@ struct Model {
     using string = std::string;
     /// Map from the included path (in API description) to the import renderer
     using imports_type = std::unordered_map<string, string>;
-    using schemaholder_type = std::pair<std::unique_ptr<const ObjectSchema>, TypeUsage>;
-    using schemaptrs_type = std::vector<std::pair<const ObjectSchema*, TypeUsage>>;
 
     ApiSpec apiSpec;
 
     imports_type imports;
-    std::vector<schemaholder_type> types;
+    types_t globalSchemas;
     std::unordered_map<std::string, TypeUsage> localRefs;
 
     std::vector<Server> defaultServers;
@@ -343,13 +344,16 @@ struct Model {
 
     [[nodiscard]] bool empty() const
     {
-        return callClasses.empty() && types.empty();
+        return callClasses.empty() && globalSchemas.empty();
     }
     [[nodiscard]] bool trivial() const
     {
         return callClasses.empty() &&
-               types.size() == 1 && types.front().first->trivial();
+               globalSchemas.size() == 1 && globalSchemas.front().first->trivial();
     }
+
+private:
+    types_t& typesForScope(const Call* s);
 };
 
 struct ModelException : Exception
