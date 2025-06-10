@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <locale>
 #include <regex>
+#include <ranges>
 
 using namespace std;
 using namespace std::placeholders;
